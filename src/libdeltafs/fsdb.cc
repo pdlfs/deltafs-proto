@@ -33,3 +33,48 @@
  */
 
 #include "fsdb.h"
+
+namespace pdlfs {
+
+MDBOptions::MDBOptions(DB* db) : db(db) {}
+
+struct MDB::Tx {
+  const Snapshot* snap;
+  WriteBatch bat;
+};
+
+MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
+
+MDB::~MDB() {}
+
+Status MDB::SaveFsroot(const Slice& encoding) {
+  return dx_->Put(WriteOptions(), "/", encoding);
+}
+
+Status MDB::LoadFsroot(std::string* tmp) {
+  return dx_->Get(ReadOptions(), "/", tmp);
+}
+
+Status MDB::Flush() {  ///
+  return dx_->FlushMemTable(FlushOptions());
+}
+
+Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
+  ReadOptions read_opts;
+  Tx* const tx = NULL;
+  return GET<Key>(id, fname, stat, NULL, &read_opts, tx);
+}
+
+Status MDB::Set(const DirId& id, const Slice& fname, const Stat& stat) {
+  WriteOptions write_opts;
+  Tx* const tx = NULL;
+  return SET<Key>(id, fname, stat, fname, &write_opts, tx);
+}
+
+Status MDB::Delete(const DirId& id, const Slice& fname) {
+  WriteOptions write_opts;
+  Tx* const tx = NULL;
+  return DELETE<Key>(id, fname, &write_opts, tx);
+}
+
+}  // namespace pdlfs
