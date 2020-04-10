@@ -74,6 +74,8 @@ inline uint32_t gid(const LookupStat& dir) {  ///
   return dir.GroupId();
 }
 
+// Check if a given user has the "w" permission beneath a parent
+// directory based on a lease certificate provided by the user.
 bool IsDirWriteOk(const FilesystemOptions& options, const LookupStat& parent,
                   const User& who, const uint64_t ts) {
   const uint32_t mode = parent.DirMode();
@@ -94,11 +96,64 @@ bool IsDirWriteOk(const FilesystemOptions& options, const LookupStat& parent,
   }
 }
 
+// Check if a given user has the "x" permission beneath a parent
+// directory based on a lease certificate provided by the user.
+bool IsLookupOk(const FilesystemOptions& options, const LookupStat& parent,
+                const User& who, const uint64_t ts) {
+  const uint32_t mode = parent.DirMode();
+  if (options.skip_perm_checks) {
+    return true;
+  } else if (who.uid == 0) {
+    return true;
+  } else if (parent.LeaseDue() < ts) {
+    return false;
+  } else if (who.uid == uid(parent) && (mode & S_IXUSR) == S_IXUSR) {
+    return true;
+  } else if (who.gid == gid(parent) && (mode & S_IXGRP) == S_IXGRP) {
+    return true;
+  } else if ((mode & S_IXOTH) == S_IXOTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 }  // namespace
 
+Status Filesystem::Lokup(  ///
+    const User& who, const LookupStat& p, const Slice& name, LookupStat* stat) {
+  DirId at(p);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lokup1(who, at, name, dir, p, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
+Status Filesystem::Lstat(  ///
+    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+  DirId at(p);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lstat1(who, at, name, dir, p, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
 Status Filesystem::Mkfle(  ///
-    const User& who, const DirId& at, const Slice& name, uint32_t mode,
-    const LookupStat& p, Stat* stat) {
+    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
+    Stat* stat) {
+  DirId at(p);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
@@ -117,8 +172,9 @@ Status Filesystem::Mkfle(  ///
 }
 
 Status Filesystem::Mkdir(  ///
-    const User& who, const DirId& at, const Slice& name, uint32_t mode,
-    const LookupStat& p, Stat* stat) {
+    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
+    Stat* stat) {
+  DirId at(p);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
@@ -136,6 +192,36 @@ Status Filesystem::Mkdir(  ///
   return s;
 }
 
+Status Filesystem::Lokup1(  ///
+    const User& who, const DirId& at, const Slice& name, Dir* dir,
+    const LookupStat& p, LookupStat* stat) {
+  Stat tmp;
+  Status s = Lstat1(who, at, name, dir, p, &tmp);
+  if (s.ok()) {
+    stat->CopyFrom(tmp);
+    stat->SetLeaseDue(-1);
+    stat->AssertAllSet();
+  }
+  return s;
+}
+
+Status Filesystem::Lstat1(  ///
+    const User& who, const DirId& at, const Slice& name, Dir* dir,
+    const LookupStat& p, Stat* stat) {
+  Status s;
+  dir->mu->Lock();
+  const uint64_t ts = CurrentMicros();
+  if (!IsDirPartitionOk(options_, *dir->giga, name))
+    s = Status::AccessDenied("Wrong dir partition");
+  else if (!IsLookupOk(options_, p, who, ts))
+    s = Status::AccessDenied("No x perm");
+  dir->mu->Unlock();
+  if (s.ok()) {
+    s = mdb_->Get(at, name, stat);
+  }
+  return s;
+}
+
 Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t myino,
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
@@ -148,9 +234,7 @@ Status Filesystem::Mknod1(  ///
     return Status::AccessDenied("No write perm");
 
   Status s;
-  while (dir->busy) {
-    dir->cv->Wait();
-  }
+  WaitUntilNotBusy(dir);
   dir->busy = true;
   // Temporarily unlock for db accesses
   dir->mu->Unlock();
@@ -212,7 +296,12 @@ void Filesystem::FreeDir(const Slice& key, Dir* dir) {
   free(dir);
 }
 
-void Filesystem::Release(Dir* dir) {
+// Remove an active reference to a directory control block and its associated
+// handle in the LRU cache. If the control block is no longer used, remove it
+// from the in-use table. After removal, the control block may still be kept in
+// memory by the LRU cache. If the control block has been evicted from
+// the cache before, this will trigger its deletion.
+void Filesystem::Release(Dir* const dir) {
   mutex_.AssertHeld();
   assert(dir->in_use != 0);
   dir->in_use--;
@@ -222,6 +311,15 @@ void Filesystem::Release(Dir* dir) {
   dlru_->Release(dir->lru_handle);
 }
 
+// We serialize filesystem metadata operations at a per-directory basis. A
+// control block is allocated for each directory to synchronize all operations
+// within that directory. An LRU cache of directory control blocks is kept in
+// memory to avoid repeatedly creating directory control blocks. A separate hash
+// table is allocated to index all directory control blocks that are currently
+// being used by ongoing filesystem operations. When obtaining a control block,
+// we first look it up at the hash table. If we cannot find it, we continue the
+// search at the LRU cache. If we still cannot find it, we create a new and
+// insert it into the LRU cache and the hash table.
 Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   mutex_.AssertHeld();
   char tmp[30];
@@ -229,33 +327,41 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   const uint32_t hash = LRUHash(key);
   Status s;
 
-  // Cursor position in the table is cached and can be reused in
-  // subsequent table insertions.
+  // We cache the cursor position returned by the table so that we can
+  // reuse it in a subsequent table insertion.
   Dir** const pos = diu_->FindPointer(key, hash);
   Dir* dir = *pos;
   if (dir != NULL) {
     *result = dir;
     assert(dir->lru_handle->value == dir);
-    // This could prevent an entry having
-    // been evicted from the cache from being removed
-    // from the memory.
+    // If we hit an entry at the table, we increase the
+    // reference count of the entry's corresponding handle
+    // in the LRU cache. If this entry has been evicted
+    // from the cache, this will further defer its deletion
+    // from the memory, which is our intention here.
     dlru_->Ref(dir->lru_handle);
     assert(dir->in_use != 0);
     dir->in_use++;
     return s;
   }
 
+  // If we cannot find an entry in the table, we continue our search
+  // at the LRU cache.
   DirHandl* h = dlru_->Lookup(key, hash);
   if (h != NULL) {
     dir = h->value;
     *result = dir;
     assert(dir->lru_handle == h);
+    // If we find the entry from the cache, we need to
+    // reinsert it into the table.
     diu_->Inject(dir, pos);
     assert(dir->in_use == 0);
     dir->in_use = 1;
     return s;
   }
 
+  // If we still cannot find the entry, we create it and insert it into the
+  // cache and the table.
   dir = static_cast<Dir*>(malloc(sizeof(Dir) - 1 + key.size()));
   dir->dno = id.dno;
   dir->ino = id.ino;
@@ -266,6 +372,9 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   dir->cv = new port::CondVar(dir->mu);
   dir->busy = 0;
 
+  // Each cache handle of a Dir has a value pointer pointing to the Dir.
+  // Each Dir back points to its handle. Dirs are double used as
+  // hash entries enabling hash operations in the table.
   h = dlru_->Insert(key, hash, dir, 1, FreeDir);
   *result = dir;
   dir->lru_handle = h;

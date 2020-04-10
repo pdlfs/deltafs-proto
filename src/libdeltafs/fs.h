@@ -70,14 +70,14 @@ class Filesystem {
   explicit Filesystem(const FilesystemOptions& options);
   ~Filesystem();
 
-  Status Mkfle(const User& who, const DirId& at, const Slice& name,
-               uint32_t mode, const LookupStat& p, Stat* stat);
-  Status Mkdir(const User& who, const DirId& at, const Slice& name,
-               uint32_t mode, const LookupStat& p, Stat* stat);
-  Status Lokup(const User& who, const DirId& at, const Slice& name,
-               const LookupStat& p, LookupStat* stat);
-  Status Lstat(const User& who, const DirId& at, const Slice& name,
-               const LookupStat& p, Stat* stat);
+  Status Mkfle(const User& who, const LookupStat& parent, const Slice& name,
+               uint32_t mode, Stat* stat);
+  Status Mkdir(const User& who, const LookupStat& parent, const Slice& name,
+               uint32_t mode, Stat* stat);
+  Status Lokup(const User& who, const LookupStat& parent, const Slice& name,
+               LookupStat* stat);
+  Status Lstat(const User& who, const LookupStat& parent, const Slice& name,
+               Stat* stat);
 
   // Deterministically map directories to their zeroth servers.
   uint32_t PickupServer(const DirId& id);
@@ -88,6 +88,10 @@ class Filesystem {
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
                 uint64_t ino, uint32_t type, uint32_t mode,
                 const LookupStat& parent, Dir* dir, Stat* stat);
+  Status Lokup1(const User& who, const DirId& at, const Slice& name, Dir* dir,
+                const LookupStat& parent, LookupStat* stat);
+  Status Lstat1(const User& who, const DirId& at, const Slice& name, Dir* dir,
+                const LookupStat& parent, Stat* stat);
 
   Status Put(const User& who, const DirId& at, const Slice& name, uint64_t dno,
              uint64_t ino, uint32_t zsrv, uint32_t mode, Stat* stat);
@@ -128,6 +132,11 @@ class Filesystem {
 
     ///
   };
+  static void WaitUntilNotBusy(Dir* dir) {
+    while (dir->busy) {
+      dir->cv->Wait();
+    }
+  }
   static void Unbusy(Dir* dir) {
     dir->busy = false;
     // No need to Signal() if we are the only user
