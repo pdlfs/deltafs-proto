@@ -46,7 +46,7 @@
 
 # main directory sources and tests
 set (deltafs-srcs deltafs.cc fsdb.cc fs.cc)
-set (deltafs-tests deltafs_test.cc)
+set (deltafs-tests deltafs_test.cc fs_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)

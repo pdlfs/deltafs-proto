@@ -120,6 +120,16 @@ bool IsLookupOk(const FilesystemOptions& options, const LookupStat& parent,
 
 }  // namespace
 
+Status Filesystem::TEST_ProbeDir(const DirId& at) {
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    Release(dir);
+  }
+  return s;
+}
+
 Status Filesystem::Lokup(  ///
     const User& who, const LookupStat& p, const Slice& name, LookupStat* stat) {
   DirId at(p);
@@ -416,7 +426,8 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
 }
 
 FilesystemOptions::FilesystemOptions()
-    : skip_partition_checks(false),
+    : dir_lru_size(4096),
+      skip_partition_checks(false),
       skip_name_collision_checks(false),
       skip_perm_checks(false),
       rdonly(false),
@@ -427,10 +438,13 @@ FilesystemOptions::FilesystemOptions()
 
 Filesystem::Filesystem(const FilesystemOptions& options)
     : options_(options), mdb_(NULL), db_(NULL) {
-  //
+  dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
+  diu_ = new HashTable<Dir>();
 }
 
 Filesystem::~Filesystem() {
+  delete dlru_;
+  delete diu_;
   delete mdb_;
   delete db_;
 }

@@ -47,6 +47,7 @@ class DirIndex;
 // Options for controlling the filesystem.
 struct FilesystemOptions {
   FilesystemOptions();
+  size_t dir_lru_size;
   bool skip_partition_checks;
   bool skip_name_collision_checks;
   bool skip_perm_checks;
@@ -85,6 +86,9 @@ class Filesystem {
   // Deterministically assign a zeroth server to
   // a given directory id.
   int PickupServer(const DirId& id);
+
+  // Fake a directory access.
+  Status TEST_ProbeDir(const DirId& id);
 
  private:
   struct Dir;
