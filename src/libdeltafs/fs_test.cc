@@ -49,6 +49,20 @@ class FilesystemTest {
     delete fs_;
   }
 
+  Status Creat(uint64_t pid, const std::string& name) {
+    LookupStat p;
+    p.SetDnodeNo(0);
+    p.SetInodeNo(pid);
+    p.SetZerothServer(0);
+    p.SetDirMode(0777);
+    p.SetUserId(0);
+    p.SetGroupId(0);
+    p.SetLeaseDue(-1);
+    p.AssertAllSet();
+    Stat tmp;
+    return fs_->Mkfle(me_, p, name, 0660, &tmp);
+  }
+
   FilesystemOptions options_;
   Filesystem* fs_;
   std::string fsloc_;
@@ -57,7 +71,12 @@ class FilesystemTest {
 
 TEST(FilesystemTest, OpenAndClose) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
-  ASSERT_OK(fs_->TEST_ProbeDir(DirId(0, 0)));
+  ASSERT_OK(fs_->TEST_ProbeDir(DirId(0)));
+}
+
+TEST(FilesystemTest, Files) {
+  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(Creat(0, "a"));
 }
 
 }  // namespace pdlfs
