@@ -210,18 +210,16 @@ Status Filesystem::Lstat1(  ///
     const LookupStat& p, Stat* stat) {
   {
     MutexLock lock(dir->mu);
-    const uint64_t ts = CurrentMicros();
     Status s = MaybeFetchDir(dir);
     if (!s.ok()) {
       return s;
     }
     if (!IsDirPartitionOk(options_, *dir->giga, name))
       return Status::AccessDenied("Wrong dir partition");
-    else if (!IsLookupOk(options_, p, who, ts))
+    else if (!IsLookupOk(options_, p, who, CurrentMicros()))
       return Status::AccessDenied("No x perm");
   }
 
-  // TODO: Allow reads to read from a db snapshot
   return mdb_->Get(at, name, stat);
 }
 
@@ -230,18 +228,19 @@ Status Filesystem::Mknod1(  ///
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
     Stat* stat) {
   MutexLock lock(dir->mu);
-  const uint64_t ts = CurrentMicros();
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
     return s;
   }
+  // Wait for ongoing writes
+  while (dir->busy) dir->cv->Wait();
+  dir->busy = true;
+
   if (!IsDirPartitionOk(options_, *dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
-  if (!IsDirWriteOk(options_, p, who, ts))
+  if (!IsDirWriteOk(options_, p, who, CurrentMicros()))
     return Status::AccessDenied("No write perm");
 
-  WaitUntilNotBusy(dir);
-  dir->busy = true;
   // Temporarily unlock for db accesses
   dir->mu->Unlock();
   if (!options_.skip_name_collision_checks) {

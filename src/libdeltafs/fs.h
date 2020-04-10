@@ -135,11 +135,6 @@ class Filesystem {
 
     ///
   };
-  static void WaitUntilNotBusy(Dir* dir) {
-    while (dir->busy) {
-      dir->cv->Wait();
-    }
-  }
   static void Unbusy(Dir* dir) {
     dir->busy = false;
     // No need to Signal() if we are the only user
