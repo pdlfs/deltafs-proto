@@ -41,6 +41,7 @@
 
 namespace pdlfs {
 
+struct DirIndexOptions;
 class DirIndex;
 
 // Options for controlling the filesystem.
@@ -80,7 +81,7 @@ class Filesystem {
                Stat* stat);
 
   // Deterministically map directories to their zeroth servers.
-  uint32_t PickupServer(const DirId& id);
+  int PickupServer(const DirId& id);
 
  private:
   struct Dir;
@@ -114,6 +115,7 @@ class Filesystem {
   // Also serves as entries in an Hash Table.
   struct Dir {
     DirHandl* lru_handle;
+    DirIndexOptions* giga_opts;
     DirIndex* giga;
     Dir* next_hash;
     port::CondVar* cv;
@@ -123,6 +125,7 @@ class Filesystem {
     size_t key_length;
     uint32_t in_use;  // Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    unsigned char fetched;
     unsigned char busy;  // Has ongoing directory changes
     char key_data[1];    // Beginning of key
 
@@ -148,10 +151,12 @@ class Filesystem {
   // number of control blocks may be cached in memory. When the maximum is
   // reached, cache eviction will start.
   LRUCache<DirHandl>* dlru_;
-  // Delete, acquire, or release a directory control block
-  // from cache.
   static void FreeDir(const Slice& key, Dir* dir);
+  // Obtain the control block for a given directory.
   Status AcquireDir(const DirId&, Dir**);
+  // Fetch information on a directory from db.
+  Status MaybeFetchDir(Dir* dir);
+  // Release an active reference to a directory control block.
   void Release(Dir*);
   // It is possible for a control block to be evicted from the LRU cache while
   // the block itself is still being used by some threads. This would cause a

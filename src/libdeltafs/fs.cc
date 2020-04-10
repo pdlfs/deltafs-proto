@@ -42,7 +42,7 @@
 
 namespace pdlfs {
 
-uint32_t Filesystem::PickupServer(const DirId& id) {
+int Filesystem::PickupServer(const DirId& id) {
   char tmp[16];
   char* p = tmp;
   EncodeFixed64(p, id.dno);
@@ -208,18 +208,21 @@ Status Filesystem::Lokup1(  ///
 Status Filesystem::Lstat1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
     const LookupStat& p, Stat* stat) {
-  Status s;
-  dir->mu->Lock();
-  const uint64_t ts = CurrentMicros();
-  if (!IsDirPartitionOk(options_, *dir->giga, name))
-    s = Status::AccessDenied("Wrong dir partition");
-  else if (!IsLookupOk(options_, p, who, ts))
-    s = Status::AccessDenied("No x perm");
-  dir->mu->Unlock();
-  if (s.ok()) {
-    s = mdb_->Get(at, name, stat);
+  {
+    MutexLock lock(dir->mu);
+    const uint64_t ts = CurrentMicros();
+    Status s = MaybeFetchDir(dir);
+    if (!s.ok()) {
+      return s;
+    }
+    if (!IsDirPartitionOk(options_, *dir->giga, name))
+      return Status::AccessDenied("Wrong dir partition");
+    else if (!IsLookupOk(options_, p, who, ts))
+      return Status::AccessDenied("No x perm");
   }
-  return s;
+
+  // TODO: Allow reads to read from a db snapshot
+  return mdb_->Get(at, name, stat);
 }
 
 Status Filesystem::Mknod1(  ///
@@ -228,12 +231,15 @@ Status Filesystem::Mknod1(  ///
     Stat* stat) {
   MutexLock lock(dir->mu);
   const uint64_t ts = CurrentMicros();
+  Status s = MaybeFetchDir(dir);
+  if (!s.ok()) {
+    return s;
+  }
   if (!IsDirPartitionOk(options_, *dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
   if (!IsDirWriteOk(options_, p, who, ts))
     return Status::AccessDenied("No write perm");
 
-  Status s;
   WaitUntilNotBusy(dir);
   dir->busy = true;
   // Temporarily unlock for db accesses
@@ -311,6 +317,26 @@ void Filesystem::Release(Dir* const dir) {
   dlru_->Release(dir->lru_handle);
 }
 
+// Fetch information from db if we haven't done so yet.
+Status Filesystem::MaybeFetchDir(Dir* dir) {
+  Status s;
+  dir->mu->AssertHeld();
+  if (dir->fetched) {
+    return s;
+  }
+
+  dir->giga_opts = new DirIndexOptions;
+  dir->giga_opts->num_virtual_servers = options_.vsrvs;
+  dir->giga_opts->num_servers = options_.nsrvs;
+
+  const int zsrv = PickupServer(DirId(dir->dno, dir->ino));
+  dir->giga = new DirIndex(zsrv, dir->giga_opts);
+  dir->giga->SetAll();
+
+  dir->fetched = true;
+  return s;
+}
+
 // We serialize filesystem metadata operations at a per-directory basis. A
 // control block is allocated for each directory to synchronize all operations
 // within that directory. An LRU cache of directory control blocks is kept in
@@ -370,6 +396,9 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   dir->hash = hash;
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
+  dir->giga = NULL;  // To be fetched from db later
+  dir->giga_opts = NULL;
+  dir->fetched = 0;
   dir->busy = 0;
 
   // Each cache handle of a Dir has a value pointer pointing to the Dir.
