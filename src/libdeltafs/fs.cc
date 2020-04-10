@@ -220,6 +220,10 @@ Status Filesystem::Lstat1(  ///
       return Status::AccessDenied("No x perm");
   }
 
+  // The following Get() operation goes unlocked with an assumption
+  // that the directory partition status it just checked won't
+  // change --- the name is still "in" the partition.
+  // This can be ensured by having the Get() read from a db snapshot.
   return mdb_->Get(at, name, stat);
 }
 
@@ -409,6 +413,38 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   diu_->Inject(dir, pos);
   dir->in_use = 1;
   return s;
+}
+
+FilesystemOptions::FilesystemOptions()
+    : skip_partition_checks(false),
+      skip_name_collision_checks(false),
+      skip_perm_checks(false),
+      rdonly(false),
+      vsrvs(1),
+      nsrvs(1),
+      srvid(0),
+      mydno(0) {}
+
+Filesystem::Filesystem(const FilesystemOptions& options)
+    : options_(options), mdb_(NULL), db_(NULL) {
+  //
+}
+
+Filesystem::~Filesystem() {
+  delete mdb_;
+  delete db_;
+}
+
+Status Filesystem::OpenFilesystem(const std::string& fsloc) {
+  DBOptions options;
+  options.create_if_missing = options.error_if_exists = true;
+  Status status = DB::Open(options, fsloc, &db_);
+  if (!status.ok()) {
+    return status;
+  }
+
+  mdb_ = new MDB(MDBOptions(db_));
+  return status;
 }
 
 }  // namespace pdlfs

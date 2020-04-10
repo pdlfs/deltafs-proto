@@ -71,6 +71,8 @@ class Filesystem {
   explicit Filesystem(const FilesystemOptions& options);
   ~Filesystem();
 
+  Status OpenFilesystem(const std::string& fsloc);
+
   Status Mkfle(const User& who, const LookupStat& parent, const Slice& name,
                uint32_t mode, Stat* stat);
   Status Mkdir(const User& who, const LookupStat& parent, const Slice& name,
@@ -80,7 +82,8 @@ class Filesystem {
   Status Lstat(const User& who, const LookupStat& parent, const Slice& name,
                Stat* stat);
 
-  // Deterministically map directories to their zeroth servers.
+  // Deterministically assign a zeroth server to
+  // a given directory id.
   int PickupServer(const DirId& id);
 
  private:
