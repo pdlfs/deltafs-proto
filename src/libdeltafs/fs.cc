@@ -55,12 +55,12 @@ int Filesystem::PickupServer(const DirId& id) {
 
 namespace {
 
-bool IsDirPartitionOk(const FilesystemOptions& options, const DirIndex& giga,
+bool IsDirPartitionOk(const FilesystemOptions& options, const DirIndex* giga,
                       const Slice& name) {
   if (options.skip_partition_checks) {
     return true;
   } else {
-    return (options.srvid == giga.SelectServer(name));
+    return (options.srvid == giga->SelectServer(name));
   }
 }
 
@@ -222,16 +222,17 @@ Status Filesystem::Lokup1(  ///
 Status Filesystem::Lstat1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
     const LookupStat& p, Stat* stat) {
-  {
+  if (!IsLookupOk(options_, p, who, CurrentMicros()))
+    return Status::AccessDenied("No x perm");
+  if (!options_.skip_partition_checks) {
     MutexLock lock(dir->mu);
     Status s = MaybeFetchDir(dir);
     if (!s.ok()) {
       return s;
     }
-    if (!IsDirPartitionOk(options_, *dir->giga, name))
+    // XXX: obtain split lock here to secure directory split status
+    if (!IsDirPartitionOk(options_, dir->giga, name))
       return Status::AccessDenied("Wrong dir partition");
-    else if (!IsLookupOk(options_, p, who, CurrentMicros()))
-      return Status::AccessDenied("No x perm");
   }
 
   // The following Get() operation goes unlocked with an assumption
@@ -248,7 +249,7 @@ Status Filesystem::Lstat1(  ///
   // the read and switched back after a directory split, it may miss
   // the key.
   // To ensure that the read operation can still read the key as if
-  // the directory had not been split, we have it read from a db
+  // the directory had not been split, we can have it read from a db
   // snapshot. If the name is "in" the half of partition that might
   // be moved out, the read reads from the snapshot. Otherwise, the
   // read still reads the latest db.
@@ -262,7 +263,7 @@ Status Filesystem::Lstat1(  ///
   // still go during an entire split and only write operations against
   // the half of partition are blocked by the split.
   //
-  // Another completely different way to do this is to have a read
+  // Another more straightforward way to do this is to have a read
   // operation install a status in the directory control block to
   // block any subsequent split from happening. At the same time,
   // any ongoing split will block reads from happening, like a read
@@ -270,10 +271,10 @@ Status Filesystem::Lstat1(  ///
   // The lock has 2 phases. In phase 1, all write operations against
   // the half of partition to be moved are blocked. The split
   // operation copies the half to another server. Read operations
-  // can still go during this phase. In phase 2, both read and write
-  // operations are blocked. The split operation bulk deletes the
-  // half of partition that has been moved and install a new directory
-  // index.
+  // are still allowed during this phase. In phase 2, both read and
+  // write operations are blocked. The split operation bulk deletes
+  // the half of partition that has been moved and install a new
+  // directory index.
   return mdb_->Get(at, name, stat);
 }
 
@@ -281,11 +282,16 @@ Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t myino,
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
     Stat* stat) {
+  if (!IsDirWriteOk(options_, p, who, CurrentMicros()))
+    return Status::AccessDenied("No write perm");
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
     return s;
   }
+  // XXX: obtain directory split lock here to secure directory split status
+  if (!IsDirPartitionOk(options_, dir->giga, name))
+    return Status::AccessDenied("Wrong dir partition");
   // The best performance is achieved when a different hash function is used
   // as the one used for directory splits
   uint32_t hash = Hash(name.data(), name.size(), 0);
@@ -293,13 +299,7 @@ Status Filesystem::Mknod1(  ///
   // Wait for conflicting writes
   while (dir->busy[i]) dir->cv->Wait();
   dir->busy[i] = true;
-
-  if (!IsDirPartitionOk(options_, *dir->giga, name))
-    return Status::AccessDenied("Wrong dir partition");
-  if (!IsDirWriteOk(options_, p, who, CurrentMicros()))
-    return Status::AccessDenied("No write perm");
-
-  // Temporarily unlock for db accesses
+  // Temporarily unlock for db operations
   dir->mu->Unlock();
   if (!options_.skip_name_collision_checks) {
     s = mdb_->Get(at, name, stat);
