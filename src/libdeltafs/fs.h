@@ -120,6 +120,7 @@ class Filesystem {
   typedef LRUEntry<Dir> DirHandl;
   // Directory control blocks.
   // Also serves as entries in an Hash Table.
+  enum { kWays = 8 };  // Must be a power of 2
   struct Dir {
     DirHandl* lru_handle;
     DirIndexOptions* giga_opts;
@@ -133,8 +134,8 @@ class Filesystem {
     uint32_t in_use;  // Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
     unsigned char fetched;
-    unsigned char busy;  // Has ongoing directory changes
-    char key_data[1];    // Beginning of key
+    unsigned char busy[kWays];  // Has ongoing namespace or stat changes
+    char key_data[1];           // Beginning of key
 
     Slice key() const {  // Return the key of the dir.
       return Slice(key_data, key_length);
@@ -142,13 +143,6 @@ class Filesystem {
 
     ///
   };
-  static void Unbusy(Dir* dir) {
-    dir->busy = false;
-    // No need to Signal() if we are the only user
-    if (dir->in_use > 1) {
-      dir->cv->Signal();
-    }
-  }
   // An LRU cache of directory control blocks is kept in memory. A certain
   // number of control blocks may be cached in memory. When the maximum is
   // reached, cache eviction will start.

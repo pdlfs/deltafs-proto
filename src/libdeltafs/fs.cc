@@ -231,9 +231,45 @@ Status Filesystem::Lstat1(  ///
   }
 
   // The following Get() operation goes unlocked with an assumption
-  // that the directory partition status it just checked won't
-  // change --- the name is still "in" the partition.
-  // This can be ensured by having the Get() read from a db snapshot.
+  // that the directory partition it just checked won't be later
+  // split --- the name is still "in" the partition so that
+  // the read is still reading against the right server.
+  // A directory partition is split when it grows large. When a
+  // directory partition is split, it is divided into two halves.
+  // One of the two halves stays in the server. The other is moved
+  // into another server.
+  // The read operation may read a key that belongs to the half
+  // of partition that will be moved should directory splitting happen.
+  // If the read operation is context switched out before it performs
+  // the read and switched back after a directory split, it may miss
+  // the key.
+  // To ensure that the read operation can still read the key as if
+  // the directory had not been split, we have it read from a db
+  // snapshot. If the name is "in" the half of partition that might
+  // be moved out, the read reads from the snapshot. Otherwise, the
+  // read still reads the latest db.
+  // Db snapshots are installed by the operation that performs a split.
+  // Db snapshots are reference counted. If an operation performing
+  // a split finds a previously installed snapshot, it waits until
+  // the last reference to the snapshot is released before proceeding.
+  // An advantage of this approach is that when a directory
+  // splitting happens, it effectively treats the half of partition
+  // that needs to be moved as read only so that read operations can
+  // still go during an entire split and only write operations against
+  // the half of partition are blocked by the split.
+  //
+  // Another completely different way to do this is to have a read
+  // operation install a status in the directory control block to
+  // block any subsequent split from happening. At the same time,
+  // any ongoing split will block reads from happening, like a read
+  // write lock would do. We may call it a per-directory split lock.
+  // The lock has 2 phases. In phase 1, all write operations against
+  // the half of partition to be moved are blocked. The split
+  // operation copies the half to another server. Read operations
+  // can still go during this phase. In phase 2, both read and write
+  // operations are blocked. The split operation bulk deletes the
+  // half of partition that has been moved and install a new directory
+  // index.
   return mdb_->Get(at, name, stat);
 }
 
@@ -246,9 +282,13 @@ Status Filesystem::Mknod1(  ///
   if (!s.ok()) {
     return s;
   }
-  // Wait for ongoing writes
-  while (dir->busy) dir->cv->Wait();
-  dir->busy = true;
+  // The best performance is achieved when a different hash function is used
+  // as the one used for directory splits
+  uint32_t hash = Hash(name.data(), name.size(), 0);
+  uint32_t i = hash & (kWays - 1);
+  // Wait for conflicting writes
+  while (dir->busy[i]) dir->cv->Wait();
+  dir->busy[i] = true;
 
   if (!IsDirPartitionOk(options_, *dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
@@ -273,7 +313,8 @@ Status Filesystem::Mknod1(  ///
             mymo, stat);
   }
   dir->mu->Lock();
-  Unbusy(dir);
+  dir->busy[i] = false;
+  dir->cv->SignalAll();
   return s;
 }
 
@@ -409,10 +450,10 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   dir->hash = hash;
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
+  memset(&dir->busy[0], 0, sizeof(dir->busy));
   dir->giga = NULL;  // To be fetched from db later
   dir->giga_opts = NULL;
   dir->fetched = 0;
-  dir->busy = 0;
 
   // Each cache handle of a Dir has a value pointer pointing to the Dir.
   // Each Dir back points to its handle. Dirs are double used as
