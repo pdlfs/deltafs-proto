@@ -208,9 +208,13 @@ Status Filesystem::Lokup1(  ///
   Stat tmp;
   Status s = Lstat1(who, at, name, dir, p, &tmp);
   if (s.ok()) {
-    stat->CopyFrom(tmp);
-    stat->SetLeaseDue(-1);
-    stat->AssertAllSet();
+    if (!S_ISDIR(tmp.FileMode())) {
+      s = Status::DirExpected(Slice("Not a dir"));
+    } else {
+      stat->CopyFrom(tmp);
+      stat->SetLeaseDue(-1);
+      stat->AssertAllSet();
+    }
   }
   return s;
 }
