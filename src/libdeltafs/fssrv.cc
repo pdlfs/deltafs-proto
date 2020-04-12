@@ -36,7 +36,7 @@
 namespace pdlfs {
 
 FilesystemServerOptions::FilesystemServerOptions()
-    : num_rpc_threads(8), uri(":10086") {}
+    : num_rpc_threads(1), uri(":10086") {}
 
 FilesystemServer::FilesystemServer(  ///
     const FilesystemServerOptions& options, Filesystem* fs)
