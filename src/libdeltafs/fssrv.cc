@@ -58,7 +58,7 @@ rpc::If* FilesystemServer::TEST_CreateCli(const std::string& uri) {
   return rpc_->OpenStubFor(uri);
 }
 
-void FilesystemServer::TEST_SetOp(int i, If* op) {
+void FilesystemServer::TEST_Remap(int i, If* op) {
   ops_[i] = op;  ///
 }
 

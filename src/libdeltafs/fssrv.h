@@ -55,7 +55,7 @@ class FilesystemServer : public rpc::If {
   Status Close();
 
   If* TEST_CreateCli(const std::string& uri);
-  void TEST_SetOp(int i, If* op);
+  void TEST_Remap(int i, If* op);
 
  private:
   // No copying allowed

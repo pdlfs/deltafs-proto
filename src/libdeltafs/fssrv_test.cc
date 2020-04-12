@@ -60,7 +60,7 @@ TEST(FilesystemServerTest, StartAndStop) {
 
 TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->OpenServer());
-  srv_->TEST_SetOp(0, this);
+  srv_->TEST_Remap(0, this);
   If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
   Message in, out;
   EncodeFixed32(&in.buf[0], 0);
