@@ -45,7 +45,8 @@
 #
 
 # main directory sources and tests
-set (deltafs-srcs deltafs.cc fsdb.cc fscomm.cc fssrv.cc fs.cc)
+set (deltafs-srcs fsdb.cc fsapi.cc fscomm.cc fssrv.cc fscli.cc fs.cc
+        deltafs.cc)
 set (deltafs-tests deltafs_test.cc fssrv_test.cc fs_test.cc)
 
 # configure/load in standard modules we plan to use

@@ -33,46 +33,28 @@
  */
 #pragma once
 
-#include "fsapi.h"
-#include "fscomm.h"
-
-#include "pdlfs-common/rpc.h"
+#include "pdlfs-common/fstypes.h"
 
 namespace pdlfs {
-
-struct FilesystemServerOptions {
-  FilesystemServerOptions();
-  int num_rpc_threads;
-  std::string uri;
+// User id information.
+struct User {
+  uint32_t uid;
+  uint32_t gid;
 };
 
-// Each filesystem server acts as a router. An embedded rpc server handles
-// network communication and listens to client requests. Each client request
-// received by it (the rpc server) is sent to the filesystem server for
-// processing. The filesystem server processes a request by routing it to a
-// corresponding handler for processing. Requests are routed according to a
-// routing table established at the beginning of filesystem server
-// initialization.
-class FilesystemServer : public rpc::If {
+// Filesystem interface at the server side.
+class FilesystemIf {
  public:
-  FilesystemServer(const FilesystemServerOptions& options, FilesystemIf* fs);
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~FilesystemServer();
-  Status OpenServer();
-  Status Close();
-
-  If* TEST_CreateCli(const std::string& uri);
-  // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, If* op);
-
- private:
-  // No copying allowed
-  void operator=(const FilesystemServer& server);
-  FilesystemServer(const FilesystemServer&);
-  FilesystemServerOptions options_;
-  RPC* rpc_;
-  FilesystemIf* fs_;
-  If** ops_;
+  FilesystemIf() {}
+  virtual Status Mkfle(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat) = 0;
+  virtual Status Mkdir(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat) = 0;
+  virtual Status Lokup(const User& who, const LookupStat& parent,
+                       const Slice& name, LookupStat* stat) = 0;
+  virtual Status Lstat(const User& who, const LookupStat& parent,
+                       const Slice& name, Stat* stat) = 0;
+  virtual ~FilesystemIf();
 };
 
 }  // namespace pdlfs

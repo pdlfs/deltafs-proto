@@ -39,7 +39,7 @@ FilesystemServerOptions::FilesystemServerOptions()
     : num_rpc_threads(1), uri(":10086") {}
 
 FilesystemServer::FilesystemServer(  ///
-    const FilesystemServerOptions& options, Filesystem* fs)
+    const FilesystemServerOptions& options, FilesystemIf* fs)
     : options_(options), rpc_(NULL), fs_(fs), ops_(NULL) {
   ops_ = new If*[kNumOps];
   memset(ops_, 0, kNumOps * sizeof(If*));

@@ -33,6 +33,7 @@
  */
 #pragma once
 
+#include "fsapi.h"
 #include "fsdb.h"
 
 #include "pdlfs-common/hashmap.h"
@@ -42,6 +43,8 @@
 namespace pdlfs {
 
 struct DirIndexOptions;
+struct User;
+
 class DirIndex;
 
 // Options for controlling the filesystem.
@@ -61,27 +64,22 @@ struct FilesystemOptions {
   // My dnode no.
   int mydno;
 };
-// User id information.
-struct User {
-  uint32_t uid;
-  uint32_t gid;
-};
 
-class Filesystem {
+class Filesystem : public FilesystemIf {
  public:
   explicit Filesystem(const FilesystemOptions& options);
-  ~Filesystem();
+  virtual ~Filesystem();
 
   Status OpenFilesystem(const std::string& fsloc);
 
-  Status Mkfle(const User& who, const LookupStat& parent, const Slice& name,
-               uint32_t mode, Stat* stat);
-  Status Mkdir(const User& who, const LookupStat& parent, const Slice& name,
-               uint32_t mode, Stat* stat);
-  Status Lokup(const User& who, const LookupStat& parent, const Slice& name,
-               LookupStat* stat);
-  Status Lstat(const User& who, const LookupStat& parent, const Slice& name,
-               Stat* stat);
+  virtual Status Mkfle(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat);
+  virtual Status Mkdir(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat);
+  virtual Status Lokup(const User& who, const LookupStat& parent,
+                       const Slice& name, LookupStat* stat);
+  virtual Status Lstat(const User& who, const LookupStat& parent,
+                       const Slice& name, Stat* stat);
 
   // Deterministically assign a zeroth server to
   // a given directory id.

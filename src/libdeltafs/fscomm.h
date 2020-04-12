@@ -33,9 +33,8 @@
  */
 #pragma once
 
-#include "fs.h"
+#include "fsapi.h"
 
-#include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
@@ -54,10 +53,10 @@ struct MkdirRet {
   Stat stat;
 };
 struct MkdirOperation : public rpc::If {
-  MkdirOperation(Filesystem* fs) : fs_(fs) {}
+  MkdirOperation(FilesystemIf* fs) : fs_(fs) {}
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
   virtual ~MkdirOperation() {}
-  Filesystem* fs_;
+  FilesystemIf* fs_;
 };
 namespace rpc {
 struct MkdirCli {
