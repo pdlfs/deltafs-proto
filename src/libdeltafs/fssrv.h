@@ -49,11 +49,13 @@ struct FilesystemServerOptions {
 class FilesystemServer : public rpc::If {
  public:
   FilesystemServer(const FilesystemServerOptions& options, Filesystem* fs);
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
+  virtual ~FilesystemServer();
   Status OpenServer();
   Status Close();
 
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~FilesystemServer();
+  If* TEST_CreateCli(const std::string& uri);
+  void TEST_SetOp(int i, If* op);
 
  private:
   // No copying allowed

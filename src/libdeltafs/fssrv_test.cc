@@ -33,54 +33,45 @@
  */
 #include "fssrv.h"
 
+#include "pdlfs-common/testharness.h"
+
 namespace pdlfs {
-
-FilesystemServerOptions::FilesystemServerOptions()
-    : num_rpc_threads(8), uri(":10086") {}
-
-FilesystemServer::FilesystemServer(  ///
-    const FilesystemServerOptions& options, Filesystem* fs)
-    : options_(options), rpc_(NULL), fs_(fs), ops_(NULL) {
-  ops_ = new If*[kNumOps];
-  memset(ops_, 0, kNumOps * sizeof(If*));
-  ops_[kMkdir] = new MkdirOperation(fs_);
-}
-
-Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
-  if (in.contents.size() >= 4) {
-    return ops_[DecodeFixed32(&in.contents[0])]->Call(in, out);
-  } else {
-    return Status::InvalidArgument("Bad rpc req");
+class FilesystemServerTest : public rpc::If {
+ public:
+  FilesystemServerTest()  ///
+      : srv_(new FilesystemServer(options_, NULL)) {}
+  virtual ~FilesystemServerTest() {  ///
+    delete srv_;
   }
+
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
+    out.contents = in.contents;
+    return Status::OK();
+  }
+
+  FilesystemServerOptions options_;
+  FilesystemServer* srv_;
+};
+
+TEST(FilesystemServerTest, StartAndStop) {
+  ASSERT_OK(srv_->OpenServer());
+  ASSERT_OK(srv_->Close());
 }
 
-rpc::If* FilesystemServer::TEST_CreateCli(const std::string& uri) {
-  return rpc_->OpenStubFor(uri);
-}
-
-void FilesystemServer::TEST_SetOp(int i, If* op) {
-  ops_[i] = op;  ///
-}
-
-FilesystemServer::~FilesystemServer() {
-  delete rpc_;
-  delete ops_;
-}
-
-Status FilesystemServer::Close() {
-  if (rpc_) return rpc_->Stop();
-  return Status::OK();
-}
-
-Status FilesystemServer::OpenServer() {
-  RPCOptions options;
-  options.fs = this;
-  options.impl = rpc::kSocketRPC;
-  options.mode = rpc::kServerClient;
-  options.num_rpc_threads = options_.num_rpc_threads;
-  options.uri = options_.uri;
-  rpc_ = RPC::Open(options);
-  return rpc_->Start();
+TEST(FilesystemServerTest, OpRoute) {
+  ASSERT_OK(srv_->OpenServer());
+  srv_->TEST_SetOp(0, this);
+  If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
+  Message in, out;
+  EncodeFixed32(&in.buf[0], 0);
+  in.contents = Slice(&in.buf[0], 4);
+  ASSERT_OK(cli->Call(in, out));
+  ASSERT_EQ(out.contents, in.contents);
+  ASSERT_OK(srv_->Close());
 }
 
 }  // namespace pdlfs
+
+int main(int argc, char* argv[]) {
+  return pdlfs::test::RunAllTests(&argc, &argv);
+}
