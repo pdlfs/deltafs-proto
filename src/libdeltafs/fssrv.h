@@ -34,20 +34,35 @@
 #pragma once
 
 #include "fs.h"
+#include "fscomm.h"
 
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
 
+struct FilesystemServerOptions {
+  FilesystemServerOptions();
+  int num_rpc_threads;
+  std::string uri;
+};
+
 class FilesystemServer : public rpc::If {
  public:
-  FilesystemServer();
+  FilesystemServer(const FilesystemServerOptions& options, Filesystem* fs);
+  Status OpenServer();
+  Status Close();
 
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
   virtual ~FilesystemServer();
 
  private:
+  // No copying allowed
+  void operator=(const FilesystemServer& server);
+  FilesystemServer(const FilesystemServer&);
+  FilesystemServerOptions options_;
+  RPC* rpc_;
   Filesystem* fs_;
+  If** ops_;
 };
 
 }  // namespace pdlfs

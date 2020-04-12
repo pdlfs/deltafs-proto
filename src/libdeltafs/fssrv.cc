@@ -35,6 +35,44 @@
 
 namespace pdlfs {
 
-//
+FilesystemServerOptions::FilesystemServerOptions()
+    : num_rpc_threads(8), uri(":10086") {}
 
+FilesystemServer::FilesystemServer(  ///
+    const FilesystemServerOptions& options, Filesystem* fs)
+    : options_(options), rpc_(NULL), fs_(fs), ops_(NULL) {
+  ops_ = new If*[kNumOps];
+  memset(ops_, 0, kNumOps * sizeof(If*));
+  ops_[kMkdir] = new MkdirOperation(fs_);
 }
+
+Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
+  if (in.contents.size() >= 4) {
+    return ops_[DecodeFixed32(&in.contents[0])]->Call(in, out);
+  } else {
+    return Status::InvalidArgument("Bad rpc req");
+  }
+}
+
+FilesystemServer::~FilesystemServer() {
+  delete rpc_;
+  delete ops_;
+}
+
+Status FilesystemServer::Close() {
+  if (rpc_) return rpc_->Stop();
+  return Status::OK();
+}
+
+Status FilesystemServer::OpenServer() {
+  RPCOptions options;
+  options.fs = this;
+  options.impl = rpc::kSocketRPC;
+  options.mode = rpc::kServerClient;
+  options.num_rpc_threads = options_.num_rpc_threads;
+  options.uri = options_.uri;
+  rpc_ = RPC::Open(options);
+  return rpc_->Start();
+}
+
+}  // namespace pdlfs
