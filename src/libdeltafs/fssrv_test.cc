@@ -36,7 +36,7 @@
 #include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
-class FilesystemServerTest : public rpc::If {
+class FilesystemServerTest {
  public:
   FilesystemServerTest()  ///
       : srv_(new FilesystemServer(options_, NULL)) {}
@@ -44,13 +44,21 @@ class FilesystemServerTest : public rpc::If {
     delete srv_;
   }
 
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
-    out.contents = in.contents;
-    return Status::OK();
-  }
-
   FilesystemServerOptions options_;
   FilesystemServer* srv_;
+};
+
+// A server-side rpc stub that always returns a predefined integer
+// value as response.
+class TEST_If : public rpc::If {
+ public:
+  TEST_If(uint32_t val) : rv(val) {}
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
+    EncodeFixed32(&out.buf[0], rv);
+    out.contents = Slice(&out.buf[0], 4);
+    return Status::OK();
+  }
+  uint32_t rv;
 };
 
 TEST(FilesystemServerTest, StartAndStop) {
@@ -60,13 +68,15 @@ TEST(FilesystemServerTest, StartAndStop) {
 
 TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->OpenServer());
-  srv_->TEST_Remap(0, this);
-  If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
-  Message in, out;
+  TEST_If op(2);
+  srv_->TEST_Remap(0, &op);
+  rpc::If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
+  rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 0);
   in.contents = Slice(&in.buf[0], 4);
   ASSERT_OK(cli->Call(in, out));
-  ASSERT_EQ(out.contents, in.contents);
+  ASSERT_EQ(out.contents.size(), 4);
+  ASSERT_EQ(DecodeFixed32(&out.contents[0]), op.rv);
   ASSERT_OK(srv_->Close());
 }
 

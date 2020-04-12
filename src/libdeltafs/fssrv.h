@@ -46,6 +46,13 @@ struct FilesystemServerOptions {
   std::string uri;
 };
 
+// Each filesystem server acts as a router. An embedded rpc server handles
+// network communication and listens to client requests. Each client request
+// received by it (the rpc server) is sent to the filesystem server for
+// processing. The filesystem server processes a request by routing it to a
+// corresponding handler for processing. Requests are routed according to a
+// routing table established at the beginning of filesystem server
+// initialization.
 class FilesystemServer : public rpc::If {
  public:
   FilesystemServer(const FilesystemServerOptions& options, Filesystem* fs);
@@ -55,6 +62,7 @@ class FilesystemServer : public rpc::If {
   Status Close();
 
   If* TEST_CreateCli(const std::string& uri);
+  // Reset the handler for a specific type of operations.
   void TEST_Remap(int i, If* op);
 
  private:
