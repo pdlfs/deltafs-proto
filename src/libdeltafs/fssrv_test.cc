@@ -48,18 +48,11 @@ class FilesystemServerTest {
   FilesystemServer* srv_;
 };
 
-// A server-side rpc stub that always returns a predefined integer
-// value as response.
-class TEST_If : public rpc::If {
- public:
-  TEST_If(uint32_t val) : rv(val) {}
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
-    EncodeFixed32(&out.buf[0], rv);
-    out.contents = Slice(&out.buf[0], 4);
-    return Status::OK();
-  }
-  uint32_t rv;
-};
+Status TEST_Op(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out) {
+  EncodeFixed32(&out.buf[0], DecodeFixed32(&in.contents[4]));
+  out.contents = Slice(&out.buf[0], 4);
+  return Status::OK();
+}
 
 TEST(FilesystemServerTest, StartAndStop) {
   ASSERT_OK(srv_->OpenServer());
@@ -68,15 +61,15 @@ TEST(FilesystemServerTest, StartAndStop) {
 
 TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->OpenServer());
-  TEST_If op(2);
-  srv_->TEST_Remap(0, &op);
+  srv_->TEST_Remap(0, TEST_Op);
   rpc::If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
   rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 0);
-  in.contents = Slice(&in.buf[0], 4);
+  EncodeFixed32(&in.buf[4], 12345);
+  in.contents = Slice(&in.buf[0], 8);
   ASSERT_OK(cli->Call(in, out));
   ASSERT_EQ(out.contents.size(), 4);
-  ASSERT_EQ(DecodeFixed32(&out.contents[0]), op.rv);
+  ASSERT_EQ(DecodeFixed32(&out.contents[0]), 12345);
   ASSERT_OK(srv_->Close());
 }
 

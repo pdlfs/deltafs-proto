@@ -51,7 +51,7 @@ class FilesystemCli {
  private:
   FilesystemCliOptions options_;
   RPC* rpc_;
-  Filesystem* fs_;
+  FilesystemIf* fs_;
   rpc::If* r_;
 };
 

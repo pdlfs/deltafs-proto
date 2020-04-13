@@ -63,16 +63,16 @@ class FilesystemServer : public rpc::If {
 
   If* TEST_CreateCli(const std::string& uri);
   // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, If* op);
+  void TEST_Remap(int i, FilesystemOp op);
 
  private:
   // No copying allowed
   void operator=(const FilesystemServer& server);
   FilesystemServer(const FilesystemServer&);
   FilesystemServerOptions options_;
-  RPC* rpc_;
   FilesystemIf* fs_;
-  If** ops_;
+  FilesystemOp* ops_;
+  RPC* rpc_;
 };
 
 }  // namespace pdlfs

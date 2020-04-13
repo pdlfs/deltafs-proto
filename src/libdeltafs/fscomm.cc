@@ -110,7 +110,8 @@ bool GetFixed32(Slice* input, uint32_t* op) {
 }  // namespace
 
 // clang-format on
-Status MkdirOperation::Call(Message& in, Message& out) RPCNOEXCEPT {
+namespace rpc {
+Status MkdirOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;
   MkdirOptions options;
@@ -134,7 +135,6 @@ Status MkdirOperation::Call(Message& in, Message& out) RPCNOEXCEPT {
   return s;
 }
 
-namespace rpc {
 Status MkdirCli::operator()(  ///
     const MkdirOptions& options, MkdirRet* ret) {
   Status s;
@@ -166,5 +166,8 @@ Status MkdirCli::operator()(  ///
   }
 }
 }  // namespace rpc
+Status Mkdir(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::MkdirOperation(fs)(in, out);
+}
 
 }  // namespace pdlfs

@@ -40,15 +40,15 @@ FilesystemServerOptions::FilesystemServerOptions()
 
 FilesystemServer::FilesystemServer(  ///
     const FilesystemServerOptions& options, FilesystemIf* fs)
-    : options_(options), rpc_(NULL), fs_(fs), ops_(NULL) {
-  ops_ = new If*[kNumOps];
-  memset(ops_, 0, kNumOps * sizeof(If*));
-  ops_[kMkdir] = new MkdirOperation(fs_);
+    : options_(options), fs_(fs), ops_(NULL), rpc_(NULL) {
+  ops_ = new FilesystemOp[kNumOps];
+  memset(ops_, 0, kNumOps * sizeof(void*));
+  ops_[kMkdir] = Mkdir;
 }
 
 Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
   if (in.contents.size() >= 4) {
-    return ops_[DecodeFixed32(&in.contents[0])]->Call(in, out);
+    return ops_[DecodeFixed32(&in.contents[0])](fs_, in, out);
   } else {
     return Status::InvalidArgument("Bad rpc req");
   }
@@ -58,7 +58,7 @@ rpc::If* FilesystemServer::TEST_CreateCli(const std::string& uri) {
   return rpc_->OpenStubFor(uri);
 }
 
-void FilesystemServer::TEST_Remap(int i, If* op) {
+void FilesystemServer::TEST_Remap(int i, FilesystemOp op) {
   ops_[i] = op;  ///
 }
 

@@ -43,6 +43,9 @@ class Filesystem;
 
 enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
 
+typedef Status (*FilesystemOp)(FilesystemIf*, rpc::If::Message& in,
+                               rpc::If::Message& out);
+
 struct MkdirOptions {
   LookupStat parent;
   Slice name;
@@ -52,12 +55,14 @@ struct MkdirOptions {
 struct MkdirRet {
   Stat stat;
 };
-struct MkdirOperation : public rpc::If {
+namespace rpc {
+struct MkdirOperation {
   MkdirOperation(FilesystemIf* fs) : fs_(fs) {}
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~MkdirOperation() {}
+  Status operator()(If::Message& in, If::Message& out);
   FilesystemIf* fs_;
 };
+}  // namespace rpc
+Status Mkdir(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
 namespace rpc {
 struct MkdirCli {
   MkdirCli(If* rpc) : rpc_(rpc) {}
