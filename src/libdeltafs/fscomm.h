@@ -39,12 +39,7 @@
 
 namespace pdlfs {
 
-class Filesystem;
-
 enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
-
-typedef Status (*FilesystemOp)(FilesystemIf*, rpc::If::Message& in,
-                               rpc::If::Message& out);
 
 struct MkdirOptions {
   LookupStat parent;

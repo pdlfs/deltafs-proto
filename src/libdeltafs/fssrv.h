@@ -33,7 +33,6 @@
  */
 #pragma once
 
-#include "fsapi.h"
 #include "fscomm.h"
 
 #include "pdlfs-common/rpc.h"
@@ -55,15 +54,16 @@ struct FilesystemServerOptions {
 // initialization.
 class FilesystemServer : public rpc::If {
  public:
-  FilesystemServer(const FilesystemServerOptions& options, FilesystemIf* fs);
+  FilesystemServer(const FilesystemServerOptions& o, FilesystemIf* fs);
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
   virtual ~FilesystemServer();
   Status OpenServer();
   Status Close();
 
   If* TEST_CreateCli(const std::string& uri);
+  typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);
   // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, FilesystemOp op);
+  void TEST_Remap(int i, RequestHandler h);
 
  private:
   // No copying allowed
@@ -71,7 +71,7 @@ class FilesystemServer : public rpc::If {
   FilesystemServer(const FilesystemServer&);
   FilesystemServerOptions options_;
   FilesystemIf* fs_;
-  FilesystemOp* ops_;
+  RequestHandler* hmap_;
   RPC* rpc_;
 };
 
