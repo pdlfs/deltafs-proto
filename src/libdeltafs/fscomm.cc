@@ -32,7 +32,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fscomm.h"
-#include "fs.h"
 
 #include "pdlfs-common/coding.h"
 
@@ -115,20 +114,20 @@ Status MkdirOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;
   MkdirOptions options;
-  MkdirRet ret;
+  LookupStat pa;
+  Stat stat;
   Slice input = in.contents;
-  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &options.parent) ||
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetUser(&input, &options.me) || !GetFixed32(&input, &options.mode)) {
     s = Status::InvalidArgument("Wrong mkdir input");
   } else {
-    s = fs_->Mkdir(options.me, options.parent, options.name, options.mode,
-                   &ret.stat);
+    s = fs_->Mkdir(options.me, pa, options.name, options.mode, &stat);
     char* dst = &out.buf[0];
     EncodeFixed32(dst, s.err_code());
     char* p = dst + 4;
     if (s.ok()) {
-      p = EncodeStat(p, ret.stat);
+      p = EncodeStat(p, stat);
     }
     out.contents = Slice(dst, p - dst);
   }
@@ -142,7 +141,7 @@ Status MkdirCli::operator()(  ///
   char* dst = &in.buf[0];
   EncodeFixed32(dst, kMkdir);
   char* p = dst + 4;
-  p = EncodeLookupStat(p, options.parent);
+  p = EncodeLookupStat(p, *options.parent);
   p = EncodeLengthPrefixedSlice(p, options.name);
   p = EncodeUser(p, options.me);
   EncodeFixed32(p, options.mode);
@@ -159,7 +158,7 @@ Status MkdirCli::operator()(  ///
     return Status::Corruption("Bad rpc reply header");
   } else if (rv != 0) {
     return Status::FromCode(rv);
-  } else if (!GetStat(&input, &ret->stat)) {
+  } else if (!GetStat(&input, ret->stat)) {
     return Status::Corruption("Bad rpc reply");
   } else {
     return s;

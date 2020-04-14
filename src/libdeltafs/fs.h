@@ -83,7 +83,7 @@ class Filesystem : public FilesystemIf {
 
   // Deterministically assign a zeroth server to
   // a given directory id.
-  int PickupServer(const DirId& id);
+  static uint32_t PickupServer(const DirId& id);
 
   // Fake a directory access.
   Status TEST_ProbeDir(const DirId& id);
@@ -116,9 +116,9 @@ class Filesystem : public FilesystemIf {
   }
 
   typedef LRUEntry<Dir> DirHandl;
-  // Directory control blocks.
-  // Also serves as entries in an Hash Table.
   enum { kWays = 8 };  // Must be a power of 2
+  // Per-directory control block.
+  // Simultaneously serves as an hash table entry.
   struct Dir {
     DirHandl* lru_handle;
     DirIndexOptions* giga_opts;
@@ -132,10 +132,10 @@ class Filesystem : public FilesystemIf {
     uint32_t in_use;  // Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
     unsigned char fetched;
-    unsigned char busy[kWays];  // Has ongoing namespace or stat changes
+    unsigned char busy[kWays];  // True if a dir subpartition is busy
     char key_data[1];           // Beginning of key
 
-    Slice key() const {  // Return the key of the dir.
+    Slice key() const {  // Return the key of the dir
       return Slice(key_data, key_length);
     }
 
@@ -146,7 +146,7 @@ class Filesystem : public FilesystemIf {
   // reached, cache eviction will start.
   LRUCache<DirHandl>* dlru_;
   static void FreeDir(const Slice& key, Dir* dir);
-  // Obtain the control block for a given directory.
+  // Obtain the control block for a specified directory.
   Status AcquireDir(const DirId&, Dir**);
   // Fetch information on a directory from db.
   Status MaybeFetchDir(Dir* dir);

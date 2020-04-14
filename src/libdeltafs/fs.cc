@@ -42,15 +42,14 @@
 
 namespace pdlfs {
 
-int Filesystem::PickupServer(const DirId& id) {
+uint32_t Filesystem::PickupServer(const DirId& id) {
   char tmp[16];
   char* p = tmp;
   EncodeFixed64(p, id.dno);
   p += 8;
   EncodeFixed64(p, id.ino);
   p += 8;
-  int rnd = DirIndex::RandomServer(Slice(tmp, p - tmp), 0);
-  return rnd % options_.vsrvs;
+  return DirIndex::RandomServer(Slice(tmp, p - tmp), 0);
 }
 
 namespace {
@@ -354,7 +353,8 @@ uint32_t LRUHash(const Slice& k) { return Hash(k.data(), k.size(), 0); }
 
 void Filesystem::FreeDir(const Slice& key, Dir* dir) {
   assert(dir->key() == key);
-  assert(!dir->in_use);
+  delete dir->giga_opts;
+  delete dir->giga;
   delete dir->cv;
   delete dir->mu;
   free(dir);
@@ -387,7 +387,7 @@ Status Filesystem::MaybeFetchDir(Dir* dir) {
   dir->giga_opts->num_virtual_servers = options_.vsrvs;
   dir->giga_opts->num_servers = options_.nsrvs;
 
-  const int zsrv = PickupServer(DirId(dir->dno, dir->ino));
+  const uint32_t zsrv = PickupServer(DirId(dir->dno, dir->ino));
   dir->giga = new DirIndex(zsrv, dir->giga_opts);
   dir->giga->SetAll();
 
@@ -396,14 +396,14 @@ Status Filesystem::MaybeFetchDir(Dir* dir) {
 }
 
 // We serialize filesystem metadata operations at a per-directory basis. A
-// control block is allocated for each directory to synchronize all operations
-// within that directory. An LRU cache of directory control blocks is kept in
-// memory to avoid repeatedly creating directory control blocks. A separate hash
-// table is allocated to index all directory control blocks that are currently
-// being used by ongoing filesystem operations. When obtaining a control block,
-// we first look it up at the hash table. If we cannot find it, we continue the
-// search at the LRU cache. If we still cannot find it, we create a new and
-// insert it into the LRU cache and the hash table.
+// control block is allocated for each directory to synchronize a variety of
+// operations within that directory. An LRU cache of directory control blocks is
+// kept in memory to avoid repeatedly allocating directory control blocks. A
+// separate hash table is created to index all directory control blocks that
+// are currently being accessed. When obtaining a control block, we first look
+// it up at the hash table. If we cannot find it, we continue the search at the
+// LRU cache. If we still cannot find it, we create a new and insert it into the
+// LRU cache and the hash table.
 Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   mutex_.AssertHeld();
   char tmp[30];

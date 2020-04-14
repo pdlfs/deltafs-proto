@@ -42,13 +42,13 @@ namespace pdlfs {
 enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
 
 struct MkdirOptions {
-  LookupStat parent;
+  LookupStat* parent;
   Slice name;
   uint32_t mode;
   User me;
 };
 struct MkdirRet {
-  Stat stat;
+  Stat* stat;
 };
 namespace rpc {
 struct MkdirOperation {
