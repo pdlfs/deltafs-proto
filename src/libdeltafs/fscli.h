@@ -36,23 +36,185 @@
 #include "fs.h"
 #include "fscomm.h"
 
+#include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/hashmap.h"
+#include "pdlfs-common/lru.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
 
 struct FilesystemCliOptions {
-  //
+  size_t per_partition_lease_lru_size;
+  bool skip_perm_checks;
+  // Total number of virtual servers
+  int vsrvs;
+  // Number of servers
+  int nsrvs;
+  // Server id.
+  bool connected;
 };
 
+// A filesystem client may either talk to a local metadata manager via the
+// FilesystemIf interface or talk to a remote filesystem server through rpc.
 class FilesystemCli {
  public:
   FilesystemCli();
 
+  Status OpenFilesystemCli();
+
+  struct AT;  // Relative root of a pathname
+
+  Status Mkfle(const User& who, const AT* at, const char* pathname,
+               uint32_t mode, Stat* stat);
+  Status Mkdir(const User& who, const AT* at, const char* pathname,
+               uint32_t mode, Stat* stat);
+  Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
+
  private:
+  struct Lease;
+  struct Partition;
+  struct Dir;
+
+  // Resolve a filesystem path down to the last component of the path. Return
+  // the name of the last component and a lease on its parent directory on
+  // success. In addition, return whether the specified path has tailing
+  // slashes. This method is a wrapper function over "Resolv", and should be
+  // called instead of it. When the input filesystem path points to the root
+  // directory, the root directory itself is returned as the parent directory
+  // and the name of the last component of the path is set to empty.
+  Status Resolu(const User& who, const AT* at, const char* pathname,
+                Lease** parent_dir, Slice* last_component,
+                bool* has_tailing_slashes);
+  // Resolve a filesystem path down to the last component of the path. On
+  // success, return the name of the last component and a lease on its parent
+  // directory. Return a non-OK status on error. Path following (not including)
+  // the erroneous directory is returned as well to assist debugging.
+  Status Resolv(const User& who, Lease* relative_root, const char* pathname,
+                Lease** parent_dir, Slice* last_component,
+                const char** remaining_path);
+  Status Lokup(const User& who, const LookupStat& parent, const Slice& name,
+               Lease** stat);
+  Status AcquireAndFetch(const User& who, const LookupStat& parent,
+                         const Slice& name, Dir**, int*);
+
+  Status Fetch1(const User& who, const LookupStat& parent, const Slice& name,
+                Dir* dir, int*);
+  Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
+                Partition* part, Lease** stat);
+
+  Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t mode, Stat* stat);
+  Status Mkdir1(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t mode, Stat* stat);
+  Status Lstat1(const User& who, const LookupStat& parent, const Slice& name,
+                Stat* stat);
+
+  // No copying allowed
+  void operator=(const FilesystemCli& cli);
+  FilesystemCli(const FilesystemCli&);
+
+  port::Mutex mutex_;
+  // A lease to a pathname lookup stat.
+  // Serves as an LRU cache entry.
+  struct Lease {
+    LookupStat* value;
+    void (*deleter)(const Slice&, LookupStat* value);
+    Lease* next_hash;
+    Lease* next;
+    Lease* prev;
+    Partition* part;
+    size_t charge;
+    size_t key_length;
+    uint32_t refs;
+    uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    bool in_cache;  // False when evicted
+    char key_data[1];  // Beginning of key
+
+    Slice key() const {  // Return key of the lease.
+      return Slice(key_data, key_length);
+    }
+
+    ///
+  };
+  static void DeleteLookupStat(const Slice& key, LookupStat* stat);
+  void Release(Lease* lease);
+
+  // Per-directory control block. Each directory consists of one or more
+  // partitions. Per-directory giga status is serialized here.
+  // Simultaneously serves as an hash table entry.
+  struct Dir {
+    DirId id;
+    DirIndexOptions* giga_opts;
+    DirIndex* giga;
+    Dir* next_hash;
+    Dir* next;
+    Dir* prev;
+    FilesystemCli* fscli;
+    port::Mutex* mu;
+    size_t key_length;
+    uint32_t refs;  // Total number of refs (system + active)
+    uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    unsigned char fetched;
+    char key_data[1];  // Beginning of key
+
+    Slice key() const {  // Return the key of the dir
+      return Slice(key_data, key_length);
+    }
+
+    ///
+  };
+  static void DeleteDir(Dir* dir);
+  // Obtain the control block for a specified directory.
+  Status AcquireDir(const DirId& id, Dir**);
+  // Fetch info from server.
+  Status FetchDir(uint32_t zeroth_server, Dir* dir);
+  void Release(Dir* dir);
+  // All directories cached at the client
+  HashTable<Dir>* dirs_;
+  Dir dirlist_;  // Dummy head of the linked list
+
+  typedef LRUEntry<Partition> PartHandl;
+  enum { kWays = 8 };  // Must be a power of 2
+  // Per-partition directory control block. Pathname lookups within a single
+  // directory partition are serialized here.
+  // Simultaneously serves as an hash table entry.
+  struct Partition {
+    PartHandl* lru_handle;
+    Dir* dir;
+    LRUCache<Lease>* cached_leases;
+    port::Mutex* mu;
+    port::CondVar* cv;
+    Partition* next_hash;
+    size_t key_length;
+    uint32_t in_use;  //  Number of active uses
+    uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    int index;
+    unsigned char busy[kWays];  // True if a dir subpartition is busy
+    char key_data[1];           // Beginning of key
+
+    Slice key() const {  // Return key of the partition
+      return Slice(key_data, key_length);
+    }
+
+    ///
+  };
+  // We keep an LRU cache of directory partitions in memory so that we don't
+  // need to create a new one every time a directory partition is accessed.
+  LRUCache<PartHandl>* plru_;
+  static void DeletePartition(const Slice& key, Partition* partition);
+  Status AcquirePartition(Dir* dir, int index, Partition**);
+  void Ref(Partition* partition);
+  void Release(Partition* partition);
+  HashTable<Partition>* piu_;  // Partition in use.
+
+  Stat rtstat_;
+  LookupStat rtlokupstat_;
+  Lease rtlease_;
   FilesystemCliOptions options_;
-  RPC* rpc_;
+  rpc::If* stub_;
   FilesystemIf* fs_;
-  rpc::If* r_;
+  RPC* rpc_;
 };
 
 }  // namespace pdlfs

@@ -294,7 +294,7 @@ Status Filesystem::Mknod1(  ///
   // The best performance is achieved when a different hash function is used
   // as the one used for directory splits
   uint32_t hash = Hash(name.data(), name.size(), 0);
-  uint32_t i = hash & (kWays - 1);
+  uint32_t i = hash & uint32_t(kWays - 1);
   // Wait for conflicting writes
   while (dir->busy[i]) dir->cv->Wait();
   dir->busy[i] = true;
