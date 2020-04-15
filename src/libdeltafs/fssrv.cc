@@ -43,7 +43,10 @@ FilesystemServer::FilesystemServer(  ///
     : options_(options), fs_(fs), hmap_(NULL), rpc_(NULL) {
   hmap_ = new RequestHandler[kNumOps];
   memset(hmap_, 0, kNumOps * sizeof(void*));
+  hmap_[kLokup] = Lokup;
   hmap_[kMkdir] = Mkdir;
+  hmap_[kMkfle] = Mkfle;
+  hmap_[kLstat] = Lstat;
 }
 
 Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
@@ -64,7 +67,7 @@ void FilesystemServer::TEST_Remap(int i, RequestHandler h) {
 
 FilesystemServer::~FilesystemServer() {
   delete rpc_;
-  delete hmap_;
+  delete[] hmap_;
 }
 
 Status FilesystemServer::Close() {

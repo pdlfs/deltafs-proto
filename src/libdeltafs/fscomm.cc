@@ -110,6 +110,64 @@ bool GetFixed32(Slice* input, uint32_t* op) {
 
 // clang-format on
 namespace rpc {
+Status LokupOperation::operator()(If::Message& in, If::Message& out) {
+  Status s;
+  uint32_t op;
+  LokupOptions options;
+  LookupStat pa;
+  LookupStat stat;
+  Slice input = in.contents;
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetUser(&input, &options.me)) {
+    s = Status::InvalidArgument("Wrong lokup input");
+  } else {
+    s = fs_->Lokup(options.me, pa, options.name, &stat);
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    char* p = dst + 4;
+    if (s.ok()) {
+      p = EncodeLookupStat(p, stat);
+    }
+    out.contents = Slice(dst, p - dst);
+  }
+  return s;
+}
+
+Status LokupCli::operator()(  ///
+    const LokupOptions& options, LokupRet* ret) {
+  Status s;
+  If::Message in;
+  char* dst = &in.buf[0];
+  EncodeFixed32(dst, kLokup);
+  char* p = dst + 4;
+  p = EncodeLookupStat(p, *options.parent);
+  p = EncodeLengthPrefixedSlice(p, options.name);
+  p = EncodeUser(p, options.me);
+  in.contents = Slice(dst, p - dst);
+  If::Message out;
+  uint32_t rv;
+  s = rpc_->Call(in, out);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice input = out.contents;
+  if (!GetFixed32(&input, &rv)) {
+    return Status::Corruption("Bad rpc reply header");
+  } else if (rv != 0) {
+    return Status::FromCode(rv);
+  } else if (!GetLookupStat(&input, ret->stat)) {
+    return Status::Corruption("Bad rpc reply");
+  } else {
+    return s;
+  }
+}
+}  // namespace rpc
+Status Lokup(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::LokupOperation(fs)(in, out);
+}
+
+namespace rpc {
 Status MkdirOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;
@@ -167,6 +225,124 @@ Status MkdirCli::operator()(  ///
 }  // namespace rpc
 Status Mkdir(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
   return rpc::MkdirOperation(fs)(in, out);
+}
+
+namespace rpc {
+Status MkfleOperation::operator()(If::Message& in, If::Message& out) {
+  Status s;
+  uint32_t op;
+  MkfleOptions options;
+  LookupStat pa;
+  Stat stat;
+  Slice input = in.contents;
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetUser(&input, &options.me) || !GetFixed32(&input, &options.mode)) {
+    s = Status::InvalidArgument("Wrong mkfle input");
+  } else {
+    s = fs_->Mkfle(options.me, pa, options.name, options.mode, &stat);
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    char* p = dst + 4;
+    if (s.ok()) {
+      p = EncodeStat(p, stat);
+    }
+    out.contents = Slice(dst, p - dst);
+  }
+  return s;
+}
+
+Status MkfleCli::operator()(  ///
+    const MkfleOptions& options, MkfleRet* ret) {
+  Status s;
+  If::Message in;
+  char* dst = &in.buf[0];
+  EncodeFixed32(dst, kMkfle);
+  char* p = dst + 4;
+  p = EncodeLookupStat(p, *options.parent);
+  p = EncodeLengthPrefixedSlice(p, options.name);
+  p = EncodeUser(p, options.me);
+  EncodeFixed32(p, options.mode);
+  p += 4;
+  in.contents = Slice(dst, p - dst);
+  If::Message out;
+  uint32_t rv;
+  s = rpc_->Call(in, out);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice input = out.contents;
+  if (!GetFixed32(&input, &rv)) {
+    return Status::Corruption("Bad rpc reply header");
+  } else if (rv != 0) {
+    return Status::FromCode(rv);
+  } else if (!GetStat(&input, ret->stat)) {
+    return Status::Corruption("Bad rpc reply");
+  } else {
+    return s;
+  }
+}
+}  // namespace rpc
+Status Mkfle(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::MkfleOperation(fs)(in, out);
+}
+
+namespace rpc {
+Status LstatOperation::operator()(If::Message& in, If::Message& out) {
+  Status s;
+  uint32_t op;
+  LstatOptions options;
+  LookupStat pa;
+  Stat stat;
+  Slice input = in.contents;
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetUser(&input, &options.me)) {
+    s = Status::InvalidArgument("Wrong lstat input");
+  } else {
+    s = fs_->Lstat(options.me, pa, options.name, &stat);
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    char* p = dst + 4;
+    if (s.ok()) {
+      p = EncodeStat(p, stat);
+    }
+    out.contents = Slice(dst, p - dst);
+  }
+  return s;
+}
+
+Status LstatCli::operator()(  ///
+    const LstatOptions& options, LstatRet* ret) {
+  Status s;
+  If::Message in;
+  char* dst = &in.buf[0];
+  EncodeFixed32(dst, kLstat);
+  char* p = dst + 4;
+  p = EncodeLookupStat(p, *options.parent);
+  p = EncodeLengthPrefixedSlice(p, options.name);
+  p = EncodeUser(p, options.me);
+  in.contents = Slice(dst, p - dst);
+  If::Message out;
+  uint32_t rv;
+  s = rpc_->Call(in, out);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice input = out.contents;
+  if (!GetFixed32(&input, &rv)) {
+    return Status::Corruption("Bad rpc reply header");
+  } else if (rv != 0) {
+    return Status::FromCode(rv);
+  } else if (!GetStat(&input, ret->stat)) {
+    return Status::Corruption("Bad rpc reply");
+  } else {
+    return s;
+  }
+}
+}  // namespace rpc
+Status Lstat(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::LstatOperation(fs)(in, out);
 }
 
 }  // namespace pdlfs

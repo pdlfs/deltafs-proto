@@ -41,6 +41,30 @@ namespace pdlfs {
 
 enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
 
+struct LokupOptions {
+  const LookupStat* parent;
+  Slice name;
+  User me;
+};
+struct LokupRet {
+  LookupStat* stat;
+};
+namespace rpc {
+struct LokupOperation {
+  LokupOperation(FilesystemIf* fs) : fs_(fs) {}
+  Status operator()(If::Message& in, If::Message& out);
+  FilesystemIf* fs_;
+};
+}  // namespace rpc
+Status Lokup(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+namespace rpc {
+struct LokupCli {
+  LokupCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const LokupOptions&, LokupRet*);
+  If* rpc_;
+};
+}  // namespace rpc
+
 struct MkdirOptions {
   const LookupStat* parent;
   Slice name;
@@ -62,6 +86,55 @@ namespace rpc {
 struct MkdirCli {
   MkdirCli(If* rpc) : rpc_(rpc) {}
   Status operator()(const MkdirOptions&, MkdirRet*);
+  If* rpc_;
+};
+}  // namespace rpc
+
+struct MkfleOptions {
+  const LookupStat* parent;
+  Slice name;
+  uint32_t mode;
+  User me;
+};
+struct MkfleRet {
+  Stat* stat;
+};
+namespace rpc {
+struct MkfleOperation {
+  MkfleOperation(FilesystemIf* fs) : fs_(fs) {}
+  Status operator()(If::Message& in, If::Message& out);
+  FilesystemIf* fs_;
+};
+}  // namespace rpc
+Status Mkfle(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+namespace rpc {
+struct MkfleCli {
+  MkfleCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const MkfleOptions&, MkfleRet*);
+  If* rpc_;
+};
+}  // namespace rpc
+
+struct LstatOptions {
+  const LookupStat* parent;
+  Slice name;
+  User me;
+};
+struct LstatRet {
+  Stat* stat;
+};
+namespace rpc {
+struct LstatOperation {
+  LstatOperation(FilesystemIf* fs) : fs_(fs) {}
+  Status operator()(If::Message& in, If::Message& out);
+  FilesystemIf* fs_;
+};
+}  // namespace rpc
+Status Lstat(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+namespace rpc {
+struct LstatCli {
+  LstatCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const LstatOptions&, LstatRet*);
   If* rpc_;
 };
 }  // namespace rpc
