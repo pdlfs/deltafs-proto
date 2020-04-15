@@ -32,7 +32,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fscli.h"
+#include "fs.h"
 
+#include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/mutexlock.h"
 
 #include <sys/stat.h>
@@ -224,10 +226,10 @@ Status FilesystemCli::Lokup(  ///
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
-      mutex_.Unlock();
+      mutex_.Unlock();  // Lokup1() uses per-partition locking
       s = Lokup1(who, parent, name, part, stat);
       mutex_.Lock();
-      if (s.ok()) {  // Increase partition ref for the returned lease
+      if (s.ok()) {  // Increase partition ref before returning the lease
         assert(*stat != &rtlease_);
         Ref(part);
       }
@@ -245,7 +247,7 @@ Status FilesystemCli::AcquireAndFetch(  ///
   DirId at(parent);
   Status s = AcquireDir(at, result);
   if (s.ok()) {
-    mutex_.Unlock();
+    mutex_.Unlock();  // Fetch1() uses per-directory locking
     s = Fetch1(who, parent, name, *result, i);
     mutex_.Lock();
     if (!s.ok()) {
@@ -339,8 +341,9 @@ Status FilesystemCli::Lokup1(  ///
     if (l->value->LeaseDue() < CurrentMicros()) {
       lru->Erase(name, hash);
       lru->Release(l);
-    } else {  // Directly return the cached lease
-      assert(l->part == part);
+    } else {
+      // Directly return the cached lease...
+      assert(l->part == part);  // Pending reference increment
       *stat = l;
       return s;
     }
@@ -358,7 +361,7 @@ Status FilesystemCli::Lokup1(  ///
       lru->Erase(name, hash);
       lru->Release(l);
     } else {
-      assert(l->part == part);
+      assert(l->part == part);  // Pending reference increment
       *stat = l;
     }
   }
@@ -377,10 +380,9 @@ Status FilesystemCli::Lokup1(  ///
     part->mu->Lock();
     if (s.ok()) {
       l = lru->Insert(name, hash, tmp, 1, DeleteLookupStat);
-      l->part = part;
+      l->part = part;  // Pending reference increment
       *stat = l;
-      // The returned lookup stat may be non-cacheable
-      if (tmp->LeaseDue() == 0) {
+      if (tmp->LeaseDue() == 0) {  // The lease is non-cacheable
         lru->Erase(name, hash);
       }
     } else {
@@ -487,21 +489,17 @@ void LIST_Append(E* e, E* list) {
 
 }  // namespace
 
-void FilesystemCli::DeleteDir(Dir* dir) {
-  delete dir->giga_opts;
-  delete dir->giga;
-  delete dir->mu;
-  free(dir);
-}
-
-void FilesystemCli::Release(Dir* const dir) {
+void FilesystemCli::Release(Dir* dir) {
   mutex_.AssertHeld();
   assert(dir->refs != 0);
   dir->refs--;
   if (!dir->refs) {
     dirs_->Remove(dir->key(), dir->hash);
     LIST_Remove(dir);
-    DeleteDir(dir);
+    delete dir->giga_opts;
+    delete dir->giga;
+    delete dir->mu;
+    free(dir);
   }
 }
 
@@ -640,9 +638,65 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   return s;
 }
 
-Status FilesystemCli::OpenFilesystemCli() {
-  // Init the root lease
-  // Init the root dir
+void FilesystemCli::FormatRoot() {
+  rtstat_.SetDnodeNo(0);
+  rtstat_.SetInodeNo(0);
+  rtstat_.SetZerothServer(0);
+  rtstat_.SetFileMode(0777);
+  rtstat_.SetUserId(0);
+  rtstat_.SetGroupId(0);
+  rtstat_.SetFileSize(0);
+  rtstat_.SetChangeTime(0);
+  rtstat_.SetModifyTime(0);
+  rtstat_.AssertAllSet();
+}
+
+FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
+    : dirs_(NULL),
+      plru_(NULL),
+      piu_(NULL),
+      options_(options),
+      stub_(NULL),
+      fs_(NULL),
+      rpc_(NULL) {
+  dirs_ = new HashTable<Dir>;
+  dirlist_.next = &dirlist_;
+  dirlist_.prev = &dirlist_;
+  plru_ = new LRUCache<PartHandl>(options_.partition_lru_size);
+  piu_ = new HashTable<Partition>;
+
+  FormatRoot();
+
+  rtlokupstat_.CopyFrom(rtstat_);
+  rtlease_.value = &rtlokupstat_;
+}
+
+FilesystemCliOptions::FilesystemCliOptions()
+    : per_partition_lease_lru_size(4096),
+      partition_lru_size(4096),
+      skip_perm_checks(false),
+      vsrvs(1),
+      nsrvs(1) {}
+
+Status FilesystemCli::OpenFilesystemCli(  ///
+    const FilesystemOptions& options, const std::string& fsloc) {
+  Filesystem* fs = new Filesystem(options);
+  Status s = fs->OpenFilesystem(fsloc);
+  if (s.ok()) {
+    fs_ = fs;
+  } else {
+    delete fs;
+  }
+  return s;
+}
+
+FilesystemCli::~FilesystemCli() {
+  delete plru_;
+  delete piu_;
+  delete dirs_;
+  delete stub_;
+  delete rpc_;
+  delete fs_;
 }
 
 }  // namespace pdlfs

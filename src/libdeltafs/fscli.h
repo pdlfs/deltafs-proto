@@ -33,10 +33,9 @@
  */
 #pragma once
 
-#include "fs.h"
 #include "fscomm.h"
 
-#include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
@@ -44,24 +43,31 @@
 
 namespace pdlfs {
 
+struct FilesystemOptions;
+struct DirIndexOptions;
+
 struct FilesystemCliOptions {
+  FilesystemCliOptions();
   size_t per_partition_lease_lru_size;
+  size_t partition_lru_size;
   bool skip_perm_checks;
   // Total number of virtual servers
   int vsrvs;
   // Number of servers
   int nsrvs;
-  // Server id.
-  bool connected;
 };
+
+class DirIndex;
 
 // A filesystem client may either talk to a local metadata manager via the
 // FilesystemIf interface or talk to a remote filesystem server through rpc.
 class FilesystemCli {
  public:
-  FilesystemCli();
+  explicit FilesystemCli(const FilesystemCliOptions& options);
+  ~FilesystemCli();
 
-  Status OpenFilesystemCli();
+  Status OpenFilesystemCli(const FilesystemOptions& options,
+                           const std::string& fsloc);
 
   struct AT;  // Relative root of a pathname
 
@@ -114,9 +120,7 @@ class FilesystemCli {
   void operator=(const FilesystemCli& cli);
   FilesystemCli(const FilesystemCli&);
 
-  port::Mutex mutex_;
-  // A lease to a pathname lookup stat.
-  // Serves as an LRU cache entry.
+  // A lease to a pathname lookup stat. Also serves as an LRU cache entry.
   struct Lease {
     LookupStat* value;
     void (*deleter)(const Slice&, LookupStat* value);
@@ -140,6 +144,8 @@ class FilesystemCli {
   static void DeleteLookupStat(const Slice& key, LookupStat* stat);
   void Release(Lease* lease);
 
+  // State below is protected by mutex_
+  port::Mutex mutex_;
   // Per-directory control block. Each directory consists of one or more
   // partitions. Per-directory giga status is serialized here.
   // Simultaneously serves as an hash table entry.
@@ -164,11 +170,11 @@ class FilesystemCli {
 
     ///
   };
-  static void DeleteDir(Dir* dir);
   // Obtain the control block for a specified directory.
   Status AcquireDir(const DirId& id, Dir**);
-  // Fetch info from server.
+  // Fetch dir info from server.
   Status FetchDir(uint32_t zeroth_server, Dir* dir);
+  // Release a reference to the dir.
   void Release(Dir* dir);
   // All directories cached at the client
   HashTable<Dir>* dirs_;
@@ -208,6 +214,8 @@ class FilesystemCli {
   void Release(Partition* partition);
   HashTable<Partition>* piu_;  // Partition in use.
 
+  void FormatRoot();
+  // Constant after client open
   Stat rtstat_;
   LookupStat rtlokupstat_;
   Lease rtlease_;
