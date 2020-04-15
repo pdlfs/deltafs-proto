@@ -117,7 +117,8 @@ Status FilesystemCli::Lstat(  ///
   return status;
 }
 
-// After a call, the caller must release *parent_dir when it is set.
+// After a call, the caller must release *parent_dir when it is set. *parent_dir
+// may be set even an non-OK status is returned.
 Status FilesystemCli::Resolu(  ///
     const User& who, const AT* at, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
@@ -148,7 +149,8 @@ Status FilesystemCli::Resolu(  ///
   return status;
 }
 
-// After a call, the caller must release *parent_dir.
+// After a call, the caller must release *parent_dir. One *parent_dir is
+// returned regardless of the return status.
 Status FilesystemCli::Resolv(  ///
     const User& who, Lease* const relative_root, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
@@ -219,6 +221,8 @@ Status FilesystemCli::Resolv(  ///
   return status;
 }
 
+// After a successful call, the caller must release *stat after use. On errors,
+// no lease is returned.
 Status FilesystemCli::Lokup(  ///
     const User& who, const LookupStat& parent, const Slice& name,
     Lease** stat) {
@@ -386,7 +390,7 @@ Status FilesystemCli::Lokup1(  ///
       l = lru->Insert(name, hash, tmp, 1, DeleteLookupStat);
       l->part = part;  // Pending reference increment
       *stat = l;
-      if (tmp->LeaseDue() == 0) {  // The lease is non-cacheable
+      if (tmp->LeaseDue() == 0) {  // Lease is non-cacheable
         lru->Erase(name, hash);
       }
     } else {
@@ -709,7 +713,11 @@ Status FilesystemCli::OpenFilesystemCli(  ///
 
 FilesystemCli::~FilesystemCli() {
   delete plru_;
+  assert(piu_->Empty());
   delete piu_;
+  assert(dirlist_.next == &dirlist_);
+  assert(dirlist_.prev == &dirlist_);
+  assert(dirs_->Empty());
   delete dirs_;
   delete stub_;
   delete rpc_;
