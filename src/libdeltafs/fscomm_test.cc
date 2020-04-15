@@ -31,30 +31,81 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#include "fscomm.h"
 
-#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
-// User id information.
-struct User {
-  uint32_t uid;
-  uint32_t gid;
+
+class LokupTest : public rpc::If, public FilesystemIf {
+ public:
+  LokupTest() {
+    who_.uid = 1;
+    who_.gid = 2;
+    parent_.SetDnodeNo(3);
+    parent_.SetInodeNo(4);
+    parent_.SetZerothServer(5);
+    parent_.SetDirMode(6);
+    parent_.SetUserId(7);
+    parent_.SetGroupId(8);
+    parent_.SetLeaseDue(9);
+    stat_.SetDnodeNo(10);
+    stat_.SetInodeNo(11);
+    stat_.SetZerothServer(12);
+    stat_.SetDirMode(13);
+    stat_.SetUserId(14);
+    stat_.SetGroupId(15);
+    stat_.SetLeaseDue(16);
+    name_ = "x";
+  }
+
+  virtual Status Lokup(  ///
+      const User& who, const LookupStat& parent, const Slice& name,
+      LookupStat* stat) {
+    ASSERT_EQ(who.uid, who_.uid);
+    ASSERT_EQ(who.gid, who_.gid);
+    ASSERT_EQ(parent.DnodeNo(), parent_.DnodeNo());
+    ASSERT_EQ(parent.InodeNo(), parent_.InodeNo());
+    ASSERT_EQ(parent.ZerothServer(), parent_.ZerothServer());
+    ASSERT_EQ(parent.DirMode(), parent_.DirMode());
+    ASSERT_EQ(parent.UserId(), parent_.UserId());
+    ASSERT_EQ(parent.GroupId(), parent_.GroupId());
+    ASSERT_EQ(parent.LeaseDue(), parent_.LeaseDue());
+    ASSERT_EQ(name, name_);
+    *stat = stat_;
+    return Status::OK();
+  }
+
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
+    return rpc::LokupOperation(this)(in, out);
+  }
+
+  LookupStat parent_;
+  LookupStat stat_;
+  Slice name_;
+  User who_;
 };
 
-// Filesystem interface at the server side.
-class FilesystemIf {
- public:
-  FilesystemIf() {}
-  virtual Status Mkfle(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
-  virtual Status Mkdir(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
-  virtual Status Lokup(const User& who, const LookupStat& parent,
-                       const Slice& name, LookupStat* stat);
-  virtual Status Lstat(const User& who, const LookupStat& parent,
-                       const Slice& name, Stat* stat);
-  virtual ~FilesystemIf();
-};
+TEST(LokupTest, Call) {
+  LokupOptions opts;
+  opts.parent = &parent_;
+  opts.name = name_;
+  opts.me = who_;
+  LokupRet ret;
+  LookupStat stat;
+  ret.stat = &stat;
+  ASSERT_OK(rpc::LokupCli(this)(opts, &ret));
+  ASSERT_EQ(stat.DnodeNo(), stat_.DnodeNo());
+  ASSERT_EQ(stat.InodeNo(), stat_.InodeNo());
+  ASSERT_EQ(stat.ZerothServer(), stat_.ZerothServer());
+  ASSERT_EQ(stat.DirMode(), stat_.DirMode());
+  ASSERT_EQ(stat.UserId(), stat_.UserId());
+  ASSERT_EQ(stat.GroupId(), stat_.GroupId());
+  ASSERT_EQ(stat.LeaseDue(), stat_.LeaseDue());
+}
 
 }  // namespace pdlfs
+
+int main(int argc, char* argv[]) {
+  return pdlfs::test::RunAllTests(&argc, &argv);
+}
