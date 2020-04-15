@@ -46,6 +46,21 @@ struct User {
 class FilesystemIf {
  public:
   FilesystemIf() {}
+  virtual ~FilesystemIf();
+  virtual Status Mkfle(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat) = 0;
+  virtual Status Mkdir(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat) = 0;
+  virtual Status Lokup(const User& who, const LookupStat& parent,
+                       const Slice& name, LookupStat* stat) = 0;
+  virtual Status Lstat(const User& who, const LookupStat& parent,
+                       const Slice& name, Stat* stat) = 0;
+};
+
+class FilesystemWrapper : public FilesystemIf {
+ public:
+  FilesystemWrapper() {}
+  virtual ~FilesystemWrapper();
   virtual Status Mkfle(const User& who, const LookupStat& parent,
                        const Slice& name, uint32_t mode, Stat* stat);
   virtual Status Mkdir(const User& who, const LookupStat& parent,
@@ -54,7 +69,6 @@ class FilesystemIf {
                        const Slice& name, LookupStat* stat);
   virtual Status Lstat(const User& who, const LookupStat& parent,
                        const Slice& name, Stat* stat);
-  virtual ~FilesystemIf();
 };
 
 }  // namespace pdlfs

@@ -35,25 +35,30 @@
 
 namespace pdlfs {
 
+FilesystemWrapper::~FilesystemWrapper() {}
+
 FilesystemIf::~FilesystemIf() {}
 
-Status FilesystemIf::Mkfle(const User& who, const LookupStat& parent,
-                           const Slice& name, uint32_t mode, Stat* stat) {
+Status FilesystemWrapper::Mkfle(  ///
+    const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
+    Stat* stat) {
   return Status::NotSupported(Slice());
 }
 
-Status FilesystemIf::Mkdir(const User& who, const LookupStat& parent,
-                           const Slice& name, uint32_t mode, Stat* stat) {
+Status FilesystemWrapper::Mkdir(  ///
+    const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
+    Stat* stat) {
   return Status::NotSupported(Slice());
 }
 
-Status FilesystemIf::Lokup(const User& who, const LookupStat& parent,
-                           const Slice& name, LookupStat* stat) {
+Status FilesystemWrapper::Lokup(  ///
+    const User& who, const LookupStat& parent, const Slice& name,
+    LookupStat* stat) {
   return Status::NotSupported(Slice());
 }
 
-Status FilesystemIf::Lstat(const User& who, const LookupStat& parent,
-                           const Slice& name, Stat* stat) {
+Status FilesystemWrapper::Lstat(  ///
+    const User& who, const LookupStat& parent, const Slice& name, Stat* stat) {
   return Status::NotSupported(Slice());
 }
 

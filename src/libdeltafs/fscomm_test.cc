@@ -37,7 +37,7 @@
 
 namespace pdlfs {
 
-class LokupTest : public rpc::If, public FilesystemIf {
+class LokupTest : public rpc::If, public FilesystemWrapper {
  public:
   LokupTest() {
     who_.uid = 1;
