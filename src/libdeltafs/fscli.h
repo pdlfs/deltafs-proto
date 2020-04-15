@@ -111,12 +111,19 @@ class FilesystemCli {
   Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
                 Partition* part, Lease** stat);
 
-  Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
+  Status Mkfle1(const User& who, const LookupStat& p, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Mkdir1(const User& who, const LookupStat& parent, const Slice& name,
+  Status Mkdir1(const User& who, const LookupStat& p, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Lstat1(const User& who, const LookupStat& parent, const Slice& name,
+  Status Lstat1(const User& who, const LookupStat& p, const Slice& name,
                 Stat* stat);
+
+  Status Mkfle2(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t mode, int i, Stat* stat);
+  Status Mkdir2(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t mode, int i, Stat* stat);
+  Status Lstat2(const User& who, const LookupStat& parent, const Slice& name,
+                int i, Stat* stat);
 
   // No copying allowed
   void operator=(const FilesystemCli& cli);
@@ -222,7 +229,7 @@ class FilesystemCli {
   LookupStat rtlokupstat_;
   Lease rtlease_;
   FilesystemCliOptions options_;
-  rpc::If* stub_;
+  rpc::If** stub_;
   FilesystemIf* fs_;
   RPC* rpc_;
 };

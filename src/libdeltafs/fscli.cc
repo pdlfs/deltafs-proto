@@ -40,7 +40,11 @@
 #include <sys/stat.h>
 
 namespace pdlfs {
-
+namespace {
+Status Nofs() {  ///
+  return Status::Disconnected("No fs manager");
+}
+}  // namespace
 // Relative root of a pathname
 struct FilesystemCli::AT {
   // Look up stat of the parent directory of the relative root
@@ -248,6 +252,8 @@ Status FilesystemCli::Lokup(  ///
   return s;
 }
 
+// After a successful call, the caller must release *result after use. On
+// errors, no directory handle is returned.
 Status FilesystemCli::AcquireAndFetch(  ///
     const User& who, const LookupStat& parent, const Slice& name, Dir** result,
     int* i) {
@@ -380,8 +386,16 @@ Status FilesystemCli::Lokup1(  ///
     LookupStat* tmp = new LookupStat;
     if (fs_ != NULL) {
       s = fs_->Lokup(who, p, name, tmp);
+    } else if (stub_[part->index] != NULL) {
+      LokupOptions opts;
+      opts.parent = &p;
+      opts.name = name;
+      opts.me = who;
+      LokupRet ret;
+      ret.stat = tmp;
+      s = rpc::LokupCli(stub_[part->index])(opts, &ret);
     } else {
-      ///
+      s = Nofs();
     }
 
     // Lock again for finishing up ...
@@ -406,13 +420,15 @@ Status FilesystemCli::Lokup1(  ///
 Status FilesystemCli::Mkfle1(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
     Stat* stat) {
-  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
-    return Status::AccessDenied("No write perm");
-  Status s;
-  if (fs_ != NULL) {
-    s = fs_->Mkfle(who, p, name, mode, stat);
-  } else {
-    ///
+  MutexLock lock(&mutex_);
+  Dir* dir;
+  int i;
+  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Mkfle2(who, p, name, mode, i, stat);
+    mutex_.Lock();
+    Release(dir);
   }
   return s;
 }
@@ -420,12 +436,67 @@ Status FilesystemCli::Mkfle1(  ///
 Status FilesystemCli::Mkdir1(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
     Stat* stat) {
+  MutexLock lock(&mutex_);
+  Dir* dir;
+  int i;
+  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Mkdir2(who, p, name, mode, i, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
+Status FilesystemCli::Lstat1(  ///
+    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+  MutexLock lock(&mutex_);
+  Dir* dir;
+  int i;
+  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lstat2(who, p, name, i, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
+Status FilesystemCli::Mkfle2(  ///
+    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
+    int i, Stat* stat) {
+  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
+    return Status::AccessDenied("No write perm");
+  Status s;
+  if (fs_ != NULL) {
+    s = fs_->Mkfle(who, p, name, mode, stat);
+  } else if (stub_[i] != NULL) {
+    MkfleOptions opts;
+    opts.parent = &p;
+    opts.name = name;
+    opts.mode = mode;
+    opts.me = who;
+    MkfleRet ret;
+    ret.stat = stat;
+    s = rpc::MkfleCli(stub_[i])(opts, &ret);
+  } else {
+    s = Nofs();
+  }
+
+  return s;
+}
+
+Status FilesystemCli::Mkdir2(  ///
+    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
+    int i, Stat* stat) {
   if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkdir(who, p, name, mode, stat);
-  } else {
+  } else if (stub_[i] != NULL) {
     MkdirOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -433,21 +504,34 @@ Status FilesystemCli::Mkdir1(  ///
     opts.me = who;
     MkdirRet ret;
     ret.stat = stat;
-    s = (rpc::MkdirCli(stub_))(opts, &ret);
+    s = rpc::MkdirCli(stub_[i])(opts, &ret);
+  } else {
+    s = Nofs();
   }
+
   return s;
 }
 
-Status FilesystemCli::Lstat1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+Status FilesystemCli::Lstat2(  ///
+    const User& who, const LookupStat& p, const Slice& name, int i,
+    Stat* stat) {
   if (!IsLookupOk(options_, p, who))  // Avoid unnecessary server rpc
     return Status::AccessDenied("No x perm");
   Status s;
   if (fs_ != NULL) {
     s = fs_->Lstat(who, p, name, stat);
+  } else if (stub_[i] != NULL) {
+    LstatOptions opts;
+    opts.parent = &p;
+    opts.name = name;
+    opts.me = who;
+    LstatRet ret;
+    ret.stat = stat;
+    s = rpc::LstatCli(stub_[i])(opts, &ret);
   } else {
-    ///
+    s = Nofs();
   }
+
   return s;
 }
 
@@ -726,7 +810,7 @@ FilesystemCli::~FilesystemCli() {
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
   delete dirs_;
-  delete stub_;
+  delete[] stub_;
   delete rpc_;
   delete fs_;
 }
