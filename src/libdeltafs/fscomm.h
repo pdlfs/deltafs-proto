@@ -42,7 +42,7 @@ namespace pdlfs {
 enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
 
 struct MkdirOptions {
-  LookupStat* parent;
+  const LookupStat* parent;
   Slice name;
   uint32_t mode;
   User me;

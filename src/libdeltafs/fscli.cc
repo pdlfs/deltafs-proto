@@ -53,7 +53,7 @@ Status FilesystemCli::Mkfle(  ///
     const User& who, const AT* const at, const char* const pathname,
     uint32_t mode, Stat* const stat) {
   bool has_tailing_slashes(false);
-  Lease* parent_dir;
+  Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
@@ -64,7 +64,7 @@ Status FilesystemCli::Mkfle(  ///
       status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
     }
   }
-  if (parent_dir != NULL) {
+  if (parent_dir) {
     Release(parent_dir);
   }
   return status;
@@ -426,7 +426,14 @@ Status FilesystemCli::Mkdir1(  ///
   if (fs_ != NULL) {
     s = fs_->Mkdir(who, p, name, mode, stat);
   } else {
-    ///
+    MkdirOptions opts;
+    opts.parent = &p;
+    opts.name = name;
+    opts.mode = mode;
+    opts.me = who;
+    MkdirRet ret;
+    ret.stat = stat;
+    s = (rpc::MkdirCli(stub_))(opts, &ret);
   }
   return s;
 }
