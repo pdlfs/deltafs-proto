@@ -386,7 +386,8 @@ Status FilesystemCli::Lokup1(  ///
     LookupStat* tmp = new LookupStat;
     if (fs_ != NULL) {
       s = fs_->Lokup(who, p, name, tmp);
-    } else if (stub_[part->index] != NULL) {
+    } else if (stub_ != NULL) {
+      assert(part->index < options_.nsrvs);
       LokupOptions opts;
       opts.parent = &p;
       opts.name = name;
@@ -472,7 +473,8 @@ Status FilesystemCli::Mkfle2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkfle(who, p, name, mode, stat);
-  } else if (stub_[i] != NULL) {
+  } else if (stub_ != NULL) {
+    assert(i < options_.nsrvs);
     MkfleOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -496,7 +498,8 @@ Status FilesystemCli::Mkdir2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkdir(who, p, name, mode, stat);
-  } else if (stub_[i] != NULL) {
+  } else if (stub_ != NULL) {
+    assert(i < options_.nsrvs);
     MkdirOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -520,7 +523,8 @@ Status FilesystemCli::Lstat2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Lstat(who, p, name, stat);
-  } else if (stub_[i] != NULL) {
+  } else if (stub_ != NULL) {
+    assert(i < options_.nsrvs);
     LstatOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -802,6 +806,15 @@ Status FilesystemCli::OpenFilesystemCli(  ///
   return s;
 }
 
+Status FilesystemCli::Open(RPC* rpc, const std::string* uri) {
+  stub_ = new rpc::If*[options_.nsrvs];
+  for (int i = 0; i < options_.nsrvs; i++) {
+    stub_[i] = rpc->OpenStubFor(uri[i]);
+  }
+  rpc_ = rpc;
+  return Status::OK();
+}
+
 FilesystemCli::~FilesystemCli() {
   delete plru_;
   assert(piu_->Empty());
@@ -810,6 +823,11 @@ FilesystemCli::~FilesystemCli() {
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
   delete dirs_;
+  if (stub_) {
+    for (int i = 0; i < options_.nsrvs; i++) {
+      delete stub_[i];
+    }
+  }
   delete[] stub_;
   delete rpc_;
   delete fs_;

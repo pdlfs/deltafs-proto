@@ -69,6 +69,8 @@ class FilesystemCli {
   Status OpenFilesystemCli(const FilesystemOptions& options,
                            const std::string& fsloc);
 
+  Status Open(RPC* rpc, const std::string* uri);
+
   struct AT;  // Relative root of a pathname
 
   Status Mkfle(const User& who, const AT* at, const char* pathname,
@@ -111,11 +113,11 @@ class FilesystemCli {
   Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
                 Partition* part, Lease** stat);
 
-  Status Mkfle1(const User& who, const LookupStat& p, const Slice& name,
+  Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Mkdir1(const User& who, const LookupStat& p, const Slice& name,
+  Status Mkdir1(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, Stat* stat);
-  Status Lstat1(const User& who, const LookupStat& p, const Slice& name,
+  Status Lstat1(const User& who, const LookupStat& parent, const Slice& name,
                 Stat* stat);
 
   Status Mkfle2(const User& who, const LookupStat& parent, const Slice& name,

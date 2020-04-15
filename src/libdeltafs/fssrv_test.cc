@@ -48,7 +48,8 @@ class FilesystemServerTest {
   FilesystemServer* srv_;
 };
 
-Status TEST_Op(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out) {
+Status TEST_Handler(FilesystemIf*, rpc::If::Message& in,
+                    rpc::If::Message& out) {
   EncodeFixed32(&out.buf[0], DecodeFixed32(&in.contents[4]));
   out.contents = Slice(&out.buf[0], 4);
   return Status::OK();
@@ -61,7 +62,7 @@ TEST(FilesystemServerTest, StartAndStop) {
 
 TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->OpenServer());
-  srv_->TEST_Remap(0, TEST_Op);
+  srv_->TEST_Remap(0, TEST_Handler);
   rpc::If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
   rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 0);
