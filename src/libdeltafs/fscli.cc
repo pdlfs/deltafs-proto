@@ -57,17 +57,16 @@ Status FilesystemCli::Mkfle(  ///
   Slice tgt;
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
-  if (!status.ok()) {
-    return status;
+  if (status.ok()) {
+    if (has_tailing_slashes) {
+      status = Status::FileExpected("Path is dir");
+    } else if (!tgt.empty()) {
+      status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
+    }
   }
-
-  if (has_tailing_slashes) {
-    status = Status::FileExpected("Path refers to a dir");
-  } else if (!tgt.empty()) {
-    status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
+  if (parent_dir != NULL) {
+    Release(parent_dir);
   }
-
-  Release(parent_dir);
   return status;
 }
 
@@ -75,21 +74,20 @@ Status FilesystemCli::Mkdir(  ///
     const User& who, const AT* const at, const char* const pathname,
     uint32_t mode, Stat* const stat) {
   bool has_tailing_slashes(false);
-  Lease* parent_dir;
+  Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
-  if (!status.ok()) {
-    return status;
+  if (status.ok()) {
+    if (!tgt.empty()) {
+      status = Mkdir1(who, *parent_dir->value, tgt, mode, stat);
+    } else {  // Special case; pathname is root
+      status = Status::AlreadyExists(Slice());
+    }
   }
-
-  if (!tgt.empty()) {
-    status = Mkdir1(who, *parent_dir->value, tgt, mode, stat);
-  } else {  // Special case; pathname is root
-    status = Status::AlreadyExists(Slice());
+  if (parent_dir) {
+    Release(parent_dir);
   }
-
-  Release(parent_dir);
   return status;
 }
 
@@ -97,24 +95,29 @@ Status FilesystemCli::Lstat(  ///
     const User& who, const AT* const at, const char* const pathname,
     Stat* const stat) {
   bool has_tailing_slashes(false);
-  Lease* parent_dir;
+  Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
-  if (!status.ok()) {
-    return status;
+  if (status.ok()) {
+    if (!tgt.empty()) {
+      status = Lstat1(who, *parent_dir->value, tgt, stat);
+      if (has_tailing_slashes) {
+        if (!S_ISDIR(stat->FileMode())) {
+          status = Status::DirExpected("Not a dir");
+        }
+      }
+    } else {  // Special case; pathname is root
+      *stat = rtstat_;
+    }
   }
-
-  if (!tgt.empty()) {
-    status = Lstat1(who, *parent_dir->value, tgt, stat);
-  } else {  // Special case; pathname is root
-    *stat = rtstat_;
+  if (parent_dir) {
+    Release(parent_dir);
   }
-
-  Release(parent_dir);
   return status;
 }
 
+// After a call, the caller must release *parent_dir when it is set.
 Status FilesystemCli::Resolu(  ///
     const User& who, const AT* at, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
@@ -145,6 +148,7 @@ Status FilesystemCli::Resolu(  ///
   return status;
 }
 
+// After a call, the caller must release *parent_dir.
 Status FilesystemCli::Resolv(  ///
     const User& who, Lease* const relative_root, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
@@ -402,7 +406,7 @@ Status FilesystemCli::Mkfle1(  ///
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
-    fs_->Mkfle(who, p, name, mode, stat);
+    s = fs_->Mkfle(who, p, name, mode, stat);
   } else {
     ///
   }
@@ -448,6 +452,17 @@ void FilesystemCli::Release(Lease* lease) {
   part->mu->Unlock();
   MutexLock lock(&mutex_);
   Release(part);
+}
+
+Status FilesystemCli::TEST_ProbeDir(const DirId& at) {
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    assert(dir->id == at);
+    Release(dir);
+  }
+  return s;
 }
 
 namespace {
@@ -551,6 +566,7 @@ Status FilesystemCli::AcquireDir(const DirId& id, Dir** result) {
   dir->giga_opts = NULL;
   dir->fetched = 0;
 
+  *result = dir;
   LIST_Append(dir, &dirlist_);
   dirs_->Inject(dir, pos);
   dir->refs = 1;
@@ -620,7 +636,7 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   part = static_cast<Partition*>(malloc(sizeof(Partition) - 1 + key.size()));
   part->index = ix;
   part->key_length = key.size();
-  memcpy(dir->key_data, key.data(), key.size());
+  memcpy(part->key_data, key.data(), key.size());
   part->hash = hash;
   part->cached_leases =
       new LRUCache<Lease>(options_.per_partition_lease_lru_size);
@@ -668,6 +684,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   FormatRoot();
 
   rtlokupstat_.CopyFrom(rtstat_);
+  rtlokupstat_.SetLeaseDue(-1);
   rtlease_.value = &rtlokupstat_;
 }
 

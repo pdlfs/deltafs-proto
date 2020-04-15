@@ -77,6 +77,8 @@ class FilesystemCli {
                uint32_t mode, Stat* stat);
   Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
 
+  Status TEST_ProbeDir(const DirId& id);
+
  private:
   struct Lease;
   struct Partition;

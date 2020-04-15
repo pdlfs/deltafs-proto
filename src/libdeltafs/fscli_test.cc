@@ -74,6 +74,74 @@ class FilesystemCliTest {
 
 TEST(FilesystemCliTest, OpenAndClose) {
   ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(fscli_->TEST_ProbeDir(DirId(0, 0)));
+  ASSERT_OK(Exist("/"));
+  ASSERT_OK(Exist("//"));
+  ASSERT_OK(Exist("///"));
+}
+
+TEST(FilesystemCliTest, Files) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(Creat("/1"));
+  ASSERT_CONFLICT(Creat("/1"));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("//1"));
+  ASSERT_OK(Exist("///1"));
+  ASSERT_ERR(Exist("/1/"));
+  ASSERT_ERR(Exist("//1//"));
+  ASSERT_NOTFOUND(Exist("/2"));
+  ASSERT_OK(Creat("/2"));
+}
+
+TEST(FilesystemCliTest, Dirs) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_CONFLICT(Mkdir("/1"));
+  ASSERT_CONFLICT(Creat("/1"));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("/1/"));
+  ASSERT_OK(Exist("//1"));
+  ASSERT_OK(Exist("//1//"));
+  ASSERT_OK(Exist("///1"));
+  ASSERT_OK(Exist("///1///"));
+  ASSERT_NOTFOUND(Exist("/2"));
+  ASSERT_OK(Mkdir("/2"));
+}
+
+TEST(FilesystemCliTest, Subdirs) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/a"));
+  ASSERT_CONFLICT(Mkdir("/1/a"));
+  ASSERT_CONFLICT(Creat("/1/a"));
+  ASSERT_OK(Exist("/1/a"));
+  ASSERT_OK(Exist("/1/a/"));
+  ASSERT_OK(Exist("//1//a"));
+  ASSERT_OK(Exist("//1//a//"));
+  ASSERT_OK(Exist("///1///a"));
+  ASSERT_OK(Exist("///1///a///"));
+  ASSERT_NOTFOUND(Exist("/1/b"));
+  ASSERT_OK(Mkdir("/1/b"));
+}
+
+TEST(FilesystemCliTest, Resolv) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(Mkdir("/1"));
+  ASSERT_OK(Mkdir("/1/2"));
+  ASSERT_OK(Mkdir("/1/2/3"));
+  ASSERT_OK(Mkdir("/1/2/3/4"));
+  ASSERT_OK(Mkdir("/1/2/3/4/5"));
+  ASSERT_OK(Creat("/1/2/3/4/5/6"));
+  ASSERT_OK(Exist("/1"));
+  ASSERT_OK(Exist("/1/2"));
+  ASSERT_OK(Exist("/1/2/3"));
+  ASSERT_OK(Exist("/1/2/3/4"));
+  ASSERT_OK(Exist("/1/2/3/4/5"));
+  ASSERT_ERR(Exist("/1/2/3/4/5/6/"));
+  ASSERT_ERR(Exist("/2/3"));
+  ASSERT_ERR(Exist("/1/2/4/5"));
+  ASSERT_ERR(Exist("/1/2/3/5"));
+  ASSERT_ERR(Creat("/1/2/3/4/5/6/7"));
 }
 
 }  // namespace pdlfs
