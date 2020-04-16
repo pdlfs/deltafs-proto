@@ -53,6 +53,32 @@ struct FilesystemCli::AT {
   std::string name;
 };
 
+void FilesystemCli::Destroy(AT* at) { delete at; }
+
+Status FilesystemCli::Atdir(  ///
+    const User& who, const AT* const at, const char* const pathname,
+    AT** result) {
+  bool has_tailing_slashes(false);
+  Lease* parent_dir(NULL);
+  Slice tgt;
+  Status status =
+      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (status.ok()) {
+    if (!tgt.empty()) {
+      AT* rv = new AT;
+      rv->parent_of_root = *parent_dir->value;
+      rv->name = tgt.ToString();
+      *result = rv;
+    } else {  // Special case for root
+      *result = NULL;
+    }
+  }
+  if (parent_dir) {
+    Release(parent_dir);
+  }
+  return status;
+}
+
 Status FilesystemCli::Mkfle(  ///
     const User& who, const AT* const at, const char* const pathname,
     uint32_t mode, Stat* const stat) {
@@ -124,20 +150,24 @@ Status FilesystemCli::Lstat(  ///
 // After a call, the caller must release *parent_dir when it is set. *parent_dir
 // may be set even an non-OK status is returned.
 Status FilesystemCli::Resolu(  ///
-    const User& who, const AT* at, const char* const pathname,
+    const User& who, const AT* const at, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
     bool* has_tailing_slashes) {
 #define PATH_PREFIX(pathname, remaining_path) \
   Slice(pathname, remaining_path - pathname)
   const char* rp(NULL);  // Remaining path on errors
+  Status status;
   // Relative root
   Lease* rr;
   if (at != NULL) {
-    return Status::NotSupported(Slice());
+    status = Lokup(who, at->parent_of_root, at->name, &rr);
+    if (!status.ok()) {
+      return status;
+    }
   } else {
     rr = &rtlease_;
   }
-  Status status = Resolv(who, rr, pathname, parent_dir, last_component, &rp);
+  status = Resolv(who, rr, pathname, parent_dir, last_component, &rp);
   if (status.IsDirExpected() && rp) {
     return Status::DirExpected(PATH_PREFIX(pathname, rp));
   } else if (status.IsNotFound() && rp) {

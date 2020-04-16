@@ -73,11 +73,18 @@ class FilesystemCli {
 
   struct AT;  // Relative root of a pathname
 
+  Status Atdir(const User& who, const AT* at, const char* pathname, AT**);
+  // Make one or more file nodes in a single batch operation.
+  Status Mknos(const User& who, const AT* at, const char** names, size_t n,
+               uint32_t type, uint32_t mode);
+  // Make a regular file.
   Status Mkfle(const User& who, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
   Status Mkdir(const User& who, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
   Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
+
+  void Destroy(AT* at);
 
   Status TEST_ProbeDir(const DirId& id);
 
