@@ -41,7 +41,7 @@ class FilesystemTest {
  public:
   FilesystemTest() : fsloc_(test::TmpDir() + "/fs_test") {
     DestroyDB(fsloc_, DBOptions());
-    fs_ = new Filesystem(options_);
+    fs_ = NULL;
     me_.gid = me_.uid = 1;
     dirmode_ = 0777;
     due_ = -1;
@@ -49,6 +49,11 @@ class FilesystemTest {
 
   ~FilesystemTest() {  ///
     delete fs_;
+  }
+
+  Status OpenFilesystem() {
+    fs_ = new Filesystem(options_);
+    return fs_->OpenFilesystem(fsloc_);
   }
 
   Status Exist(uint64_t dir_id, const std::string& name) {
@@ -88,18 +93,58 @@ class FilesystemTest {
 };
 
 TEST(FilesystemTest, OpenAndClose) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(fs_->TEST_ProbeDir(DirId(0)));
 }
 
 TEST(FilesystemTest, Files) {
-  ASSERT_OK(fs_->OpenFilesystem(fsloc_));
+  ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat(0, "a"));
   ASSERT_OK(Creat(0, "b"));
   ASSERT_OK(Creat(0, "c"));
   ASSERT_OK(Exist(0, "a"));
   ASSERT_OK(Exist(0, "b"));
   ASSERT_OK(Exist(0, "c"));
+}
+
+TEST(FilesystemTest, DuplicateNames) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat(0, "a"));
+  ASSERT_CONFLICT(Creat(0, "a"));
+  ASSERT_OK(Creat(0, "b"));
+}
+
+TEST(FilesystemTest, NoDupChecks) {
+  options_.skip_name_collision_checks = true;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat(0, "a"));
+  ASSERT_OK(Creat(0, "a"));
+}
+
+TEST(FilesystemTest, LeaseExpired) {
+  due_ = 0;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_ERR(Creat(0, "a"));
+}
+
+TEST(FilesystemTest, NoLeaseDueChecks) {
+  options_.skip_lease_due_checks = true;
+  due_ = 0;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat(0, "a"));
+}
+
+TEST(FilesystemTest, AccessDenied) {
+  dirmode_ = 0770;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_ERR(Creat(0, "a"));
+}
+
+TEST(FilesystemTest, NoPermissionChecks) {
+  options_.skip_perm_checks = true;
+  dirmode_ = 0770;
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat(0, "a"));
 }
 
 }  // namespace pdlfs

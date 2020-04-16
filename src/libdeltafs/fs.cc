@@ -115,7 +115,7 @@ bool IsLeaseOk(  ///
   if (options.skip_lease_due_checks) {
     return true;
   } else {
-    return (parent.LeaseDue() < ts);
+    return (parent.LeaseDue() >= ts);
   }
 }
 
