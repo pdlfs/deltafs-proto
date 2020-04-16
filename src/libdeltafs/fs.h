@@ -123,14 +123,13 @@ class Filesystem : public FilesystemIf {
   // Per-directory control block.
   // Simultaneously serves as an hash table entry.
   struct Dir {
+    DirId id;
     DirHandl* lru_handle;
     DirIndexOptions* giga_opts;
     DirIndex* giga;
     Dir* next_hash;
     port::CondVar* cv;
     port::Mutex* mu;
-    uint64_t dno;
-    uint64_t ino;
     size_t key_length;
     uint32_t in_use;  // Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons

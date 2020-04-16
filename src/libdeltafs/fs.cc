@@ -396,7 +396,7 @@ Status Filesystem::MaybeFetchDir(Dir* dir) {
   dir->giga_opts->num_virtual_servers = options_.vsrvs;
   dir->giga_opts->num_servers = options_.nsrvs;
 
-  const uint32_t zsrv = PickupServer(DirId(dir->dno, dir->ino));
+  const uint32_t zsrv = PickupServer(dir->id);
   dir->giga = new DirIndex(zsrv, dir->giga_opts);
   dir->giga->SetAll();
 
@@ -456,11 +456,10 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   // If we still cannot find the entry, we create it and insert it into the
   // cache and the table.
   dir = static_cast<Dir*>(malloc(sizeof(Dir) - 1 + key.size()));
-  dir->dno = id.dno;
-  dir->ino = id.ino;
   dir->key_length = key.size();
   memcpy(dir->key_data, key.data(), key.size());
   dir->hash = hash;
+  dir->id = id;
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
   memset(&dir->busy[0], 0, sizeof(dir->busy));
