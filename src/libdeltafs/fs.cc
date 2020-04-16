@@ -291,11 +291,20 @@ Status Filesystem::Mknod1(  ///
   // XXX: obtain directory split lock here to secure directory split status
   if (!IsDirPartitionOk(options_, dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
+  return CheckAndPut(who, at, name, myino, type, mode, dir, stat);
+}
+
+Status Filesystem::CheckAndPut(  ///
+    const User& who, const DirId& at, const Slice& name, uint64_t myino,
+    uint32_t type, uint32_t mode, Dir* const dir,  ///
+    Stat* stat) {
+  Status s;
   // The best performance is achieved when a different hash function is used
   // as the one used for directory splits
   uint32_t hash = Hash(name.data(), name.size(), 0);
   uint32_t i = hash & uint32_t(kWays - 1);
   // Wait for conflicting writes
+  dir->mu->AssertHeld();
   while (dir->busy[i]) dir->cv->Wait();
   dir->busy[i] = true;
   // Temporarily unlock for db operations

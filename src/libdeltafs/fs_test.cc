@@ -43,26 +43,44 @@ class FilesystemTest {
     DestroyDB(fsloc_, DBOptions());
     fs_ = new Filesystem(options_);
     me_.gid = me_.uid = 1;
+    dirmode_ = 0777;
+    due_ = -1;
   }
 
   ~FilesystemTest() {  ///
     delete fs_;
   }
 
-  Status Creat(uint64_t pid, const std::string& name) {
+  Status Exist(uint64_t dir_id, const std::string& name) {
     LookupStat p;
     p.SetDnodeNo(0);
-    p.SetInodeNo(pid);
+    p.SetInodeNo(dir_id);
     p.SetZerothServer(0);
-    p.SetDirMode(0777);
+    p.SetDirMode(dirmode_);
     p.SetUserId(0);
     p.SetGroupId(0);
-    p.SetLeaseDue(-1);
+    p.SetLeaseDue(due_);
+    p.AssertAllSet();
+    Stat tmp;
+    return fs_->Lstat(me_, p, name, &tmp);
+  }
+
+  Status Creat(uint64_t dir_id, const std::string& name) {
+    LookupStat p;
+    p.SetDnodeNo(0);
+    p.SetInodeNo(dir_id);
+    p.SetZerothServer(0);
+    p.SetDirMode(dirmode_);
+    p.SetUserId(0);
+    p.SetGroupId(0);
+    p.SetLeaseDue(due_);
     p.AssertAllSet();
     Stat tmp;
     return fs_->Mkfle(me_, p, name, 0660, &tmp);
   }
 
+  uint32_t dirmode_;
+  uint64_t due_;
   FilesystemOptions options_;
   Filesystem* fs_;
   std::string fsloc_;
@@ -77,6 +95,11 @@ TEST(FilesystemTest, OpenAndClose) {
 TEST(FilesystemTest, Files) {
   ASSERT_OK(fs_->OpenFilesystem(fsloc_));
   ASSERT_OK(Creat(0, "a"));
+  ASSERT_OK(Creat(0, "b"));
+  ASSERT_OK(Creat(0, "c"));
+  ASSERT_OK(Exist(0, "a"));
+  ASSERT_OK(Exist(0, "b"));
+  ASSERT_OK(Exist(0, "c"));
 }
 
 }  // namespace pdlfs

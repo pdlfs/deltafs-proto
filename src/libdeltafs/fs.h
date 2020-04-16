@@ -99,6 +99,9 @@ class Filesystem : public FilesystemIf {
   Status Lstat1(const User& who, const DirId& at, const Slice& name, Dir* dir,
                 const LookupStat& parent, Stat* stat);
 
+  Status CheckAndPut(const User& who, const DirId& at, const Slice& name,
+                     uint64_t ino, uint32_t type, uint32_t mode, Dir* dir,
+                     Stat* stat);
   Status Put(const User& who, const DirId& at, const Slice& name, uint64_t dno,
              uint64_t ino, uint32_t zsrv, uint32_t mode, Stat* stat);
 
