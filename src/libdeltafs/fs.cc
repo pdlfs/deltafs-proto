@@ -291,14 +291,7 @@ Status Filesystem::Mknod1(  ///
   // XXX: obtain directory split lock here to secure directory split status
   if (!IsDirPartitionOk(options_, dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
-  return CheckAndPut(who, at, name, myino, type, mode, dir, stat);
-}
-
-Status Filesystem::CheckAndPut(  ///
-    const User& who, const DirId& at, const Slice& name, uint64_t myino,
-    uint32_t type, uint32_t mode, Dir* const dir,  ///
-    Stat* stat) {
-  Status s;
+  // Lock the corresponding name subset in the partition for serialization...
   // The best performance is achieved when a different hash function is used
   // as the one used for directory splits
   uint32_t hash = Hash(name.data(), name.size(), 0);
@@ -309,6 +302,17 @@ Status Filesystem::CheckAndPut(  ///
   dir->busy[i] = true;
   // Temporarily unlock for db operations
   dir->mu->Unlock();
+  s = CheckAndPut(who, at, name, myino, type, mode, stat);
+  dir->mu->Lock();
+  dir->busy[i] = false;
+  dir->cv->SignalAll();
+  return s;
+}
+
+Status Filesystem::CheckAndPut(  ///
+    const User& who, const DirId& at, const Slice& name, uint64_t myino,
+    uint32_t type, uint32_t mode, Stat* stat) {
+  Status s;
   if (!options_.skip_name_collision_checks) {
     s = mdb_->Get(at, name, stat);
     if (s.ok()) {
@@ -324,9 +328,6 @@ Status Filesystem::CheckAndPut(  ///
     s = Put(who, at, name, mydno, myino, PickupServer(DirId(mydno, myino)),
             mymo, stat);
   }
-  dir->mu->Lock();
-  dir->busy[i] = false;
-  dir->cv->SignalAll();
   return s;
 }
 
