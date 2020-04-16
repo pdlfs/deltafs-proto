@@ -42,6 +42,7 @@ namespace pdlfs {
 
 class FilesystemCliTest {
  public:
+  typedef FilesystemCli::AT AT;
   FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     fscli_ = new FilesystemCli(options_);
@@ -52,16 +53,20 @@ class FilesystemCliTest {
     delete fscli_;
   }
 
-  Status Creat(const char* path) {
-    return fscli_->Mkfle(me_, NULL, path, 0660, &ignored_);
+  Status Atdir(const char* path, AT** result, const AT* at = NULL) {
+    return fscli_->Atdir(me_, at, path, result);
   }
 
-  Status Mkdir(const char* path) {
-    return fscli_->Mkdir(me_, NULL, path, 0770, &ignored_);
+  Status Creat(const char* path, const AT* at = NULL) {
+    return fscli_->Mkfle(me_, at, path, 0660, &ignored_);
   }
 
-  Status Exist(const char* path) {
-    return fscli_->Lstat(me_, NULL, path, &ignored_);
+  Status Mkdir(const char* path, const AT* at = NULL) {
+    return fscli_->Mkdir(me_, at, path, 0770, &ignored_);
+  }
+
+  Status Exist(const char* path, const AT* at = NULL) {
+    return fscli_->Lstat(me_, at, path, &ignored_);
   }
 
   Stat ignored_;
@@ -142,6 +147,44 @@ TEST(FilesystemCliTest, Resolv) {
   ASSERT_ERR(Exist("/1/2/4/5"));
   ASSERT_ERR(Exist("/1/2/3/5"));
   ASSERT_ERR(Creat("/1/2/3/4/5/6/7"));
+}
+
+TEST(FilesystemCliTest, Atdir) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  AT *d0, *d1, *d2, *d3, *d4, *d5;
+  ASSERT_OK(Atdir("//", &d0));
+  ASSERT_OK(Mkdir("/1", d0));
+  ASSERT_OK(Exist("/1", d0));
+  ASSERT_OK(Atdir("/1", &d1, d0));
+  ASSERT_OK(Mkdir("/2", d1));
+  ASSERT_OK(Exist("/2", d1));
+  ASSERT_OK(Atdir("/2", &d2, d1));
+  ASSERT_OK(Mkdir("/3", d2));
+  ASSERT_OK(Exist("/3", d2));
+  ASSERT_OK(Atdir("/3", &d3, d2));
+  ASSERT_OK(Mkdir("/4", d3));
+  ASSERT_OK(Exist("/4", d3));
+  ASSERT_OK(Atdir("/4", &d4, d3));
+  ASSERT_OK(Mkdir("/5", d4));
+  ASSERT_OK(Exist("/5", d4));
+  ASSERT_OK(Atdir("/5", &d5, d4));
+  ASSERT_OK(Creat("/a", d5));
+  ASSERT_OK(Creat("/b", d5));
+  ASSERT_OK(Creat("/c", d5));
+  ASSERT_OK(Creat("/d", d5));
+  ASSERT_OK(Creat("/e", d5));
+  ASSERT_OK(Creat("/f", d5));
+  ASSERT_OK(Exist("/1/2/3/4/5/a", d0));
+  ASSERT_OK(Exist("/2/3/4/5/b", d1));
+  ASSERT_OK(Exist("/3/4/5/c", d2));
+  ASSERT_OK(Exist("/4/5/d", d3));
+  ASSERT_OK(Exist("/5/e", d4));
+  ASSERT_OK(Exist("/f", d5));
+  fscli_->Destroy(d5);
+  fscli_->Destroy(d4);
+  fscli_->Destroy(d3);
+  fscli_->Destroy(d2);
+  fscli_->Destroy(d1);
 }
 
 }  // namespace pdlfs
