@@ -58,18 +58,18 @@ class FilesystemCliTest {
   }
 
   Status Creat(const char* path, const AT* at = NULL) {
-    return fscli_->Mkfle(me_, at, path, 0660, &ignored_);
+    return fscli_->Mkfle(me_, at, path, 0660, &tmp_);
   }
 
   Status Mkdir(const char* path, const AT* at = NULL) {
-    return fscli_->Mkdir(me_, at, path, 0770, &ignored_);
+    return fscli_->Mkdir(me_, at, path, 0770, &tmp_);
   }
 
   Status Exist(const char* path, const AT* at = NULL) {
-    return fscli_->Lstat(me_, at, path, &ignored_);
+    return fscli_->Lstat(me_, at, path, &tmp_);
   }
 
-  Stat ignored_;
+  Stat tmp_;
   FilesystemOptions fsopts_;
   FilesystemCliOptions options_;
   FilesystemCli* fscli_;
