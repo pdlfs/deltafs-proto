@@ -53,6 +53,7 @@ struct FilesystemOptions {
   size_t dir_lru_size;
   bool skip_partition_checks;
   bool skip_name_collision_checks;
+  bool skip_lease_due_checks;
   bool skip_perm_checks;
   bool rdonly;
   // Total number of virtual servers

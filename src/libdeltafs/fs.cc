@@ -76,44 +76,46 @@ inline uint32_t gid(const LookupStat& dir) {  ///
 // Check if a given user has the "w" permission beneath a parent
 // directory based on a lease certificate provided by the user.
 bool IsDirWriteOk(const FilesystemOptions& options, const LookupStat& parent,
-                  const User& who, const uint64_t ts) {
+                  const User& who) {
   const uint32_t mode = parent.DirMode();
   if (options.skip_perm_checks) {
     return true;
   } else if (who.uid == 0) {
     return true;
-  } else if (parent.LeaseDue() < ts) {
-    return false;
   } else if (who.uid == uid(parent) && (mode & S_IWUSR) == S_IWUSR) {
     return true;
   } else if (who.gid == gid(parent) && (mode & S_IWGRP) == S_IWGRP) {
     return true;
-  } else if ((mode & S_IWOTH) == S_IWOTH) {
-    return true;
   } else {
-    return false;
+    return ((mode & S_IWOTH) == S_IWOTH);
   }
 }
 
 // Check if a given user has the "x" permission beneath a parent
 // directory based on a lease certificate provided by the user.
 bool IsLookupOk(const FilesystemOptions& options, const LookupStat& parent,
-                const User& who, const uint64_t ts) {
+                const User& who) {
   const uint32_t mode = parent.DirMode();
   if (options.skip_perm_checks) {
     return true;
   } else if (who.uid == 0) {
     return true;
-  } else if (parent.LeaseDue() < ts) {
-    return false;
   } else if (who.uid == uid(parent) && (mode & S_IXUSR) == S_IXUSR) {
     return true;
   } else if (who.gid == gid(parent) && (mode & S_IXGRP) == S_IXGRP) {
     return true;
-  } else if ((mode & S_IXOTH) == S_IXOTH) {
+  } else {
+    return ((mode & S_IXOTH) == S_IXOTH);
+  }
+}
+
+bool IsLeaseOk(  ///
+    const FilesystemOptions& options, const LookupStat& parent,
+    const uint64_t ts) {
+  if (options.skip_lease_due_checks) {
     return true;
   } else {
-    return false;
+    return (parent.LeaseDue() < ts);
   }
 }
 
@@ -221,8 +223,10 @@ Status Filesystem::Lokup1(  ///
 Status Filesystem::Lstat1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
     const LookupStat& p, Stat* stat) {
-  if (!IsLookupOk(options_, p, who, CurrentMicros()))
-    return Status::AccessDenied("No x perm");
+  if (!IsLeaseOk(options_, p, CurrentMicros()))
+    return Status::AccessDenied("Lease has expired");
+  if (!IsLookupOk(options_, p, who))
+    return Status::AccessDenied("No dir x perm");
   if (!options_.skip_partition_checks) {
     MutexLock lock(dir->mu);
     Status s = MaybeFetchDir(dir);
@@ -281,7 +285,9 @@ Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t myino,
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
     Stat* stat) {
-  if (!IsDirWriteOk(options_, p, who, CurrentMicros()))
+  if (!IsLeaseOk(options_, p, CurrentMicros()))
+    return Status::AccessDenied("Lease has expired");
+  if (!IsDirWriteOk(options_, p, who))
     return Status::AccessDenied("No write perm");
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
@@ -483,6 +489,7 @@ FilesystemOptions::FilesystemOptions()
     : dir_lru_size(4096),
       skip_partition_checks(false),
       skip_name_collision_checks(false),
+      skip_lease_due_checks(false),
       skip_perm_checks(false),
       rdonly(false),
       vsrvs(1),
