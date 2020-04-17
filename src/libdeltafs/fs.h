@@ -103,7 +103,7 @@ class Filesystem : public FilesystemIf {
 
   Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
                 uint64_t startino, uint32_t type, uint32_t mode,
-                const LookupStat& parent, Dir* dir, uint32_t * n);
+                const LookupStat& parent, Dir* dir, uint32_t* n);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
                 uint64_t ino, uint32_t type, uint32_t mode,
                 const LookupStat& parent, Dir* dir, Stat* stat);
