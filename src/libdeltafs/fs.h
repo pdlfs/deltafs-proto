@@ -73,6 +73,8 @@ class Filesystem : public FilesystemIf {
 
   Status OpenFilesystem(const std::string& fsloc);
 
+  virtual Status Mkfls(const User& who, const LookupStat& parent,
+                       const Slice& namearr, uint32_t mode, size_t* n);
   virtual Status Mkfle(const User& who, const LookupStat& parent,
                        const Slice& name, uint32_t mode, Stat* stat);
   virtual Status Mkdir(const User& who, const LookupStat& parent,
@@ -92,6 +94,9 @@ class Filesystem : public FilesystemIf {
  private:
   struct Dir;
 
+  Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
+                uint64_t startino, uint32_t type, uint32_t mode,
+                const LookupStat& parent, Dir* dir, size_t* n);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
                 uint64_t ino, uint32_t type, uint32_t mode,
                 const LookupStat& parent, Dir* dir, Stat* stat);

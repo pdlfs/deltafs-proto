@@ -52,8 +52,113 @@ uint32_t Filesystem::PickupServer(const DirId& id) {
   return DirIndex::RandomServer(Slice(tmp, p - tmp), 0);
 }
 
-namespace {
+Status Filesystem::Lokup(  ///
+    const User& who, const LookupStat& p, const Slice& name, LookupStat* stat) {
+  DirId at(p);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lokup1(who, at, name, dir, p, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
 
+Status Filesystem::Lstat(  ///
+    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+  DirId at(p);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lstat1(who, at, name, dir, p, stat);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
+// Note: *n is both input and output.
+Status Filesystem::Mkfls(  ///
+    const User& who, const LookupStat& parent, const Slice& namearr,
+    uint32_t mode, size_t* n) {
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    inoq_ += *n;
+    uint64_t myino = inoq_;
+    uint64_t startino = myino - *n;
+    const uint32_t t = S_IFREG;
+    mutex_.Unlock();
+    s = Mknos1(who, at, namearr, startino, t, mode, parent, dir, n);
+    mutex_.Lock();
+    if (!s.ok()) {
+      // Reuse inodes?
+    }
+    Release(dir);
+  }
+  return s;
+}
+
+Status Filesystem::Mkfle(  ///
+    const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
+    Stat* stat) {
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    uint64_t myino = ++inoq_;
+    const uint32_t t = S_IFREG;
+    mutex_.Unlock();
+    s = Mknod1(who, at, name, myino, t, mode, parent, dir, stat);
+    mutex_.Lock();
+    if (!s.ok()) {
+      TryReuseIno(myino);
+    }
+    Release(dir);
+  }
+  return s;
+}
+
+Status Filesystem::Mkdir(  ///
+    const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
+    Stat* stat) {
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    uint64_t myino = ++inoq_;
+    const uint32_t t = S_IFDIR;
+    mutex_.Unlock();
+    s = Mknod1(who, at, name, myino, t, mode, parent, dir, stat);
+    mutex_.Lock();
+    if (!s.ok()) {
+      TryReuseIno(myino);
+    }
+    Release(dir);
+  }
+  return s;
+}
+
+Status Filesystem::TEST_ProbeDir(const DirId& at) {
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    Release(dir);
+  }
+  return s;
+}
+
+namespace {
 bool IsDirPartitionOk(const FilesystemOptions& options, const DirIndex* giga,
                       const Slice& name) {
   if (options.skip_partition_checks) {
@@ -118,90 +223,7 @@ bool IsLeaseOk(  ///
     return (parent.LeaseDue() >= ts);
   }
 }
-
 }  // namespace
-
-Status Filesystem::TEST_ProbeDir(const DirId& at) {
-  Dir* dir;
-  MutexLock lock(&mutex_);
-  Status s = AcquireDir(at, &dir);
-  if (s.ok()) {
-    Release(dir);
-  }
-  return s;
-}
-
-Status Filesystem::Lokup(  ///
-    const User& who, const LookupStat& p, const Slice& name, LookupStat* stat) {
-  DirId at(p);
-  Dir* dir;
-  MutexLock lock(&mutex_);
-  Status s = AcquireDir(at, &dir);
-  if (s.ok()) {
-    mutex_.Unlock();
-    s = Lokup1(who, at, name, dir, p, stat);
-    mutex_.Lock();
-    Release(dir);
-  }
-  return s;
-}
-
-Status Filesystem::Lstat(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
-  DirId at(p);
-  Dir* dir;
-  MutexLock lock(&mutex_);
-  Status s = AcquireDir(at, &dir);
-  if (s.ok()) {
-    mutex_.Unlock();
-    s = Lstat1(who, at, name, dir, p, stat);
-    mutex_.Lock();
-    Release(dir);
-  }
-  return s;
-}
-
-Status Filesystem::Mkfle(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* stat) {
-  DirId at(p);
-  Dir* dir;
-  MutexLock lock(&mutex_);
-  Status s = AcquireDir(at, &dir);
-  if (s.ok()) {
-    uint64_t myino = ++inoq_;
-    const uint32_t t = S_IFREG;
-    mutex_.Unlock();
-    s = Mknod1(who, at, name, myino, t, mode, p, dir, stat);
-    mutex_.Lock();
-    if (!s.ok()) {
-      TryReuseIno(myino);
-    }
-    Release(dir);
-  }
-  return s;
-}
-
-Status Filesystem::Mkdir(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* stat) {
-  DirId at(p);
-  Dir* dir;
-  MutexLock lock(&mutex_);
-  Status s = AcquireDir(at, &dir);
-  if (s.ok()) {
-    uint64_t myino = ++inoq_;
-    const uint32_t t = S_IFDIR;
-    mutex_.Unlock();
-    s = Mknod1(who, at, name, myino, t, mode, p, dir, stat);
-    mutex_.Lock();
-    if (!s.ok()) {
-      TryReuseIno(myino);
-    }
-    Release(dir);
-  }
-  return s;
-}
 
 Status Filesystem::Lokup1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
@@ -281,10 +303,52 @@ Status Filesystem::Lstat1(  ///
   return mdb_->Get(at, name, stat);
 }
 
+Status Filesystem::Mknos1(  ///
+    const User& who, const DirId& at, const Slice& namearr, uint64_t startino,
+    uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
+    size_t* const n) {
+  if (!IsLeaseOk(options_, p, CurrentMicros()))
+    return Status::AccessDenied("Lease has expired");
+  if (!IsDirWriteOk(options_, p, who))
+    return Status::AccessDenied("No write perm");
+  MutexLock lock(dir->mu);
+  Status s = MaybeFetchDir(dir);
+  if (!s.ok()) {
+    return s;
+  }
+  dir->mu->AssertHeld();  // TODO: lock directory split status
+  // Lock all name subsets...
+  for (uint32_t i = 0; i < kWays; i++) {
+    while (dir->busy[i]) {
+      dir->cv->Wait();
+    }
+    dir->busy[i] = true;
+  }
+  dir->mu->Unlock();
+  Stat tmp;
+  size_t m = 0;
+  Slice input = namearr;
+  Slice name;
+  while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
+    s = CheckAndPut(who, at, name, startino + m, type, mode, &tmp);
+    if (!s.ok()) {
+      break;
+    }
+    m++;
+  }
+  *n = m;
+  dir->mu->Lock();
+  for (uint32_t i = 0; i < kWays; i++) {
+    dir->busy[i] = false;
+  }
+  dir->cv->SignalAll();
+  return s;
+}
+
 Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t myino,
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
-    Stat* stat) {
+    Stat* const stat) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
@@ -303,7 +367,6 @@ Status Filesystem::Mknod1(  ///
   uint32_t hash = Hash(name.data(), name.size(), 0);
   uint32_t i = hash & uint32_t(kWays - 1);
   // Wait for conflicting writes
-  dir->mu->AssertHeld();
   while (dir->busy[i]) dir->cv->Wait();
   dir->busy[i] = true;
   // Temporarily unlock for db operations
