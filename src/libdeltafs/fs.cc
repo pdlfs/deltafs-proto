@@ -100,8 +100,8 @@ Status Filesystem::Mkfls(  ///
     mutex_.Lock();
     // Reuse inodes left by the batch
     if (!s.ok()) {
-      uint64_t t = myino - startino + 1;
-      TryReuseIno(myino, t - *n);
+      uint64_t x = myino - startino + 1;
+      TryReuseIno(myino, x - *n);
     }
     Release(dir);
   }
