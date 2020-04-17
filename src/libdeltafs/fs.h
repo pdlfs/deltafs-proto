@@ -90,6 +90,7 @@ class Filesystem : public FilesystemIf {
 
   // Fake a directory access.
   Status TEST_ProbeDir(const DirId& id);
+  uint64_t TEST_LastIno();
 
  private:
   struct Dir;
@@ -116,10 +117,11 @@ class Filesystem : public FilesystemIf {
 
   port::Mutex mutex_;
   uint64_t inoq_;  // The last inode no.
-  void TryReuseIno(uint64_t ino) {
+  // If the last ino ever assigned is still ino, reduce it by n
+  void TryReuseIno(uint64_t ino, size_t n = 1) {
     mutex_.AssertHeld();
     if (ino == inoq_) {
-      --inoq_;
+      inoq_ -= n;
     }
   }
 

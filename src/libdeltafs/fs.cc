@@ -92,14 +92,16 @@ Status Filesystem::Mkfls(  ///
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
     inoq_ += *n;
-    uint64_t myino = inoq_;
-    uint64_t startino = myino - *n;
+    uint64_t myino = inoq_;  // The last ino for the batch
+    uint64_t startino = myino - *n + 1;
     const uint32_t t = S_IFREG;
     mutex_.Unlock();
     s = Mknos1(who, at, namearr, startino, t, mode, parent, dir, n);
     mutex_.Lock();
+    // Reuse inodes left by the batch
     if (!s.ok()) {
-      // Reuse inodes?
+      uint64_t t = myino - startino + 1;
+      TryReuseIno(myino, t - *n);
     }
     Release(dir);
   }
@@ -156,6 +158,11 @@ Status Filesystem::TEST_ProbeDir(const DirId& at) {
     Release(dir);
   }
   return s;
+}
+
+uint64_t Filesystem::TEST_LastIno() {
+  MutexLock lock(&mutex_);
+  return inoq_;
 }
 
 namespace {
@@ -561,7 +568,7 @@ FilesystemOptions::FilesystemOptions()
       mydno(0) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
-    : options_(options), mdb_(NULL), db_(NULL) {
+    : inoq_(0), options_(options), mdb_(NULL), db_(NULL) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
   diu_ = new HashTable<Dir>();
 }
