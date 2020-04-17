@@ -70,6 +70,20 @@ class FilesystemTest {
     return fs_->Lstat(me_, p, name, &tmp);
   }
 
+  Status BatchedCreat(uint64_t dir_id, const std::string& namearr, size_t* n) {
+    LookupStat p;
+    p.SetDnodeNo(0);
+    p.SetInodeNo(dir_id);
+    p.SetZerothServer(0);
+    p.SetDirMode(dirmode_);
+    p.SetUserId(0);
+    p.SetGroupId(0);
+    p.SetLeaseDue(due_);
+    p.AssertAllSet();
+    Stat tmp;
+    return fs_->Mkfls(me_, p, namearr, 0660, n);
+  }
+
   Status Creat(uint64_t dir_id, const std::string& name) {
     LookupStat p;
     p.SetDnodeNo(0);
@@ -145,6 +159,40 @@ TEST(FilesystemTest, NoPermissionChecks) {
   dirmode_ = 0770;
   ASSERT_OK(OpenFilesystem());
   ASSERT_OK(Creat(0, "a"));
+}
+
+TEST(FilesystemTest, BatchedCreats) {
+  ASSERT_OK(OpenFilesystem());
+  std::string namearr;
+  PutLengthPrefixedSlice(&namearr, "a");
+  PutLengthPrefixedSlice(&namearr, "b");
+  PutLengthPrefixedSlice(&namearr, "c");
+  PutLengthPrefixedSlice(&namearr, "d");
+  PutLengthPrefixedSlice(&namearr, "e");
+  size_t n = 5;
+  ASSERT_OK(BatchedCreat(0, namearr, &n));
+  ASSERT_EQ(n, 5);
+  ASSERT_OK(Exist(0, "a"));
+  ASSERT_OK(Exist(0, "b"));
+  ASSERT_OK(Exist(0, "c"));
+  ASSERT_OK(Exist(0, "d"));
+  ASSERT_OK(Exist(0, "e"));
+}
+
+TEST(FilesystemTest, ErrInBatch) {
+  ASSERT_OK(OpenFilesystem());
+  std::string namearr;
+  PutLengthPrefixedSlice(&namearr, "a");
+  PutLengthPrefixedSlice(&namearr, "b");
+  PutLengthPrefixedSlice(&namearr, "c");
+  PutLengthPrefixedSlice(&namearr, "a");
+  PutLengthPrefixedSlice(&namearr, "e");
+  size_t n = 5;
+  ASSERT_CONFLICT(BatchedCreat(0, namearr, &n));
+  ASSERT_EQ(n, 3);
+  ASSERT_OK(Exist(0, "a"));
+  ASSERT_OK(Exist(0, "b"));
+  ASSERT_OK(Exist(0, "c"));
 }
 
 }  // namespace pdlfs
