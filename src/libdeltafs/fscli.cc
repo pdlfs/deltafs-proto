@@ -262,13 +262,14 @@ Status FilesystemCli::Lokup(  ///
     Lease** stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
-  int i;  // Index for the partition holding the name
+  int i;  // Index of the partition holding the name being looked up
   Status s = AcquireAndFetch(who, parent, name, &dir, &i);
   if (s.ok()) {
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
-      mutex_.Unlock();  // Lokup1() uses per-partition locking
+      // Lokup1() uses per-partition locking. Unlock here...
+      mutex_.Unlock();
       s = Lokup1(who, parent, name, part, stat);
       mutex_.Lock();
       if (s.ok()) {  // Increase partition ref before returning the lease
@@ -291,7 +292,7 @@ Status FilesystemCli::AcquireAndFetch(  ///
   DirId at(parent);
   Status s = AcquireDir(at, result);
   if (s.ok()) {
-    mutex_.Unlock();  // Fetch1() uses per-directory locking
+    mutex_.Unlock();  // Fetch1() uses per-dir locking
     s = Fetch1(who, parent, name, *result, i);
     mutex_.Lock();
     if (!s.ok()) {
