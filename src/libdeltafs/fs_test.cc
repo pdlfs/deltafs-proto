@@ -197,6 +197,11 @@ TEST(FilesystemTest, ErrInBatch) {
   ASSERT_OK(Exist(0, "b"));
   ASSERT_OK(Exist(0, "c"));
   ASSERT_EQ(fs_->TEST_LastIno(), 3);
+  ASSERT_CONFLICT(Creat(0, "a"));
+  ASSERT_CONFLICT(Creat(0, "b"));
+  ASSERT_CONFLICT(Creat(0, "c"));
+  ASSERT_OK(Creat(0, "d"));
+  ASSERT_EQ(fs_->TEST_LastIno(), 4);
 }
 
 }  // namespace pdlfs
