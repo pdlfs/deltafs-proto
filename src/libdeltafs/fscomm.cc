@@ -288,6 +288,70 @@ Status Mkfle(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
 }
 
 namespace rpc {
+Status MkflsOperation::operator()(If::Message& in, If::Message& out) {
+  Status s;
+  uint32_t op;
+  MkflsOptions options;
+  LookupStat pa;
+  uint32_t n;
+  Slice input = in.contents;
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
+      !GetLengthPrefixedSlice(&input, &options.namearr) ||
+      !GetUser(&input, &options.me) || !GetFixed32(&input, &options.n) ||
+      !GetFixed32(&input, &options.mode)) {
+    s = Status::InvalidArgument("Wrong mkfls input");
+  } else {
+    s = fs_->Mkfls(options.me, pa, options.namearr, options.mode, &n);
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    char* p = dst + 4;
+    if (s.ok()) {
+      EncodeFixed32(p, n);
+      p += 4;
+    }
+    out.contents = Slice(dst, p - dst);
+  }
+  return s;
+}
+
+Status MkflsCli::operator()(  ///
+    const MkflsOptions& options, MkflsRet* ret) {
+  Status s;
+  If::Message in;
+  char* dst = &in.buf[0];
+  EncodeFixed32(dst, kMkfls);
+  char* p = dst + 4;
+  p = EncodeLookupStat(p, *options.parent);
+  p = EncodeLengthPrefixedSlice(p, options.namearr);
+  p = EncodeUser(p, options.me);
+  EncodeFixed32(p, options.n);
+  p += 4;
+  EncodeFixed32(p, options.mode);
+  p += 4;
+  in.contents = Slice(dst, p - dst);
+  If::Message out;
+  uint32_t rv;
+  s = rpc_->Call(in, out);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice input = out.contents;
+  if (!GetFixed32(&input, &rv)) {
+    return Status::Corruption("Bad rpc reply header");
+  } else if (rv != 0) {
+    return Status::FromCode(rv);
+  } else if (!GetFixed32(&input, &ret->n)) {
+    return Status::Corruption("Bad rpc reply");
+  } else {
+    return s;
+  }
+}
+}  // namespace rpc
+Status Mkfls(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::MkflsOperation(fs)(in, out);
+}
+
+namespace rpc {
 Status LstatOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;

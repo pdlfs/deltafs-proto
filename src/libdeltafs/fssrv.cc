@@ -46,6 +46,7 @@ FilesystemServer::FilesystemServer(  ///
   hmap_[kLokup] = Lokup;
   hmap_[kMkdir] = Mkdir;
   hmap_[kMkfle] = Mkfle;
+  hmap_[kMkfls] = Mkfls;
   hmap_[kLstat] = Lstat;
 }
 

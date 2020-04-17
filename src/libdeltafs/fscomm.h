@@ -39,7 +39,7 @@
 
 namespace pdlfs {
 
-enum { kLokup = 0, kMkdir, kMkfle, kLstat, kNumOps };
+enum { kLokup = 0, kMkdir, kMkfle, kMkfls, kLstat, kNumOps };
 
 struct LokupOptions {
   const LookupStat* parent;
@@ -111,6 +111,32 @@ namespace rpc {
 struct MkfleCli {
   MkfleCli(If* rpc) : rpc_(rpc) {}
   Status operator()(const MkfleOptions&, MkfleRet*);
+  If* rpc_;
+};
+}  // namespace rpc
+
+struct MkflsOptions {
+  const LookupStat* parent;
+  Slice namearr;
+  uint32_t n;
+  uint32_t mode;
+  User me;
+};
+struct MkflsRet {
+  uint32_t n;
+};
+namespace rpc {
+struct MkflsOperation {
+  MkflsOperation(FilesystemIf* fs) : fs_(fs) {}
+  Status operator()(If::Message& in, If::Message& out);
+  FilesystemIf* fs_;
+};
+}  // namespace rpc
+Status Mkfls(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+namespace rpc {
+struct MkflsCli {
+  MkflsCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const MkflsOptions&, MkflsRet*);
   If* rpc_;
 };
 }  // namespace rpc
