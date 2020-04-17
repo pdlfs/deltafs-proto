@@ -47,6 +47,8 @@ class FilesystemIf {
  public:
   FilesystemIf() {}
   virtual ~FilesystemIf();
+  virtual Status Mkfls(const User& who, const LookupStat& parent,
+                       const Slice& namearr, uint32_t mode, uint32_t* n) = 0;
   virtual Status Mkfle(const User& who, const LookupStat& parent,
                        const Slice& name, uint32_t mode, Stat* stat) = 0;
   virtual Status Mkdir(const User& who, const LookupStat& parent,
@@ -57,18 +59,27 @@ class FilesystemIf {
                        const Slice& name, Stat* stat) = 0;
 };
 
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 class FilesystemWrapper : public FilesystemIf {
  public:
   FilesystemWrapper() {}
   virtual ~FilesystemWrapper();
+  virtual Status Mkfls(const User& who, const LookupStat& parent,
+                       const Slice& namearr, uint32_t mode,
+                       uint32_t* n) OVERRIDE;
   virtual Status Mkfle(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
+                       const Slice& name, uint32_t mode, Stat* stat) OVERRIDE;
   virtual Status Mkdir(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
+                       const Slice& name, uint32_t mode, Stat* stat) OVERRIDE;
   virtual Status Lokup(const User& who, const LookupStat& parent,
-                       const Slice& name, LookupStat* stat);
+                       const Slice& name, LookupStat* stat) OVERRIDE;
   virtual Status Lstat(const User& who, const LookupStat& parent,
-                       const Slice& name, Stat* stat);
+                       const Slice& name, Stat* stat) OVERRIDE;
 };
+#undef OVERRIDE
 
 }  // namespace pdlfs

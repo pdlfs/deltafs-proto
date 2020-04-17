@@ -85,7 +85,7 @@ Status Filesystem::Lstat(  ///
 // Note: *n is both input and output.
 Status Filesystem::Mkfls(  ///
     const User& who, const LookupStat& parent, const Slice& namearr,
-    uint32_t mode, size_t* n) {
+    uint32_t mode, uint32_t* n) {
   DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
@@ -313,7 +313,7 @@ Status Filesystem::Lstat1(  ///
 Status Filesystem::Mknos1(  ///
     const User& who, const DirId& at, const Slice& namearr, uint64_t startino,
     uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
-    size_t* const n) {
+    uint32_t* const n) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))

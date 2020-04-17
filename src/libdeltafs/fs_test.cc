@@ -70,7 +70,8 @@ class FilesystemTest {
     return fs_->Lstat(me_, p, name, &tmp);
   }
 
-  Status BatchedCreat(uint64_t dir_id, const std::string& namearr, size_t* n) {
+  Status BatchedCreat(uint64_t dir_id, const std::string& namearr,
+                      uint32_t* n) {
     LookupStat p;
     p.SetDnodeNo(0);
     p.SetInodeNo(dir_id);
@@ -171,7 +172,7 @@ TEST(FilesystemTest, BatchedCreats) {
   PutLengthPrefixedSlice(&namearr, "c");
   PutLengthPrefixedSlice(&namearr, "d");
   PutLengthPrefixedSlice(&namearr, "e");
-  size_t n = 5;
+  uint32_t n = 5;
   ASSERT_OK(BatchedCreat(0, namearr, &n));
   ASSERT_EQ(n, 5);
   ASSERT_OK(Exist(0, "a"));
@@ -190,7 +191,7 @@ TEST(FilesystemTest, ErrInBatch) {
   PutLengthPrefixedSlice(&namearr, "c");
   PutLengthPrefixedSlice(&namearr, "a");
   PutLengthPrefixedSlice(&namearr, "e");
-  size_t n = 5;
+  uint32_t n = 5;
   ASSERT_CONFLICT(BatchedCreat(0, namearr, &n));
   ASSERT_EQ(n, 3);
   ASSERT_OK(Exist(0, "a"));

@@ -39,6 +39,12 @@ FilesystemWrapper::~FilesystemWrapper() {}
 
 FilesystemIf::~FilesystemIf() {}
 
+Status FilesystemWrapper::Mkfls(  ///
+    const User& who, const LookupStat& parent, const Slice& namearr,
+    uint32_t mode, uint32_t* n) {
+  return Status::NotSupported(Slice());
+}
+
 Status FilesystemWrapper::Mkfle(  ///
     const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
     Stat* stat) {

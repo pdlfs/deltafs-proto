@@ -66,6 +66,11 @@ struct FilesystemOptions {
   int mydno;
 };
 
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 class Filesystem : public FilesystemIf {
  public:
   explicit Filesystem(const FilesystemOptions& options);
@@ -74,15 +79,16 @@ class Filesystem : public FilesystemIf {
   Status OpenFilesystem(const std::string& fsloc);
 
   virtual Status Mkfls(const User& who, const LookupStat& parent,
-                       const Slice& namearr, uint32_t mode, size_t* n);
+                       const Slice& namearr, uint32_t mode,
+                       uint32_t* n) OVERRIDE;
   virtual Status Mkfle(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
+                       const Slice& name, uint32_t mode, Stat* stat) OVERRIDE;
   virtual Status Mkdir(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat);
+                       const Slice& name, uint32_t mode, Stat* stat) OVERRIDE;
   virtual Status Lokup(const User& who, const LookupStat& parent,
-                       const Slice& name, LookupStat* stat);
+                       const Slice& name, LookupStat* stat) OVERRIDE;
   virtual Status Lstat(const User& who, const LookupStat& parent,
-                       const Slice& name, Stat* stat);
+                       const Slice& name, Stat* stat) OVERRIDE;
 
   // Deterministically assign a zeroth server to
   // a given directory id.
@@ -97,7 +103,7 @@ class Filesystem : public FilesystemIf {
 
   Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
                 uint64_t startino, uint32_t type, uint32_t mode,
-                const LookupStat& parent, Dir* dir, size_t* n);
+                const LookupStat& parent, Dir* dir, uint32_t * n);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
                 uint64_t ino, uint32_t type, uint32_t mode,
                 const LookupStat& parent, Dir* dir, Stat* stat);
@@ -180,5 +186,6 @@ class Filesystem : public FilesystemIf {
   MDB* mdb_;
   DB* db_;
 };
+#undef OVERRIDE
 
 }  // namespace pdlfs
