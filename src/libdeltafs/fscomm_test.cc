@@ -35,8 +35,12 @@
 
 #include "pdlfs-common/testharness.h"
 
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 namespace pdlfs {
-
 class LokupTest : public rpc::If, public FilesystemWrapper {
  public:
   LokupTest() {
@@ -61,7 +65,7 @@ class LokupTest : public rpc::If, public FilesystemWrapper {
 
   virtual Status Lokup(  ///
       const User& who, const LookupStat& parent, const Slice& name,
-      LookupStat* stat) {
+      LookupStat* stat) OVERRIDE {
     ASSERT_EQ(who.uid, who_.uid);
     ASSERT_EQ(who.gid, who_.gid);
     ASSERT_EQ(parent.DnodeNo(), parent_.DnodeNo());
@@ -76,7 +80,7 @@ class LokupTest : public rpc::If, public FilesystemWrapper {
     return Status::OK();
   }
 
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT OVERRIDE {
     return rpc::LokupOperation(this)(in, out);
   }
 
@@ -86,7 +90,7 @@ class LokupTest : public rpc::If, public FilesystemWrapper {
   User who_;
 };
 
-TEST(LokupTest, Call) {
+TEST(LokupTest, LokupCall) {
   LokupOptions opts;
   opts.parent = &parent_;
   opts.name = name_;
@@ -104,7 +108,68 @@ TEST(LokupTest, Call) {
   ASSERT_EQ(stat.LeaseDue(), stat_.LeaseDue());
 }
 
+class MkflsTest : public rpc::If, public FilesystemWrapper {
+ public:
+  MkflsTest() {
+    who_.uid = 1;
+    who_.gid = 2;
+    parent_.SetDnodeNo(3);
+    parent_.SetInodeNo(4);
+    parent_.SetZerothServer(5);
+    parent_.SetDirMode(6);
+    parent_.SetUserId(7);
+    parent_.SetGroupId(8);
+    parent_.SetLeaseDue(9);
+    mode_ = 10;
+    npre_ = 11;
+    n_ = 12;
+    namearr_ = "x";
+  }
+
+  virtual Status Mkfls(const User& who, const LookupStat& parent,
+                       const Slice& namearr, uint32_t mode,
+                       uint32_t* n) OVERRIDE {
+    ASSERT_EQ(who.uid, who_.uid);
+    ASSERT_EQ(who.gid, who_.gid);
+    ASSERT_EQ(parent.DnodeNo(), parent_.DnodeNo());
+    ASSERT_EQ(parent.InodeNo(), parent_.InodeNo());
+    ASSERT_EQ(parent.ZerothServer(), parent_.ZerothServer());
+    ASSERT_EQ(parent.DirMode(), parent_.DirMode());
+    ASSERT_EQ(parent.UserId(), parent_.UserId());
+    ASSERT_EQ(parent.GroupId(), parent_.GroupId());
+    ASSERT_EQ(parent.LeaseDue(), parent_.LeaseDue());
+    ASSERT_EQ(namearr, namearr_);
+    ASSERT_EQ(mode, mode_);
+    ASSERT_EQ(*n, npre_);
+    *n = n_;
+    return Status::OK();
+  }
+
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT OVERRIDE {
+    return rpc::MkflsOperation(this)(in, out);
+  }
+
+  LookupStat parent_;
+  Slice namearr_;
+  uint32_t mode_;
+  uint32_t npre_;
+  uint32_t n_;
+  User who_;
+};
+
+TEST(MkflsTest, MkflsCall) {
+  MkflsOptions opts;
+  opts.parent = &parent_;
+  opts.namearr = namearr_;
+  opts.n = npre_;
+  opts.mode = mode_;
+  opts.me = who_;
+  MkflsRet ret;
+  ASSERT_OK(rpc::MkflsCli(this)(opts, &ret));
+  ASSERT_EQ(ret.n, n_);
+}
 }  // namespace pdlfs
+#undef OVERRIDE
 
 int main(int argc, char* argv[]) {
   return pdlfs::test::RunAllTests(&argc, &argv);

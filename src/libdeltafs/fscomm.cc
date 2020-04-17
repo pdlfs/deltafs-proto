@@ -293,7 +293,6 @@ Status MkflsOperation::operator()(If::Message& in, If::Message& out) {
   uint32_t op;
   MkflsOptions options;
   LookupStat pa;
-  uint32_t n;
   Slice input = in.contents;
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.namearr) ||
@@ -301,12 +300,12 @@ Status MkflsOperation::operator()(If::Message& in, If::Message& out) {
       !GetFixed32(&input, &options.mode)) {
     s = Status::InvalidArgument("Wrong mkfls input");
   } else {
-    s = fs_->Mkfls(options.me, pa, options.namearr, options.mode, &n);
+    s = fs_->Mkfls(options.me, pa, options.namearr, options.mode, &options.n);
     char* dst = &out.buf[0];
     EncodeFixed32(dst, s.err_code());
     char* p = dst + 4;
     if (s.ok()) {
-      EncodeFixed32(p, n);
+      EncodeFixed32(p, options.n);
       p += 4;
     }
     out.contents = Slice(dst, p - dst);
