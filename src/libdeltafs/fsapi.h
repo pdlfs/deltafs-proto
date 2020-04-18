@@ -36,6 +36,7 @@
 #include "pdlfs-common/fstypes.h"
 
 namespace pdlfs {
+enum LokupMode { kRegular, kBatchedCreats, kBulkIn };
 // User id information.
 struct User {
   uint32_t uid;

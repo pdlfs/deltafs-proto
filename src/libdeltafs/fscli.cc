@@ -53,8 +53,6 @@ struct FilesystemCli::AT {
   std::string name;
 };
 
-void FilesystemCli::Destroy(AT* at) { delete at; }
-
 Status FilesystemCli::Atdir(  ///
     const User& who, const AT* const at, const char* const pathname,
     AT** result) {
@@ -79,6 +77,78 @@ Status FilesystemCli::Atdir(  ///
   return status;
 }
 
+void FilesystemCli::Destroy(AT* at) { delete at; }
+
+// Each batch instance is a reference to a server-issued lease with bulk
+// insertion capabilities.
+struct FilesystemCli::BATCH {
+  Lease* dir_lease;
+};
+
+// On success, the returned batch handle contains a reference to the target
+// dir's lease from server and a reference to the internal batch object
+// associated with the lease.
+Status FilesystemCli::BatchStart(  ///
+    const User& who, const AT* const at, const char* const pathname,
+    BATCH** result) {
+  bool has_tailing_slashes(false);
+  Lease* parent_dir(NULL);
+  Slice tgt;
+  Status status =
+      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (status.ok()) {
+    if (!tgt.empty()) {
+      Lease* dir_lease;
+      // This should ideally be a special mkdir creating a new dir and
+      // simultaneously locking the newly created dir. Any subsequent regular
+      // lookup operation either finds a non-regular lease with a batch context
+      // or fails to obtain a regular lease from server
+      status = Lokup(who, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
+      if (status.ok()) {
+        assert(dir_lease->batch != NULL);
+        BATCH* bat = new BATCH;  // Opaque handle to the batch
+        bat->dir_lease = dir_lease;
+        *result = bat;
+      }
+    } else {  // Special case for root
+      status = Status::NotSupported(Slice());
+    }
+  }
+  if (parent_dir) {
+    Release(parent_dir);
+  }
+  return status;
+}
+
+Status FilesystemCli::BatchEnd(BATCH* bat) {
+  Lease* lease = bat->dir_lease;
+  Partition* const part = lease->part;
+  BatchedCreates* const bc = lease->batch;
+  part->mu->Lock();
+  assert(bc->refs != 0);
+  bc->refs--;
+  uint32_t r = bc->refs;
+  if (!r) {
+    // Non-regular leases are marked by their batch contexts.
+    // Once the context is deleted, the lease itself is invalidated and must be
+    // removed from the cache.
+    part->cached_leases->Erase(lease->key(), lease->hash);
+  }
+  part->cached_leases->Release(lease);
+  part->mu->Unlock();
+  {
+    MutexLock lock(&mutex_);
+    if (!r) Release(bc->dir);
+    Release(part);
+  }
+  if (!r) {
+    delete[] bc->wribufs;
+    delete bc;
+  }
+  delete bat;
+  return Status::OK();
+}
+
 Status FilesystemCli::Mkfle(  ///
     const User& who, const AT* const at, const char* const pathname,
     uint32_t mode, Stat* const stat) {
@@ -88,9 +158,9 @@ Status FilesystemCli::Mkfle(  ///
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
-    if (has_tailing_slashes) {
+    if (tgt.empty() || has_tailing_slashes) {
       status = Status::FileExpected("Path is dir");
-    } else if (!tgt.empty()) {
+    } else {
       status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
     }
   }
@@ -148,7 +218,7 @@ Status FilesystemCli::Lstat(  ///
 }
 
 // After a call, the caller must release *parent_dir when it is set. *parent_dir
-// may be set even an non-OK status is returned.
+// may be set even when an non-OK status is returned.
 Status FilesystemCli::Resolu(  ///
     const User& who, const AT* const at, const char* const pathname,
     Lease** parent_dir, Slice* last_component,  ///
@@ -160,7 +230,7 @@ Status FilesystemCli::Resolu(  ///
   // Relative root
   Lease* rr;
   if (at != NULL) {
-    status = Lokup(who, at->parent_of_root, at->name, &rr);
+    status = Lokup(who, at->parent_of_root, at->name, kRegular, &rr);
     if (!status.ok()) {
       return status;
     }
@@ -236,7 +306,7 @@ Status FilesystemCli::Resolv(  ///
     }
     current_name = Slice(p + 1, q - p - 1);
     p = c - 1;
-    status = Lokup(who, *current_parent->value, current_name, &tmp);
+    status = Lokup(who, *current_parent->value, current_name, kRegular, &tmp);
     if (status.ok()) {
       Release(current_parent);
       current_parent = tmp;
@@ -259,7 +329,7 @@ Status FilesystemCli::Resolv(  ///
 // no lease is returned.
 Status FilesystemCli::Lokup(  ///
     const User& who, const LookupStat& parent, const Slice& name,
-    Lease** stat) {
+    LokupMode mode, Lease** stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;  // Index of the partition holding the name being looked up
@@ -270,7 +340,7 @@ Status FilesystemCli::Lokup(  ///
     if (s.ok()) {
       // Lokup1() uses per-partition locking. Unlock here...
       mutex_.Unlock();
-      s = Lokup1(who, parent, name, part, stat);
+      s = Lokup1(who, parent, name, mode, part, stat);
       mutex_.Lock();
       if (s.ok()) {  // Increase partition ref before returning the lease
         assert(*stat != &rtlease_);
@@ -283,8 +353,27 @@ Status FilesystemCli::Lokup(  ///
   return s;
 }
 
+Status FilesystemCli::CreateBatch(  ///
+    const User& who, const LookupStat& parent, BatchedCreates** result) {
+  MutexLock lock(&mutex_);
+  Dir* dir;
+  Status s = AcquireAndFetch(who, parent, Slice(), &dir, NULL);
+  if (s.ok()) {
+    BatchedCreates* bc = new BatchedCreates;
+    *result = bc;
+    // In future, we could allow each dir to define its own amount
+    // of virtual servers.
+    int n = options_.nsrvs;
+    bc->refs = 1;
+    bc->wribufs = new WriBuf[n];
+    bc->dir = dir;
+  }
+  return s;
+}
+
 // After a successful call, the caller must release *result after use. On
 // errors, no directory handle is returned.
+// REQUIRES: mutex_ has been locked.
 Status FilesystemCli::AcquireAndFetch(  ///
     const User& who, const LookupStat& parent, const Slice& name, Dir** result,
     int* i) {
@@ -353,9 +442,11 @@ bool IsLookupOk(const FilesystemCliOptions& options, const LookupStat& parent,
 Status FilesystemCli::Fetch1(  ///
     const User& who, const LookupStat& p, const Slice& name, Dir* dir,
     int* rv) {
-  MutexLock lock(dir->mu);  // May be changed to using cv...
+  MutexLock lock(dir->mu);  // To be updated to using cv...
   Status s = FetchDir(p.ZerothServer(), dir);
-  if (s.ok()) {
+  // If there is an ongoing dir index status change, wait until that change is
+  // done before using the index
+  if (s.ok() && !name.empty()) {
     *rv = dir->giga->SelectServer(name);
   }
   return s;
@@ -368,8 +459,8 @@ Status FilesystemCli::Fetch1(  ///
 // a reference to its parent partition. Caller of this function must
 // increase the partition's reference count when a lease is returned.
 Status FilesystemCli::Lokup1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Partition* part,
-    Lease** stat) {
+    const User& who, const LookupStat& p, const Slice& name, LokupMode mode,
+    Partition* part, Lease** stat) {
   if (!IsLookupOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No x perm");
   MutexLock lock(part->mu);
@@ -382,13 +473,17 @@ Status FilesystemCli::Lokup1(  ///
   LRUCache<Lease>* const lru = part->cached_leases;
   // Quickly check if we have it already...
   Lease* l = lru->Lookup(name, hash);
-  if (l != NULL) {
+  if (l != NULL) {  // It's a hit...
     if (l->value->LeaseDue() < CurrentMicros()) {
       lru->Erase(name, hash);
       lru->Release(l);
     } else {
       // Directly return the cached lease...
       assert(l->part == part);  // Pending reference increment
+      if (mode == kBatchedCreats) {
+        assert(l->batch != NULL);
+        l->batch->refs++;
+      }
       *stat = l;
       return s;
     }
@@ -407,6 +502,10 @@ Status FilesystemCli::Lokup1(  ///
       lru->Release(l);
     } else {
       assert(l->part == part);  // Pending reference increment
+      if (mode == kBatchedCreats) {
+        assert(l->batch != NULL);
+        l->batch->refs++;
+      }
       *stat = l;
     }
   }
@@ -430,10 +529,18 @@ Status FilesystemCli::Lokup1(  ///
       s = Nofs();
     }
 
-    // Lock again for finishing up ...
+    BatchedCreates* tmpbat = NULL;
+    if (s.ok()) {
+      if (mode == kBatchedCreats) {
+        s = CreateBatch(who, *tmp, &tmpbat);
+      }
+    }
+
+    // Lock again for finishing up...
     part->mu->Lock();
     if (s.ok()) {
       l = lru->Insert(name, hash, tmp, 1, DeleteLookupStat);
+      l->batch = tmpbat;
       l->part = part;  // Pending reference increment
       *stat = l;
       if (tmp->LeaseDue() == 0) {  // Lease is non-cacheable
@@ -648,6 +755,7 @@ void FilesystemCli::Release(Dir* dir) {
   }
 }
 
+// REQUIRES: dir->mu has been locked.
 Status FilesystemCli::FetchDir(uint32_t zeroth_server, Dir* dir) {
   Status s;
   dir->mu->AssertHeld();
@@ -667,6 +775,7 @@ Status FilesystemCli::FetchDir(uint32_t zeroth_server, Dir* dir) {
   return s;
 }
 
+// REQUIRES: mutex_ has been locked.
 Status FilesystemCli::AcquireDir(const DirId& id, Dir** result) {
   mutex_.AssertHeld();
   char tmp[30];

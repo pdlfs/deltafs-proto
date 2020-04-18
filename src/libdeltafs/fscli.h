@@ -71,7 +71,9 @@ class FilesystemCli {
 
   Status Open(RPC* rpc, const std::string* uri);
 
-  struct AT;  // Relative root of a pathname
+  // Reference to a resolved parent directory serving as a relative root for
+  // pathnames
+  struct AT;
 
   Status Atdir(const User& who, const AT* at, const char* pathname, AT**);
   Status Mkfle(const User& who, const AT* at, const char* pathname,
@@ -80,11 +82,20 @@ class FilesystemCli {
                uint32_t mode, Stat* stat);
   Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
 
+  // Reference to a batch of create operations buffered at the client protected
+  // by a server-issued parent dir lease
+  struct BATCH;
+
+  Status BatchStart(const User& who, const AT* at, const char* pathname,
+                    BATCH**);
+  Status BatchEnd(BATCH* bat);
+
   void Destroy(AT* at);
 
   Status TEST_ProbeDir(const DirId& id);
 
  private:
+  struct BatchedCreates;
   struct Lease;
   struct Partition;
   struct Dir;
@@ -106,15 +117,18 @@ class FilesystemCli {
   Status Resolv(const User& who, Lease* relative_root, const char* pathname,
                 Lease** parent_dir, Slice* last_component,
                 const char** remaining_path);
+
   Status Lokup(const User& who, const LookupStat& parent, const Slice& name,
-               Lease** stat);
+               LokupMode mode, Lease** stat);
+  Status CreateBatch(const User& who, const LookupStat& parent,
+                     BatchedCreates**);
   Status AcquireAndFetch(const User& who, const LookupStat& parent,
                          const Slice& name, Dir**, int*);
 
   Status Fetch1(const User& who, const LookupStat& parent, const Slice& name,
                 Dir* dir, int*);
   Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
-                Partition* part, Lease** stat);
+                LokupMode mode, Partition* part, Lease** stat);
 
   Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, Stat* stat);
@@ -134,13 +148,24 @@ class FilesystemCli {
   void operator=(const FilesystemCli& cli);
   FilesystemCli(const FilesystemCli&);
 
-  // A lease to a pathname lookup stat. Also serves as an LRU cache entry.
+  struct WriBuf {
+    std::string namearr;
+    port::Mutex mu;
+  };
+  struct BatchedCreates {
+    uint32_t refs;
+    WriBuf* wribufs;
+    Dir* dir;
+  };
+  // A lease to a pathname lookup stat. Struct also serves as an LRU cache
+  // entry.
   struct Lease {
     LookupStat* value;
     void (*deleter)(const Slice&, LookupStat* value);
     Lease* next_hash;
     Lease* next;
     Lease* prev;
+    BatchedCreates* batch;
     Partition* part;
     size_t charge;
     size_t key_length;
