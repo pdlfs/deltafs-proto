@@ -189,7 +189,7 @@ class FilesystemCli {
   port::Mutex mutex_;
   // Per-directory control block. Each directory consists of one or more
   // partitions. Per-directory giga status is serialized here.
-  // Simultaneously serves as an hash table entry.
+  // Struct simultaneously serves as an hash table entry.
   struct Dir {
     DirId id;
     DirIndexOptions* giga_opts;
@@ -225,7 +225,7 @@ class FilesystemCli {
   enum { kWays = 8 };  // Must be a power of 2
   // Per-partition directory control block. Pathname lookups within a single
   // directory partition are serialized here.
-  // Simultaneously serves as an hash table entry.
+  // Struct simultaneously serves as an hash table entry.
   struct Partition {
     PartHandl* lru_handle;
     Dir* dir;

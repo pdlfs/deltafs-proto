@@ -576,9 +576,14 @@ Status FilesystemCli::Mkfle1(  ///
   int i;
   Status s = AcquireAndFetch(who, p, name, &dir, &i);
   if (s.ok()) {
-    mutex_.Unlock();
-    s = Mkfle2(who, p, name, mode, i, stat);
-    mutex_.Lock();
+    Partition* part;
+    s = AcquirePartition(dir, i, &part);
+    if (s.ok()) {
+      mutex_.Unlock();  // Mkfle2() uses server-side locking. Unlock here...
+      s = Mkfle2(who, p, name, mode, i, stat);
+      mutex_.Lock();
+      Release(part);
+    }
     Release(dir);
   }
   return s;
@@ -592,9 +597,14 @@ Status FilesystemCli::Mkdir1(  ///
   int i;
   Status s = AcquireAndFetch(who, p, name, &dir, &i);
   if (s.ok()) {
-    mutex_.Unlock();
-    s = Mkdir2(who, p, name, mode, i, stat);
-    mutex_.Lock();
+    Partition* part;
+    s = AcquirePartition(dir, i, &part);
+    if (s.ok()) {
+      mutex_.Unlock();  // Mkdir2() uses server-side locking. Unlock here...
+      s = Mkdir2(who, p, name, mode, i, stat);
+      mutex_.Lock();
+      Release(part);
+    }
     Release(dir);
   }
   return s;
@@ -607,9 +617,14 @@ Status FilesystemCli::Lstat1(  ///
   int i;
   Status s = AcquireAndFetch(who, p, name, &dir, &i);
   if (s.ok()) {
-    mutex_.Unlock();
-    s = Lstat2(who, p, name, i, stat);
-    mutex_.Lock();
+    Partition* part;
+    s = AcquirePartition(dir, i, &part);
+    if (s.ok()) {
+      mutex_.Unlock();  // Lstat2() uses server-side locking. Unlock here...
+      s = Lstat2(who, p, name, i, stat);
+      mutex_.Lock();
+      Release(part);
+    }
     Release(dir);
   }
   return s;
