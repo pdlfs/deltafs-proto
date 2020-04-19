@@ -93,7 +93,10 @@ class FilesystemCli {
 
   void Destroy(AT* at);
 
-  Status TEST_ProbeDir(const DirId& id);
+  Status TEST_ProbePartition(const DirId& at, int ix);
+  uint32_t TEST_TotalPartitionsInMemory();
+  Status TEST_ProbeDir(const DirId& at);
+  uint32_t TEST_TotalDirsInMemory();
 
  private:
   struct BatchedCreates;
@@ -159,8 +162,8 @@ class FilesystemCli {
     WriBuf* wribufs;
     Dir* dir;
   };
-  // A lease to a pathname lookup stat. Struct also serves as an LRU cache
-  // entry.
+  // A lease to a pathname lookup stat. Struct simultaneously serves as a hash
+  // table entry.
   struct Lease {
     LookupStat* value;
     void (*deleter)(const Slice&, LookupStat* value);

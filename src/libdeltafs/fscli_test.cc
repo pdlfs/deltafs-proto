@@ -88,10 +88,11 @@ class FilesystemCliTest {
 
 TEST(FilesystemCliTest, OpenAndClose) {
   ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
-  ASSERT_OK(fscli_->TEST_ProbeDir(DirId(0, 0)));
-  ASSERT_OK(Exist("/"));
-  ASSERT_OK(Exist("//"));
-  ASSERT_OK(Exist("///"));
+  ASSERT_OK(fscli_->TEST_ProbeDir(DirId(0)));
+  ASSERT_EQ(fscli_->TEST_TotalDirsInMemory(), 0);
+  ASSERT_OK(fscli_->TEST_ProbePartition(DirId(0), 0));
+  ASSERT_EQ(fscli_->TEST_TotalPartitionsInMemory(), 1);
+  ASSERT_EQ(fscli_->TEST_TotalDirsInMemory(), 1);
 }
 
 TEST(FilesystemCliTest, Files) {
@@ -109,6 +110,9 @@ TEST(FilesystemCliTest, Files) {
 
 TEST(FilesystemCliTest, Dirs) {
   ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(Exist("/"));
+  ASSERT_OK(Exist("//"));
+  ASSERT_OK(Exist("///"));
   ASSERT_OK(Mkdir("/1"));
   ASSERT_CONFLICT(Mkdir("/1"));
   ASSERT_CONFLICT(Creat("/1"));

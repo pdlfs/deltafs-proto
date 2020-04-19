@@ -718,6 +718,23 @@ void FilesystemCli::Release(Lease* lease) {
   Release(part);
 }
 
+Status FilesystemCli::TEST_ProbePartition(const DirId& at, int ix) {
+  Partition* part;
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    assert(dir->id == at);
+    s = AcquirePartition(dir, ix, &part);
+    if (s.ok()) {
+      assert(part->index == ix);
+      Release(part);
+    }
+    Release(dir);
+  }
+  return s;
+}
+
 Status FilesystemCli::TEST_ProbeDir(const DirId& at) {
   Dir* dir;
   MutexLock lock(&mutex_);
@@ -727,6 +744,16 @@ Status FilesystemCli::TEST_ProbeDir(const DirId& at) {
     Release(dir);
   }
   return s;
+}
+
+uint32_t FilesystemCli::TEST_TotalPartitionsInMemory() {
+  MutexLock lock(&mutex_);
+  return pars_->Size();
+}
+
+uint32_t FilesystemCli::TEST_TotalDirsInMemory() {
+  MutexLock lock(&mutex_);
+  return dirs_->Size();
 }
 
 namespace {
@@ -883,7 +910,8 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   }
 
   // If we cannot find an entry from the cache, we continue our search at the
-  // bigger hash table.
+  // bigger hash table. We cache the cursor position returned by the table so
+  // that we can reuse it in a later table insertion.
   Partition** const pos = pars_->FindPointer(key, hash);
   part = *pos;
   if (part != NULL) {
