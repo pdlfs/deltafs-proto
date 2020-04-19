@@ -94,8 +94,8 @@ class Filesystem : public FilesystemIf {
   // a given directory id.
   static uint32_t PickupServer(const DirId& id);
 
-  // Fake a directory access.
-  Status TEST_ProbeDir(const DirId& id);
+  Status TEST_ProbeDir(const DirId& id);  // Fake a directory access.
+  uint32_t TEST_TotalDirsInMemory();
   uint64_t TEST_LastIno();
 
  private:
@@ -134,20 +134,20 @@ class Filesystem : public FilesystemIf {
   typedef LRUEntry<Dir> DirHandl;
   enum { kWays = 8 };  // Must be a power of 2
   // Per-directory control block.
-  // Simultaneously serves as an hash table entry.
+  // Struct simultaneously serves as an hash table entry.
   struct Dir {
     DirId id;
     DirHandl* lru_handle;
     DirIndexOptions* giga_opts;
     DirIndex* giga;
     Dir* next_hash;
+    Filesystem* fs;
     port::CondVar* cv;
     port::Mutex* mu;
     size_t key_length;
-    uint32_t in_use;  // Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
     unsigned char fetched;
-    unsigned char busy[kWays];  // True if a dir subpartition is busy
+    unsigned char busy[kWays];  // True if a name subset is busy
     char key_data[1];           // Beginning of key
 
     Slice key() const {  // Return the key of the dir
@@ -160,10 +160,10 @@ class Filesystem : public FilesystemIf {
   // number of control blocks may be cached in memory. When the maximum is
   // reached, cache eviction will start.
   LRUCache<DirHandl>* dlru_;
-  static void FreeDir(const Slice& key, Dir* dir);
-  // Obtain the control block for a specified directory.
+  static void DeleteDir(const Slice& key, Dir* dir);
+  // Obtain the control block for a specific directory.
   Status AcquireDir(const DirId&, Dir**);
-  // Fetch information on a directory from db.
+  // Fetch dir from db.
   Status MaybeFetchDir(Dir* dir);
   // Release an active reference to a directory control block.
   void Release(Dir*);
@@ -172,17 +172,16 @@ class Filesystem : public FilesystemIf {
   // caller seeking the control block to believe that there is no such block in
   // memory and go create a new control block causing two control blocks of a
   // single directory to appear in memory. To resolve this problem, we use a
-  // separate table to hold all directory control blocks that are currently
-  // being used. A caller checks the table before it checks the LRU cache. If
-  // the caller finds the control block it seeks from the table, it directly
-  // adds a reference to the control block and no more cache queries will be
-  // needed. We only keep a certain number of control blocks in the table. If
-  // the maximum is reached, subsequent filesystem operations may be rejected
-  // until one or more slots in the table reappear.
-  HashTable<Dir>* diu_;  // I.e., Directory in use.
+  // separate table to index all directory control blocks that are currently
+  // kept in memory. A caller checks the table after it gets a miss from the LRU
+  // cache. If the caller finds the control block it seeks from the table, it
+  // adds a reference to the control block. We only keep a certain number of
+  // control blocks in the table. If the maximum is reached, subsequent
+  // filesystem operations may be rejected until slots in the table reappear.
+  HashTable<Dir>* dirs_;
 
+  // Constant after server opening
   FilesystemOptions options_;
-
   MDB* mdb_;
   DB* db_;
 };

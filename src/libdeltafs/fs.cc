@@ -160,6 +160,11 @@ Status Filesystem::TEST_ProbeDir(const DirId& at) {
   return s;
 }
 
+uint32_t Filesystem::TEST_TotalDirsInMemory()  {
+  MutexLock lock(&mutex_);
+  return dirs_->Size();
+}
+
 uint64_t Filesystem::TEST_LastIno() {
   MutexLock lock(&mutex_);
   return inoq_;
@@ -437,8 +442,12 @@ uint32_t LRUHash(const Slice& k) { return Hash(k.data(), k.size(), 0); }
 
 }  // namespace
 
-void Filesystem::FreeDir(const Slice& key, Dir* dir) {
+// Called when the last reference to a directory control block is removed.
+void Filesystem::DeleteDir(const Slice& key, Dir* dir) {
   assert(dir->key() == key);
+  Filesystem* const fs = dir->fs;
+  fs->mutex_.AssertHeld();
+  fs->dirs_->Remove(dir->key(), dir->hash);
   delete dir->giga_opts;
   delete dir->giga;
   delete dir->cv;
@@ -446,18 +455,11 @@ void Filesystem::FreeDir(const Slice& key, Dir* dir) {
   free(dir);
 }
 
-// Remove an active reference to a directory control block and its associated
-// handle in the LRU cache. If the control block is no longer used, remove it
-// from the in-use table. After removal, the control block may still be kept in
-// memory by the LRU cache. If the control block has been evicted from
-// the cache before, this will trigger its deletion.
+// Remove an active reference to a directory control block. After removal, the
+// control block may still be kept in memory by the LRU cache. If the control
+// block has been evicted from the cache before, it will be deleted.
 void Filesystem::Release(Dir* const dir) {
   mutex_.AssertHeld();
-  assert(dir->in_use != 0);
-  dir->in_use--;
-  if (!dir->in_use) {
-    diu_->Remove(dir->key(), dir->hash);
-  }
   dlru_->Release(dir->lru_handle);
 }
 
@@ -486,10 +488,11 @@ Status Filesystem::MaybeFetchDir(Dir* dir) {
 // operations within that directory. An LRU cache of directory control blocks is
 // kept in memory to avoid repeatedly allocating directory control blocks. A
 // separate hash table is created to index all directory control blocks that
-// are currently being accessed. When obtaining a control block, we first look
-// it up at the hash table. If we cannot find it, we continue the search at the
-// LRU cache. If we still cannot find it, we create a new and insert it into the
-// LRU cache and the hash table.
+// are currently kept in memory including those that have been evicted from the
+// cache but are still in use by some threads. When obtaining a control block,
+// we first look it up at the cache. If we cannot find it, we continue the
+// search at the table. If we still cannot find it, we create a new and insert
+// it into the LRU cache and the hash table.
 Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   mutex_.AssertHeld();
   char tmp[30];
@@ -497,36 +500,30 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   const uint32_t hash = LRUHash(key);
   Status s;
 
-  // We cache the cursor position returned by the table so that we can
-  // reuse it in a subsequent table insertion.
-  Dir** const pos = diu_->FindPointer(key, hash);
-  Dir* dir = *pos;
-  if (dir != NULL) {
-    *result = dir;
-    assert(dir->lru_handle->value == dir);
-    // If we hit an entry at the table, we increase the
-    // reference count of the entry's corresponding handle
-    // in the LRU cache. If this entry has been evicted
-    // from the cache, this will further defer its deletion
-    // from the memory, which is our intention here.
-    dlru_->Ref(dir->lru_handle);
-    assert(dir->in_use != 0);
-    dir->in_use++;
-    return s;
-  }
-
-  // If we cannot find an entry in the table, we continue our search
-  // at the LRU cache.
+  Dir* dir;
+  // We start our search at the LRU cache. If we find it we are done.
   DirHandl* h = dlru_->Lookup(key, hash);
   if (h != NULL) {
     dir = h->value;
     *result = dir;
     assert(dir->lru_handle == h);
-    // If we find the entry from the cache, we need to
-    // reinsert it into the table.
-    diu_->Inject(dir, pos);
-    assert(dir->in_use == 0);
-    dir->in_use = 1;
+    return s;
+  }
+
+  // If we cannot find an entry in the cache, we continue our search at the
+  // bigger hash table. We cache the cursor position returned by the table so
+  // that we can reuse it in the subsequent table insertion.
+  Dir** const pos = dirs_->FindPointer(key, hash);
+  dir = *pos;
+  if (dir != NULL) {
+    *result = dir;
+    assert(dir->lru_handle->value == dir);
+    // If we hit an entry at the table, we increase the reference count of the
+    // entry's corresponding handle in the LRU cache. If this entry has been
+    // evicted from the cache, this will further defer its deletion from the
+    // memory, which is our intention here. Should we reinsert it into the cache
+    // though?
+    dlru_->Ref(dir->lru_handle);
     return s;
   }
 
@@ -539,19 +536,16 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   dir->id = id;
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
+  dir->fs = this;
   memset(&dir->busy[0], 0, sizeof(dir->busy));
   dir->giga = NULL;  // To be fetched from db later
   dir->giga_opts = NULL;
   dir->fetched = 0;
+  dirs_->Inject(dir, pos);
 
-  // Each cache handle of a Dir has a value pointer pointing to the Dir.
-  // Each Dir back points to its handle. Dirs are double used as
-  // hash entries enabling hash operations in the table.
-  h = dlru_->Insert(key, hash, dir, 1, FreeDir);
-  *result = dir;
+  h = dlru_->Insert(key, hash, dir, 1, DeleteDir);
   dir->lru_handle = h;
-  diu_->Inject(dir, pos);
-  dir->in_use = 1;
+  *result = dir;
   return s;
 }
 
@@ -570,12 +564,13 @@ FilesystemOptions::FilesystemOptions()
 Filesystem::Filesystem(const FilesystemOptions& options)
     : inoq_(0), options_(options), mdb_(NULL), db_(NULL) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
-  diu_ = new HashTable<Dir>();
+  dirs_ = new HashTable<Dir>();
 }
 
 Filesystem::~Filesystem() {
   delete dlru_;
-  delete diu_;
+  assert(dirs_->Empty());
+  delete dirs_;
   delete mdb_;
   delete db_;
 }
