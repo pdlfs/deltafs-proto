@@ -133,8 +133,11 @@ Status FilesystemCli::BatchEnd(BATCH* bat) {
     // Once the context is deleted, the lease itself is invalidated and must be
     // removed from the cache.
     part->cached_leases->Erase(lease->key(), lease->hash);
+    part->leases->Remove(lease->key(), lease->hash);
+    lease->removed = true;
+    lease->batch = NULL;
   }
-  part->cached_leases->Release(lease);
+  part->cached_leases->Release(lease->lru_handle);
   part->mu->Unlock();
   {
     MutexLock lock(&mutex_);
@@ -376,7 +379,7 @@ Status FilesystemCli::CreateBatch(  ///
     // In future, we could allow each dir to define its own amount
     // of virtual servers.
     int n = options_.nsrvs;
-    bc->refs = 1;
+    bc->refs = 0;  // To be increased by the caller
     bc->wribufs = new WriBuf[n];
     bc->dir = dir;
   }
@@ -464,107 +467,39 @@ Status FilesystemCli::Fetch1(  ///
   return s;
 }
 
-// Look up a named directory under a parent directory. On success, a lease for
-// the stat of the directory being looked up is returned. The returned lease
-// must be released after use. Only valid leases will be returned. Expired
-// leases are renewed before they are returned. Each returned lease holds
-// a reference to its parent partition. Caller of this function must
-// increase the partition's reference count when a lease is returned.
+// Look up a named directory beneath a specified parent directory. On success, a
+// lease for the stat of the directory being looked up is returned. The returned
+// lease must be released after use. Only valid leases will be returned. Expired
+// leases are renewed before they are returned. Each returned lease holds a
+// reference to its parent directory partition. Caller of this function must
+// increase the partition's reference count after receiving a lease.
 Status FilesystemCli::Lokup1(  ///
     const User& who, const LookupStat& p, const Slice& name, LokupMode mode,
     Partition* part, Lease** stat) {
   if (!IsLookupOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No x perm");
+  Lease* lease;
   MutexLock lock(part->mu);
-  // Determine subpartition; also serves as the hash
-  // for the LRU lease cache
-  uint32_t hash = Hash(name.data(), name.size(), 0);
-  uint32_t i = hash & uint32_t(kWays - 1);
-
-  Status s;
-  LRUCache<Lease>* const lru = part->cached_leases;
-  // Quickly check if we have it already...
-  Lease* l = lru->Lookup(name, hash);
-  if (l != NULL) {  // It's a hit...
-    if (l->value->LeaseDue() < CurrentMicros()) {
-      lru->Erase(name, hash);
-      lru->Release(l);
-    } else {
-      // Directly return the cached lease...
-      assert(l->part == part);  // Pending reference increment
-      if (mode == kBatchedCreats) {
-        assert(l->batch != NULL);
-        l->batch->refs++;
-      }
-      *stat = l;
-      return s;
+  // The following hash is used for per-partition synchronization, for lookups
+  // in the per-partition lease LRU cache, and for lookups in the per-partition
+  // lease table.
+  const uint32_t hash = Hash(name.data(), name.size(), 0);
+  Status s = Lokup2(who, p, name, hash, mode, part, &lease);
+  if (s.ok()) {
+    *stat = lease;
+    assert(lease->part == part);  // Pending partition reference increment
+    if (lease->value->LeaseDue() == 0) {
+      // Lease cannot be cached; remove it from the partition
+      part->cached_leases->Erase(lease->key(), lease->hash);
+      part->leases->Remove(lease->key(), lease->hash);
+      lease->removed = true;
+    }
+    if (mode == kBatchedCreats) {
+      assert(lease->batch != NULL);
+      lease->batch->refs++;
     }
   }
 
-  *stat = NULL;
-
-  // Wait for concurrent conflicting name lookups and check again in case some
-  // other thread has done the work for us while we are waiting...
-  while (part->busy[i]) part->cv->Wait();
-  part->busy[i] = true;
-  l = lru->Lookup(name, hash);
-  if (l != NULL) {
-    if (l->value->LeaseDue() < CurrentMicros()) {
-      lru->Erase(name, hash);
-      lru->Release(l);
-    } else {
-      assert(l->part == part);  // Pending reference increment
-      if (mode == kBatchedCreats) {
-        assert(l->batch != NULL);
-        l->batch->refs++;
-      }
-      *stat = l;
-    }
-  }
-
-  if (*stat == NULL) {
-    // Temporarily unlock for potentially costly lookups...
-    part->mu->Unlock();
-    LookupStat* tmp = new LookupStat;
-    if (fs_ != NULL) {
-      s = fs_->Lokup(who, p, name, tmp);
-    } else if (stub_ != NULL) {
-      assert(part->index < options_.nsrvs);
-      LokupOptions opts;
-      opts.parent = &p;
-      opts.name = name;
-      opts.me = who;
-      LokupRet ret;
-      ret.stat = tmp;
-      s = rpc::LokupCli(stub_[part->index])(opts, &ret);
-    } else {
-      s = Nofs();
-    }
-
-    BatchedCreates* tmpbat = NULL;
-    if (s.ok()) {
-      if (mode == kBatchedCreats) {
-        s = CreateBatch(who, *tmp, &tmpbat);
-      }
-    }
-
-    // Lock again for finishing up...
-    part->mu->Lock();
-    if (s.ok()) {
-      l = lru->Insert(name, hash, tmp, 1, DeleteLookupStat);
-      l->batch = tmpbat;
-      l->part = part;  // Pending reference increment
-      *stat = l;
-      if (tmp->LeaseDue() == 0) {  // Lease is non-cacheable
-        lru->Erase(name, hash);
-      }
-    } else {
-      delete tmp;
-    }
-  }
-
-  part->busy[i] = false;
-  part->cv->SignalAll();
   return s;
 }
 
@@ -627,6 +562,122 @@ Status FilesystemCli::Lstat1(  ///
     }
     Release(dir);
   }
+  return s;
+}
+
+// part->mu has been locked.
+Status FilesystemCli::Lokup2(  ///
+    const User& who, const LookupStat& p, const Slice& name, uint32_t hash,
+    LokupMode mode, Partition* part, Lease** stat) {
+  part->mu->AssertHeld();
+  Lease* lease;
+  Status s;
+  LRUCache<LeaseHandl>* const lru = part->cached_leases;
+  HashTable<Lease>* const ht = part->leases;
+  // Quickly check if we have it already...
+  LeaseHandl* h = lru->Lookup(name, hash);
+  if (h != NULL) {  // It's a hit!
+    lease = h->value;
+    if (lease->value->LeaseDue() < CurrentMicros()) {
+      ht->Remove(name, hash);  // Lease expired; remove it from the partition
+      lru->Erase(name, hash);
+      lease->removed = true;
+      lru->Release(h);
+    } else {
+      // Directly return the cached lease
+      assert(lease->lru_handle == h);
+      *stat = lease;
+      return s;
+    }
+  } else {  // Try the bigger lease table...
+    lease = *part->leases->FindPointer(name, hash);
+    if (lease != NULL) {
+      assert(lease->lru_handle->value == lease);
+      lru->Ref(lease->lru_handle);
+      *stat = lease;
+      return s;
+    }
+  }
+
+  *stat = NULL;
+
+  // Wait for concurrent conflicting name lookups or changes and check again in
+  // case some other thread has done the work for us while we are waiting...
+  uint32_t const i = hash & uint32_t(kWays - 1);
+  while (part->busy[i]) part->cv->Wait();
+  part->busy[i] = true;
+  h = lru->Lookup(name, hash);
+  if (h != NULL) {
+    lease = h->value;
+    if (lease->value->LeaseDue() < CurrentMicros()) {
+      ht->Remove(name, hash);  // Lease expired; remove it from the partition
+      lru->Erase(name, hash);
+      lease->removed = true;
+      lru->Release(h);
+    } else {
+      assert(lease->lru_handle == h);
+      *stat = lease;
+    }
+  } else {  // Try the bigger lease table...
+    lease = *part->leases->FindPointer(name, hash);
+    if (lease != NULL) {
+      assert(lease->lru_handle->value == lease);
+      lru->Ref(lease->lru_handle);
+      *stat = lease;
+    }
+  }
+
+  if (*stat == NULL) {
+    // Temporarily unlock for potentially costly lookups...
+    part->mu->Unlock();
+    LookupStat* tmp = new LookupStat;
+    if (fs_ != NULL) {
+      s = fs_->Lokup(who, p, name, tmp);
+    } else if (stub_ != NULL) {
+      assert(part->index < options_.nsrvs);
+      LokupOptions opts;
+      opts.parent = &p;
+      opts.name = name;
+      opts.me = who;
+      LokupRet ret;
+      ret.stat = tmp;
+      s = rpc::LokupCli(stub_[part->index])(opts, &ret);
+    } else {
+      s = Nofs();
+    }
+
+    BatchedCreates* tmpbat = NULL;
+    if (s.ok()) {
+      if (mode == kBatchedCreats) {
+        s = CreateBatch(who, *tmp, &tmpbat);
+      }
+    }
+
+    // Lock again for finishing up...
+    part->mu->Lock();
+    if (s.ok()) {
+      lease = static_cast<Lease*>(malloc(sizeof(Lease) - 1 + name.size()));
+      lease->key_length = name.size();
+      memcpy(lease->key_data, name.data(), name.size());
+      lease->hash = hash;
+      lease->part = part;
+      lease->removed = false;
+      lease->batch = tmpbat;
+      lease->value = tmp;
+      Lease* old = ht->Insert(lease);
+      assert(old == NULL);
+      (void)old;
+
+      h = lru->Insert(name, hash, lease, 1, DeleteLease);
+      lease->lru_handle = h;
+      *stat = lease;
+    } else {
+      delete tmp;
+    }
+  }
+
+  part->busy[i] = false;
+  part->cv->SignalAll();
   return s;
 }
 
@@ -704,15 +755,27 @@ Status FilesystemCli::Lstat2(  ///
   return s;
 }
 
-void FilesystemCli::DeleteLookupStat(const Slice& key, LookupStat* stat) {
-  delete stat;
+// Delete a lease from memory.
+void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
+  assert(lease->key() == key);
+  Partition* const part = lease->part;
+  part->mu->AssertHeld();
+  if (!lease->removed)  // Remove only if we haven't done so yet
+    part->leases->Remove(lease->key(), lease->hash);
+  // Any batch context should already be closed by now
+  assert(lease->batch == NULL);
+  delete lease->value;
+  free(lease);
 }
 
+// Remove an active reference to a lease potentially causing it to be deleted
+// from memory. Also remove a reference to the lease's parent partition
+// potentially causing the partition to be deleted from memory too.
 void FilesystemCli::Release(Lease* lease) {
   if (lease == &rtlease_) return;  // Root lease is static...
   Partition* const part = lease->part;
   part->mu->Lock();
-  part->cached_leases->Release(lease);
+  part->cached_leases->Release(lease->lru_handle);
   part->mu->Unlock();
   MutexLock lock(&mutex_);
   Release(part);
@@ -873,6 +936,8 @@ void FilesystemCli::DeletePartition(const Slice& key, Partition* part) {
   cli->mutex_.AssertHeld();
   cli->pars_->Remove(key, part->hash);
   delete part->cached_leases;
+  assert(part->leases->Empty());
+  delete part->leases;
   delete part->cv;
   delete part->mu;
   cli->Release(part->dir);
@@ -904,8 +969,8 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   PartHandl* h = plru_->Lookup(key, hash);
   if (h != NULL) {
     part = h->value;
-    *result = part;
     assert(part->lru_handle == h);
+    *result = part;
     return s;
   }
 
@@ -929,7 +994,8 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   part->hash = hash;
   part->index = ix;
   part->cached_leases =
-      new LRUCache<Lease>(options_.per_partition_lease_lru_size);
+      new LRUCache<LeaseHandl>(options_.per_partition_lease_lru_size);
+  part->leases = new HashTable<Lease>;
   part->mu = new port::Mutex;
   part->cv = new port::CondVar(part->mu);
   memset(&part->busy[0], 0, kWays);

@@ -141,6 +141,8 @@ class FilesystemCli {
   Status Lstat1(const User& who, const LookupStat& parent, const Slice& name,
                 Stat* stat);
 
+  Status Lokup2(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t hash, LokupMode mode, Partition* part, Lease** stat);
   Status Mkfle2(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, int i, Stat* stat);
   Status Mkdir2(const User& who, const LookupStat& parent, const Slice& name,
@@ -162,21 +164,18 @@ class FilesystemCli {
     WriBuf* wribufs;
     Dir* dir;
   };
+  typedef LRUEntry<Lease> LeaseHandl;
   // A lease to a pathname lookup stat. Struct simultaneously serves as a hash
   // table entry.
   struct Lease {
+    LeaseHandl* lru_handle;
     LookupStat* value;
-    void (*deleter)(const Slice&, LookupStat* value);
-    Lease* next_hash;
-    Lease* next;
-    Lease* prev;
     BatchedCreates* batch;
     Partition* part;
-    size_t charge;
+    Lease* next_hash;
     size_t key_length;
-    uint32_t refs;
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
-    bool in_cache;  // False when evicted
+    unsigned char removed;
     char key_data[1];  // Beginning of key
 
     Slice key() const {  // Return key of the lease.
@@ -185,7 +184,7 @@ class FilesystemCli {
 
     ///
   };
-  static void DeleteLookupStat(const Slice& key, LookupStat* stat);
+  static void DeleteLease(const Slice& key, Lease* lease);
   void Release(Lease* lease);
 
   // State below is protected by mutex_
@@ -232,7 +231,8 @@ class FilesystemCli {
   struct Partition {
     PartHandl* lru_handle;
     Dir* dir;
-    LRUCache<Lease>* cached_leases;
+    LRUCache<LeaseHandl>* cached_leases;
+    HashTable<Lease>* leases;
     port::Mutex* mu;
     port::CondVar* cv;
     Partition* next_hash;
