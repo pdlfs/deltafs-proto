@@ -108,6 +108,9 @@ class HashTable {
   }
 
   bool Empty() const { return elems_ == 0; }
+  uint32_t Size() const {  ///
+    return elems_;
+  }
 
  private:
   // The table consists of an array of buckets where each bucket is
