@@ -102,7 +102,7 @@ Status FilesystemCli::BatchStart(  ///
       // This should ideally be a special mkdir creating a new dir and
       // simultaneously locking the newly created dir. Any subsequent regular
       // lookup operation either finds a non-regular lease with a batch context
-      // or fails to obtain a regular lease from server
+      // or fails to initialize a regular lease from server
       status = Lokup(who, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
         assert(dir_lease->batch != NULL);
@@ -158,10 +158,14 @@ Status FilesystemCli::Mkfle(  ///
   Status status =
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
-    if (tgt.empty() || has_tailing_slashes) {
-      status = Status::FileExpected("Path is dir");
+    if (!tgt.empty() && !has_tailing_slashes) {
+      if (parent_dir->batch != NULL) {
+        status = Status::NotSupported(Slice());
+      } else {
+        status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
+      }
     } else {
-      status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
+      status = Status::FileExpected("Path is dir");
     }
   }
   if (parent_dir) {
@@ -180,8 +184,12 @@ Status FilesystemCli::Mkdir(  ///
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
-      status = Mkdir1(who, *parent_dir->value, tgt, mode, stat);
-    } else {  // Special case; pathname is root
+      if (parent_dir->batch != NULL) {
+        status = Status::AccessDenied("Dir locked for batch file creates");
+      } else {
+        status = Mkdir1(who, *parent_dir->value, tgt, mode, stat);
+      }
+    } else {  // Special case: pathname is root
       status = Status::AlreadyExists(Slice());
     }
   }
@@ -201,13 +209,17 @@ Status FilesystemCli::Lstat(  ///
       Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
-      status = Lstat1(who, *parent_dir->value, tgt, stat);
-      if (has_tailing_slashes) {
-        if (!S_ISDIR(stat->FileMode())) {
-          status = Status::DirExpected("Not a dir");
+      if (parent_dir->batch != NULL) {
+        status = Status::AccessDenied("Dir locked for batch file creates");
+      } else {
+        status = Lstat1(who, *parent_dir->value, tgt, stat);
+        if (has_tailing_slashes) {
+          if (!S_ISDIR(stat->FileMode())) {
+            status = Status::DirExpected("Not a dir");
+          }
         }
       }
-    } else {  // Special case; pathname is root
+    } else {  // Special case: pathname is root
       *stat = rtstat_;
     }
   }
@@ -925,6 +937,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   rtlokupstat_.CopyFrom(rtstat_);
   rtlokupstat_.SetLeaseDue(-1);
   rtlease_.value = &rtlokupstat_;
+  rtlease_.batch = NULL;
 }
 
 FilesystemCliOptions::FilesystemCliOptions()

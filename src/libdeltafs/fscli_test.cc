@@ -42,6 +42,7 @@ namespace pdlfs {
 
 class FilesystemCliTest {
  public:
+  typedef FilesystemCli::BATCH BATCH;
   typedef FilesystemCli::AT AT;
   FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
@@ -67,6 +68,14 @@ class FilesystemCliTest {
 
   Status Exist(const char* path, const AT* at = NULL) {
     return fscli_->Lstat(me_, at, path, &tmp_);
+  }
+
+  Status BatchStart(const char* path, BATCH** result, const AT* at = NULL) {
+    return fscli_->BatchStart(me_, at, path, result);
+  }
+
+  Status BatchEnd(BATCH* batch) {  ///
+    return fscli_->BatchEnd(batch);
   }
 
   Stat tmp_;
@@ -185,6 +194,26 @@ TEST(FilesystemCliTest, Atdir) {
   fscli_->Destroy(d3);
   fscli_->Destroy(d2);
   fscli_->Destroy(d1);
+}
+
+TEST(FilesystemCliTest, BatchCtx) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  BATCH *bat, *bat1, *bat2;
+  ASSERT_OK(Mkdir("/a"));
+  ASSERT_OK(BatchStart("/a", &bat));
+  ASSERT_ERR(Mkdir("/a/1"));
+  ASSERT_ERR(Mkdir("/a/2"));
+  ASSERT_ERR(Mkdir("/a/3"));
+  ASSERT_ERR(Exist("/a/1"));
+  ASSERT_ERR(Exist("/a/2"));
+  ASSERT_ERR(Exist("/a/3"));
+  ASSERT_OK(BatchEnd(bat));
+  ASSERT_NOTFOUND(BatchStart("/b", &bat));
+  ASSERT_OK(Mkdir("/c"));
+  ASSERT_OK(BatchStart("/c", &bat1));
+  ASSERT_OK(BatchStart("/c", &bat2));
+  ASSERT_OK(BatchEnd(bat1));
+  ASSERT_OK(BatchEnd(bat2));
 }
 
 }  // namespace pdlfs
