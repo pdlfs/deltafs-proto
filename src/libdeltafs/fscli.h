@@ -50,6 +50,7 @@ struct FilesystemCliOptions {
   FilesystemCliOptions();
   size_t per_partition_lease_lru_size;
   size_t partition_lru_size;
+  size_t batch_size;
   bool skip_perm_checks;
   // Total number of virtual servers
   int vsrvs;
@@ -151,6 +152,7 @@ class FilesystemCli {
   struct WriBuf {
     std::string namearr;
     port::Mutex mu;
+    size_t n;
   };
   struct BatchedCreates {
     uint32_t refs;

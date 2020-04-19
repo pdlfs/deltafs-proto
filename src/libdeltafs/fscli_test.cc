@@ -202,11 +202,8 @@ TEST(FilesystemCliTest, BatchCtx) {
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
   ASSERT_ERR(Mkdir("/a/1"));
-  ASSERT_ERR(Mkdir("/a/2"));
-  ASSERT_ERR(Mkdir("/a/3"));
-  ASSERT_ERR(Exist("/a/1"));
   ASSERT_ERR(Exist("/a/2"));
-  ASSERT_ERR(Exist("/a/3"));
+  ASSERT_ERR(Creat("/a/3"));
   ASSERT_OK(BatchEnd(bat));
   ASSERT_NOTFOUND(BatchStart("/b", &bat));
   ASSERT_OK(Mkdir("/c"));

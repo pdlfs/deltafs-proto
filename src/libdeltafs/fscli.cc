@@ -102,7 +102,7 @@ Status FilesystemCli::BatchStart(  ///
       // This should ideally be a special mkdir creating a new dir and
       // simultaneously locking the newly created dir. Any subsequent regular
       // lookup operation either finds a non-regular lease with a batch context
-      // or fails to initialize a regular lease from server
+      // or fails to initialize a regular lease from server.
       status = Lokup(who, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
         assert(dir_lease->batch != NULL);
@@ -160,7 +160,7 @@ Status FilesystemCli::Mkfle(  ///
   if (status.ok()) {
     if (!tgt.empty() && !has_tailing_slashes) {
       if (parent_dir->batch != NULL) {
-        status = Status::NotSupported(Slice());
+        status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
         status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
       }
@@ -943,6 +943,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
 FilesystemCliOptions::FilesystemCliOptions()
     : per_partition_lease_lru_size(4096),
       partition_lru_size(4096),
+      batch_size(16),
       skip_perm_checks(false),
       vsrvs(1),
       nsrvs(1) {}
