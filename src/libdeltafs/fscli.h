@@ -234,7 +234,6 @@ class FilesystemCli {
     port::CondVar* cv;
     Partition* next_hash;
     size_t key_length;
-    uint32_t in_use;  //  Number of active uses
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
     int index;
     unsigned char busy[kWays];  // True if a dir subpartition is busy
@@ -250,10 +249,15 @@ class FilesystemCli {
   // need to create a new one every time a directory partition is accessed.
   LRUCache<PartHandl>* plru_;
   static void DeletePartition(const Slice& key, Partition* partition);
+  // Obtain the control block for a specific directory partition.
   Status AcquirePartition(Dir* dir, int index, Partition**);
+  // Add a reference to a specific directory partition preventing it from being
+  // deleted from memory.
   void Ref(Partition* partition);
+  // Release an active reference to a directory partition.
   void Release(Partition* partition);
-  HashTable<Partition>* piu_;  // Partition in use.
+  // All directory partitions in memory.
+  HashTable<Partition>* pars_;
 
   void FormatRoot();
   // Constant after client open

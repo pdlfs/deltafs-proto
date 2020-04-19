@@ -839,34 +839,32 @@ Status FilesystemCli::AcquireDir(const DirId& id, Dir** result) {
   return s;
 }
 
+// Delete a partition from memory.
 void FilesystemCli::DeletePartition(const Slice& key, Partition* part) {
   assert(part->key() == key);
+  FilesystemCli* const cli = part->dir->fscli;
+  cli->mutex_.AssertHeld();
+  cli->pars_->Remove(key, part->hash);
   delete part->cached_leases;
   delete part->cv;
   delete part->mu;
-  FilesystemCli* cli = part->dir->fscli;
-  MutexLock lock(&cli->mutex_);
   cli->Release(part->dir);
   free(part);
 }
 
-void FilesystemCli::Release(Partition* part) {
+// Remove an active reference to a directory partition.
+void FilesystemCli::Release(Partition* const part) {
   mutex_.AssertHeld();
-  assert(part->in_use != 0);
-  part->in_use--;
-  if (!part->in_use) {
-    piu_->Remove(part->key(), part->hash);
-  }
   plru_->Release(part->lru_handle);
 }
 
+// Add a reference to a directory partition.
 void FilesystemCli::Ref(Partition* part) {
   mutex_.AssertHeld();
-  assert(part->in_use != 0);
-  part->in_use++;
   plru_->Ref(part->lru_handle);
 }
 
+// Obtain the control block for a specific directory partition.
 Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   mutex_.AssertHeld();
   char tmp[30];
@@ -874,49 +872,46 @@ Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   const uint32_t hash = HashKey(key);
   Status s;
 
-  // Search the table first...
-  Partition** const pos = piu_->FindPointer(key, hash);
-  Partition* part = *pos;
-  if (part != NULL) {
-    *result = part;
-    assert(part->lru_handle->value == part);
-    plru_->Ref(part->lru_handle);
-    assert(part->in_use != 0);
-    part->in_use++;
-    return s;
-  }
-
-  // Try the LRU cache...
+  Partition* part;
+  // Try the LRU cache first...
   PartHandl* h = plru_->Lookup(key, hash);
   if (h != NULL) {
     part = h->value;
     *result = part;
     assert(part->lru_handle == h);
-    piu_->Inject(part, pos);
-    assert(part->in_use == 0);
-    part->in_use = 1;
+    return s;
+  }
+
+  // If we cannot find an entry from the cache, we continue our search at the
+  // bigger hash table.
+  Partition** const pos = pars_->FindPointer(key, hash);
+  part = *pos;
+  if (part != NULL) {
+    *result = part;
+    assert(part->lru_handle->value == part);
+    // Should we reinsert it into the cache?
+    plru_->Ref(part->lru_handle);
     return s;
   }
 
   // If we still cannot find it, we create it...
   part = static_cast<Partition*>(malloc(sizeof(Partition) - 1 + key.size()));
-  part->index = ix;
   part->key_length = key.size();
   memcpy(part->key_data, key.data(), key.size());
   part->hash = hash;
+  part->index = ix;
   part->cached_leases =
       new LRUCache<Lease>(options_.per_partition_lease_lru_size);
   part->mu = new port::Mutex;
   part->cv = new port::CondVar(part->mu);
   memset(&part->busy[0], 0, kWays);
+  pars_->Inject(part, pos);
   part->dir = dir;
   dir->refs++;
 
   h = plru_->Insert(key, hash, part, 1, DeletePartition);
-  *result = part;
   part->lru_handle = h;
-  piu_->Inject(part, pos);
-  part->in_use = 1;
+  *result = part;
   return s;
 }
 
@@ -936,7 +931,7 @@ void FilesystemCli::FormatRoot() {
 FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
     : dirs_(NULL),
       plru_(NULL),
-      piu_(NULL),
+      pars_(NULL),
       options_(options),
       stub_(NULL),
       fs_(NULL),
@@ -945,7 +940,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   dirlist_.next = &dirlist_;
   dirlist_.prev = &dirlist_;
   plru_ = new LRUCache<PartHandl>(options_.partition_lru_size);
-  piu_ = new HashTable<Partition>;
+  pars_ = new HashTable<Partition>;
 
   FormatRoot();
 
@@ -986,8 +981,8 @@ Status FilesystemCli::Open(RPC* rpc, const std::string* uri) {
 
 FilesystemCli::~FilesystemCli() {
   delete plru_;
-  assert(piu_->Empty());
-  delete piu_;
+  assert(pars_->Empty());
+  delete pars_;
   assert(dirlist_.next == &dirlist_);
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
