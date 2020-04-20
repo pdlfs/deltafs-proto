@@ -74,8 +74,8 @@ class FilesystemCliTest {
     return fscli_->BatchStart(me_, at, path, result);
   }
 
-  Status BatchCreat(const char* name, BATCH* batch) {
-    return fscli_->BatchCreat(batch, name);
+  Status BatchInsert(const char* name, BATCH* batch) {
+    return fscli_->BatchInsert(batch, name);
   }
 
   Status BatchCommit(BATCH* batch) {  ///
@@ -213,10 +213,12 @@ TEST(FilesystemCliTest, BatchCtx) {
   BATCH *bat, *bat1, *bat2;
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
+  ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 1);
   ASSERT_ERR(Mkdir("/a/1"));
   ASSERT_ERR(Exist("/a/2"));
   ASSERT_ERR(Creat("/a/3"));
   ASSERT_OK(BatchEnd(bat));
+  ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 0);
   ASSERT_NOTFOUND(BatchStart("/b", &bat));
   ASSERT_OK(Mkdir("/c"));
   ASSERT_OK(BatchStart("/c", &bat1));
@@ -230,15 +232,15 @@ TEST(FilesystemCliTest, BatchCreats) {
   BATCH* bat;
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
-  ASSERT_OK(BatchCreat("1", bat));
+  ASSERT_OK(BatchInsert("1", bat));
   ASSERT_ERR(Exist("/a/1"));
-  ASSERT_OK(BatchCreat("2", bat));
+  ASSERT_OK(BatchInsert("2", bat));
   ASSERT_ERR(Exist("/a/2"));
-  ASSERT_OK(BatchCreat("3", bat));
+  ASSERT_OK(BatchInsert("3", bat));
   ASSERT_ERR(Exist("/a/3"));
   ASSERT_OK(BatchCommit(bat));
-  ASSERT_ERR(BatchCreat("4", bat));
-  ASSERT_ERR(BatchCommit(bat));
+  ASSERT_ERR(BatchInsert("4", bat));
+  ASSERT_OK(BatchCommit(bat));
   ASSERT_OK(BatchEnd(bat));
   ASSERT_OK(Exist("/a/1"));
   ASSERT_OK(Exist("/a/2"));

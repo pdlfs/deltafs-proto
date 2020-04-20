@@ -89,12 +89,13 @@ class FilesystemCli {
 
   Status BatchStart(const User& who, const AT* at, const char* pathname,
                     BATCH**);
-  Status BatchCreat(BATCH* bat, const char* name);
+  Status BatchInsert(BATCH* bat, const char* name);
   Status BatchCommit(BATCH* bat);
   Status BatchEnd(BATCH* bat);
 
   void Destroy(AT* at);
 
+  uint32_t TEST_TotalLeasesAtPartition(const DirId& at, int ix);
   Status TEST_ProbePartition(const DirId& at, int ix);
   uint32_t TEST_TotalPartitionsInMemory();
   Status TEST_ProbeDir(const DirId& at);
@@ -170,7 +171,8 @@ class FilesystemCli {
     uint32_t mode;
     uint32_t refs;
     port::Mutex mu;
-    bool done;  // True if committed
+    // 0 if not committed, 1 if being committed, or 2 if committed
+    unsigned char commit_status;
     Status bg_status;
     WriBuf* wribufs;
     Dir* dir;

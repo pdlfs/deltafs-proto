@@ -86,7 +86,7 @@ struct FilesystemCli::BATCH {
 };
 
 // On success, the returned batch handle contains a reference to the target
-// dir's lease from server and a reference to the internal batch object
+// dir's lease from server and a reference to the internal batch context object
 // associated with the lease.
 Status FilesystemCli::BatchStart(  ///
     const User& who, const AT* const at, const char* const pathname,
@@ -120,14 +120,14 @@ Status FilesystemCli::BatchStart(  ///
   return status;
 }
 
-Status FilesystemCli::BatchCreat(BATCH* bat, const char* name) {
+Status FilesystemCli::BatchInsert(BATCH* bat, const char* name) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);
   BatchedCreates* const bc = lease->batch;
   MutexLock lock(&bc->mu);
-  if (bc->done) {
-    return Status::NotFound("Already committed");
+  if (bc->commit_status != 0) {
+    return Status::NotSupported("Already committed");
   } else if (!bc->bg_status.ok()) {
     return bc->bg_status;
   }
@@ -148,12 +148,12 @@ Status FilesystemCli::BatchCommit(BATCH* bat) {
   assert(lease->batch != NULL);
   BatchedCreates* const bc = lease->batch;
   MutexLock lock(&bc->mu);
-  if (bc->done) {
-    return Status::NotFound("Already committed");
-  } else if (!bc->bg_status.ok()) {
+  if (bc->commit_status == 1) {
+    return Status::NotSupported("Being committed");
+  } else if (bc->commit_status == 2 || !bc->bg_status.ok()) {
     return bc->bg_status;
   }
-  bc->done = true;
+  bc->commit_status = 1;
   bc->mu.Unlock();
   Status s;
   for (int i = 0; i < options_.nsrvs; i++) {
@@ -164,6 +164,7 @@ Status FilesystemCli::BatchCommit(BATCH* bat) {
     }
   }
   bc->mu.Lock();
+  bc->commit_status = 2;
   if (!s.ok() && bc->bg_status.ok()) {
     bc->bg_status = s;
   }
@@ -431,9 +432,12 @@ Status FilesystemCli::CreateBatch(  ///
     // In future, we could allow each dir to define its own amount
     // of virtual servers.
     int n = options_.nsrvs;
+    bc->mode = 0660;
+    bc->commit_status = 0;
     bc->refs = 0;  // To be increased by the caller
     bc->wribufs = new WriBuf[n];
     bc->dir = dir;
+    bc->who = who;
   }
   return s;
 }
@@ -894,16 +898,33 @@ void FilesystemCli::Release(Lease* lease) {
   Release(part);
 }
 
+uint32_t FilesystemCli::TEST_TotalLeasesAtPartition(const DirId& at, int ix) {
+  uint32_t rv(0);
+  Partition* part;
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    s = AcquirePartition(dir, ix, &part);
+    if (s.ok()) {
+      // part->mu->Lock() unnecessary assuming reading one 32-bit
+      // integer is an atomic operation
+      rv = part->leases->Size();
+      Release(part);
+    }
+    Release(dir);
+  }
+  return rv;
+}
+
 Status FilesystemCli::TEST_ProbePartition(const DirId& at, int ix) {
   Partition* part;
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
-    assert(dir->id == at);
     s = AcquirePartition(dir, ix, &part);
     if (s.ok()) {
-      assert(part->index == ix);
       Release(part);
     }
     Release(dir);
@@ -916,7 +937,6 @@ Status FilesystemCli::TEST_ProbeDir(const DirId& at) {
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
-    assert(dir->id == at);
     Release(dir);
   }
   return s;
