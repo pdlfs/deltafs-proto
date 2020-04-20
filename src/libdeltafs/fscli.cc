@@ -458,7 +458,7 @@ Status FilesystemCli::Fetch1(  ///
     const User& who, const LookupStat& p, const Slice& name, Dir* dir,
     int* rv) {
   // If there is an ongoing dir index status change, wait until that change is
-  // done before using the index.
+  // done before operating upon the index.
   MutexLock lock(dir->mu);
   Status s = FetchDir(p.ZerothServer(), dir);
   if (s.ok() && !name.empty()) {
@@ -486,12 +486,12 @@ Status FilesystemCli::Lokup1(  ///
   const uint32_t hash = Hash(name.data(), name.size(), 0);
   Status s = Lokup2(who, p, name, hash, mode, part, &lease);
   if (s.ok()) {
-    *stat = lease;
     assert(lease->part == part);  // Pending partition reference increment
     if (mode == kBatchedCreats) {
       assert(lease->batch != NULL);
       lease->batch->refs++;
     }
+    *stat = lease;
   }
 
   return s;
@@ -594,6 +594,7 @@ Status FilesystemCli::Lokup2(  ///
       assert(lease->lru_handle->value == lease);
       lru->Ref(lease->lru_handle);
       *stat = lease;
+      return s;
     }
   }
 
@@ -668,6 +669,8 @@ Status FilesystemCli::Lokup2(  ///
       lease->batch = tmpbat;
       lease->value = tmp;
       Lease* old = ht->Insert(lease);
+      // Because we synchronize and check before each insert, there is no
+      // conflict.
       assert(old == NULL);
       (void)old;
 
