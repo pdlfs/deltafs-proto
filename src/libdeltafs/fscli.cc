@@ -457,10 +457,10 @@ bool IsLookupOk(const FilesystemCliOptions& options, const LookupStat& parent,
 Status FilesystemCli::Fetch1(  ///
     const User& who, const LookupStat& p, const Slice& name, Dir* dir,
     int* rv) {
-  MutexLock lock(dir->mu);  // To be updated to using cv...
-  Status s = FetchDir(p.ZerothServer(), dir);
   // If there is an ongoing dir index status change, wait until that change is
-  // done before using the index
+  // done before using the index.
+  MutexLock lock(dir->mu);
+  Status s = FetchDir(p.ZerothServer(), dir);
   if (s.ok() && !name.empty()) {
     *rv = dir->giga->SelectServer(name);
   }
