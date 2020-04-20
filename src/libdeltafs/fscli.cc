@@ -132,9 +132,9 @@ Status FilesystemCli::BatchEnd(BATCH* bat) {
     // Non-regular leases are marked by their batch contexts.
     // Once the context is deleted, the lease itself is invalidated and must be
     // removed from the cache.
-    part->cached_leases->Erase(lease->key(), lease->hash);
-    part->leases->Remove(lease->key(), lease->hash);
-    lease->removed = true;
+    part->cached_leases->Erase(lease->lru_handle);
+    part->leases->Remove(lease);
+    lease->out = true;
     lease->batch = NULL;
   }
   part->cached_leases->Release(lease->lru_handle);
@@ -488,12 +488,6 @@ Status FilesystemCli::Lokup1(  ///
   if (s.ok()) {
     *stat = lease;
     assert(lease->part == part);  // Pending partition reference increment
-    if (lease->value->LeaseDue() == 0) {
-      // Lease cannot be cached; remove it from the partition
-      part->cached_leases->Erase(lease->key(), lease->hash);
-      part->leases->Remove(lease->key(), lease->hash);
-      lease->removed = true;
-    }
     if (mode == kBatchedCreats) {
       assert(lease->batch != NULL);
       lease->batch->refs++;
@@ -579,9 +573,9 @@ Status FilesystemCli::Lokup2(  ///
   if (h != NULL) {  // It's a hit!
     lease = h->value;
     if (lease->value->LeaseDue() < CurrentMicros()) {
-      ht->Remove(name, hash);  // Lease expired; remove it from the partition
-      lru->Erase(name, hash);
-      lease->removed = true;
+      ht->Remove(lease);  // Lease expired; remove it from the partition
+      lru->Erase(h);
+      lease->out = true;
       lru->Release(h);
     } else {
       // Directly return the cached lease
@@ -590,12 +584,16 @@ Status FilesystemCli::Lokup2(  ///
       return s;
     }
   } else {  // Try the bigger lease table...
-    lease = *part->leases->FindPointer(name, hash);
-    if (lease != NULL) {
+    lease = *ht->FindPointer(name, hash);
+    if (lease == NULL) {
+      // Do nothing
+    } else if (lease->value->LeaseDue() < CurrentMicros()) {
+      ht->Remove(lease);
+      lease->out = true;
+    } else {
       assert(lease->lru_handle->value == lease);
       lru->Ref(lease->lru_handle);
       *stat = lease;
-      return s;
     }
   }
 
@@ -610,17 +608,22 @@ Status FilesystemCli::Lokup2(  ///
   if (h != NULL) {
     lease = h->value;
     if (lease->value->LeaseDue() < CurrentMicros()) {
-      ht->Remove(name, hash);  // Lease expired; remove it from the partition
-      lru->Erase(name, hash);
-      lease->removed = true;
+      ht->Remove(lease);  // Lease expired; remove it from the partition
+      lru->Erase(h);
+      lease->out = true;
       lru->Release(h);
     } else {
       assert(lease->lru_handle == h);
       *stat = lease;
     }
   } else {  // Try the bigger lease table...
-    lease = *part->leases->FindPointer(name, hash);
-    if (lease != NULL) {
+    lease = *ht->FindPointer(name, hash);
+    if (lease == NULL) {
+      // Do nothing
+    } else if (lease->value->LeaseDue() < CurrentMicros()) {
+      ht->Remove(lease);
+      lease->out = true;
+    } else {
       assert(lease->lru_handle->value == lease);
       lru->Ref(lease->lru_handle);
       *stat = lease;
@@ -661,7 +664,7 @@ Status FilesystemCli::Lokup2(  ///
       memcpy(lease->key_data, name.data(), name.size());
       lease->hash = hash;
       lease->part = part;
-      lease->removed = false;
+      lease->out = false;
       lease->batch = tmpbat;
       lease->value = tmp;
       Lease* old = ht->Insert(lease);
@@ -670,6 +673,13 @@ Status FilesystemCli::Lokup2(  ///
 
       h = lru->Insert(name, hash, lease, 1, DeleteLease);
       lease->lru_handle = h;
+      if (lease->value->LeaseDue() == 0) {
+        // Lease cannot be cached; remove it from the partition
+        ht->Remove(lease);
+        lru->Erase(h);
+        lease->out = true;
+      }
+
       *stat = lease;
     } else {
       delete tmp;
@@ -760,8 +770,8 @@ void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
   assert(lease->key() == key);
   Partition* const part = lease->part;
   part->mu->AssertHeld();
-  if (!lease->removed)  // Remove only if we haven't done so yet
-    part->leases->Remove(lease->key(), lease->hash);
+  if (!lease->out)  // Skip if we have already done so
+    part->leases->Remove(lease);
   // Any batch context should already be closed by now
   assert(lease->batch == NULL);
   delete lease->value;
