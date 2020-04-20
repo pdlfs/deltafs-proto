@@ -90,7 +90,7 @@ struct FilesystemCli::BATCH {
 // associated with the lease.
 Status FilesystemCli::BatchStart(  ///
     const User& who, const AT* const at, const char* const pathname,
-    BATCH** result) {
+    BATCH** const result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
@@ -120,10 +120,62 @@ Status FilesystemCli::BatchStart(  ///
   return status;
 }
 
-Status FilesystemCli::BatchEnd(BATCH* bat) {
-  Lease* lease = bat->dir_lease;
-  Partition* const part = lease->part;
+Status FilesystemCli::BatchCreat(BATCH* bat, const char* name) {
+  assert(bat->dir_lease != NULL);
+  Lease* const lease = bat->dir_lease;
+  assert(lease->batch != NULL);
   BatchedCreates* const bc = lease->batch;
+  MutexLock lock(&bc->mu);
+  if (bc->done) {
+    return Status::NotFound("Already committed");
+  } else if (!bc->bg_status.ok()) {
+    return bc->bg_status;
+  }
+  const int i = bc->dir->giga->SelectServer(name);
+  bc->mu.Unlock();
+  Status s =
+      Mkfls1(bc->who, *lease->value, name, bc->mode, false, i, &bc->wribufs[i]);
+  bc->mu.Lock();
+  if (!s.ok() && bc->bg_status.ok()) {
+    bc->bg_status = s;
+  }
+  return s;
+}
+
+Status FilesystemCli::BatchCommit(BATCH* bat) {
+  assert(bat->dir_lease != NULL);
+  Lease* const lease = bat->dir_lease;
+  assert(lease->batch != NULL);
+  BatchedCreates* const bc = lease->batch;
+  MutexLock lock(&bc->mu);
+  if (bc->done) {
+    return Status::NotFound("Already committed");
+  } else if (!bc->bg_status.ok()) {
+    return bc->bg_status;
+  }
+  bc->done = true;
+  bc->mu.Unlock();
+  Status s;
+  for (int i = 0; i < options_.nsrvs; i++) {
+    s = Mkfls1(bc->who, *lease->value, Slice(), bc->mode, true, i,
+               &bc->wribufs[i]);
+    if (!s.ok()) {
+      break;
+    }
+  }
+  bc->mu.Lock();
+  if (!s.ok() && bc->bg_status.ok()) {
+    bc->bg_status = s;
+  }
+  return s;
+}
+
+Status FilesystemCli::BatchEnd(BATCH* bat) {
+  assert(bat->dir_lease != NULL);
+  Lease* const lease = bat->dir_lease;
+  assert(lease->batch != NULL);
+  BatchedCreates* const bc = lease->batch;
+  Partition* part = lease->part;
   part->mu->Lock();
   assert(bc->refs != 0);
   bc->refs--;
@@ -470,9 +522,13 @@ Status FilesystemCli::Fetch1(  ///
 // Look up a named directory beneath a specified parent directory. On success, a
 // lease for the stat of the directory being looked up is returned. The returned
 // lease must be released after use. Only valid leases will be returned. Expired
-// leases are renewed before they are returned. Each returned lease holds a
+// leases are replaced before they are returned. Each returned lease requires a
 // reference to its parent directory partition. Caller of this function must
-// increase the partition's reference count after receiving a lease.
+// hold an active reference to the partition when making a call and transfer
+// this reference to the returned lease immediately after receiving it after the
+// call. When looking up under the "kBatchedCreats" mode, each returned lease
+// will additionally carry a reference to a batch create context embedded within
+// the lease. Such references must also be released after use.
 Status FilesystemCli::Lokup1(  ///
     const User& who, const LookupStat& p, const Slice& name, LokupMode mode,
     Partition* part, Lease** stat) {
@@ -494,6 +550,25 @@ Status FilesystemCli::Lokup1(  ///
     *stat = lease;
   }
 
+  return s;
+}
+
+Status FilesystemCli::Mkfls1(  ///
+    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
+    bool force_flush, int i, WriBuf* buf) {
+  Status s;
+  MutexLock lock(&buf->mu);  // Shall we use double buffering?
+  if (force_flush || buf->n >= options_.batch_size) {
+    s = Mkfls2(who, p, buf->namearr, buf->n, mode, i);
+    if (s.ok()) {
+      buf->namearr.resize(0);
+      buf->n = 0;
+    }
+  }
+  if (s.ok() && !name.empty()) {
+    PutLengthPrefixedSlice(&buf->namearr, name);
+    buf->n++;
+  }
   return s;
 }
 
@@ -694,6 +769,31 @@ Status FilesystemCli::Lokup2(  ///
   return s;
 }
 
+Status FilesystemCli::Mkfls2(  ///
+    const User& who, const LookupStat& p, const Slice& namearr, uint32_t n,
+    uint32_t mode, int i) {
+  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
+    return Status::AccessDenied("No write perm");
+  Status s;
+  if (fs_ != NULL) {
+    s = fs_->Mkfls(who, p, namearr, mode, &n);
+  } else if (stub_ != NULL) {
+    assert(i < options_.nsrvs);
+    MkflsOptions opts;
+    opts.parent = &p;
+    opts.namearr = namearr;
+    opts.mode = mode;
+    opts.n = n;
+    opts.me = who;
+    MkflsRet ret;
+    s = rpc::MkflsCli(stub_[i])(opts, &ret);
+  } else {
+    s = Nofs();
+  }
+
+  return s;
+}
+
 Status FilesystemCli::Mkfle2(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
     int i, Stat* stat) {
@@ -773,7 +873,7 @@ void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
   assert(lease->key() == key);
   Partition* const part = lease->part;
   part->mu->AssertHeld();
-  if (!lease->out)  // Skip if we have already done so
+  if (!lease->out)  // Skip if lease has already been removed from table
     part->leases->Remove(lease);
   // Any batch context should already be closed by now
   assert(lease->batch == NULL);

@@ -74,6 +74,14 @@ class FilesystemCliTest {
     return fscli_->BatchStart(me_, at, path, result);
   }
 
+  Status BatchCreat(const char* name, BATCH* batch) {
+    return fscli_->BatchCreat(batch, name);
+  }
+
+  Status BatchCommit(BATCH* batch) {  ///
+    return fscli_->BatchCommit(batch);
+  }
+
   Status BatchEnd(BATCH* batch) {  ///
     return fscli_->BatchEnd(batch);
   }
@@ -215,6 +223,26 @@ TEST(FilesystemCliTest, BatchCtx) {
   ASSERT_OK(BatchStart("/c", &bat2));
   ASSERT_OK(BatchEnd(bat1));
   ASSERT_OK(BatchEnd(bat2));
+}
+
+TEST(FilesystemCliTest, BatchCreats) {
+  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  BATCH* bat;
+  ASSERT_OK(Mkdir("/a"));
+  ASSERT_OK(BatchStart("/a", &bat));
+  ASSERT_OK(BatchCreat("1", bat));
+  ASSERT_ERR(Exist("/a/1"));
+  ASSERT_OK(BatchCreat("2", bat));
+  ASSERT_ERR(Exist("/a/2"));
+  ASSERT_OK(BatchCreat("3", bat));
+  ASSERT_ERR(Exist("/a/3"));
+  ASSERT_OK(BatchCommit(bat));
+  ASSERT_ERR(BatchCreat("4", bat));
+  ASSERT_ERR(BatchCommit(bat));
+  ASSERT_OK(BatchEnd(bat));
+  ASSERT_OK(Exist("/a/1"));
+  ASSERT_OK(Exist("/a/2"));
+  ASSERT_OK(Exist("/a/3"));
 }
 
 }  // namespace pdlfs

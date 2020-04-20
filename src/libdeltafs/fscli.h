@@ -89,6 +89,8 @@ class FilesystemCli {
 
   Status BatchStart(const User& who, const AT* at, const char* pathname,
                     BATCH**);
+  Status BatchCreat(BATCH* bat, const char* name);
+  Status BatchCommit(BATCH* bat);
   Status BatchEnd(BATCH* bat);
 
   void Destroy(AT* at);
@@ -99,6 +101,7 @@ class FilesystemCli {
   uint32_t TEST_TotalDirsInMemory();
 
  private:
+  struct WriBuf;
   struct BatchedCreates;
   struct Lease;
   struct Partition;
@@ -133,7 +136,8 @@ class FilesystemCli {
                 Dir* dir, int*);
   Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
                 LokupMode mode, Partition* part, Lease** stat);
-
+  Status Mkfls1(const User& who, const LookupStat& parent, const Slice& name,
+                uint32_t mode, bool force_flush, int i, WriBuf* buf);
   Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, Stat* stat);
   Status Mkdir1(const User& who, const LookupStat& parent, const Slice& name,
@@ -143,6 +147,8 @@ class FilesystemCli {
 
   Status Lokup2(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t hash, LokupMode mode, Partition* part, Lease** stat);
+  Status Mkfls2(const User& who, const LookupStat& parent, const Slice& namearr,
+                uint32_t n, uint32_t mode, int i);
   Status Mkfle2(const User& who, const LookupStat& parent, const Slice& name,
                 uint32_t mode, int i, Stat* stat);
   Status Mkdir2(const User& who, const LookupStat& parent, const Slice& name,
@@ -157,10 +163,15 @@ class FilesystemCli {
   struct WriBuf {
     std::string namearr;
     port::Mutex mu;
-    size_t n;
+    uint32_t n;
   };
   struct BatchedCreates {
+    User who;
+    uint32_t mode;
     uint32_t refs;
+    port::Mutex mu;
+    bool done;  // True if committed
+    Status bg_status;
     WriBuf* wribufs;
     Dir* dir;
   };
