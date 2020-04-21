@@ -160,7 +160,7 @@ Status Filesystem::TEST_ProbeDir(const DirId& at) {
   return s;
 }
 
-uint32_t Filesystem::TEST_TotalDirsInMemory()  {
+uint32_t Filesystem::TEST_TotalDirsInMemory() {
   MutexLock lock(&mutex_);
   return dirs_->Size();
 }
@@ -562,29 +562,22 @@ FilesystemOptions::FilesystemOptions()
       mydno(0) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
-    : inoq_(0), options_(options), mdb_(NULL), db_(NULL) {
+    : inoq_(0), options_(options), mdb_(NULL) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
   dirs_ = new HashTable<Dir>();
+  mfac_ = new MDBFactory;
 }
 
 Filesystem::~Filesystem() {
   delete dlru_;
   assert(dirs_->Empty());
   delete dirs_;
-  delete mdb_;
-  delete db_;
+  delete mdb_;  // Must be deleted before mfac_
+  delete mfac_;
 }
 
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
-  DBOptions options;
-  options.create_if_missing = options.error_if_exists = true;
-  Status status = DB::Open(options, fsloc, &db_);
-  if (!status.ok()) {
-    return status;
-  }
-
-  mdb_ = new MDB(MDBOptions(db_));
-  return status;
+  return mfac_->OpenMDB(fsloc, &mdb_);
 }
 
 }  // namespace pdlfs

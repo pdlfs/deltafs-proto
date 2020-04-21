@@ -34,18 +34,39 @@
 
 #include "fsdb.h"
 
+#include "pdlfs-common/cache.h"
+
 namespace pdlfs {
 
-MDBOptions::MDBOptions(DB* db) : db(db) {}
+MDBFactory::MDBFactory() {}
+
+Status MDBFactory::OpenMDB(const std::string& dbloc, MDB** ptr) {
+  *ptr = NULL;
+  DB* db;
+  DBOptions options;
+  options.filter_policy = NewBloomFilterPolicy(12);
+  options.block_cache = NewLRUCache(8 << 20);
+  options.create_if_missing = options.error_if_exists = true;
+  Status status = DB::Open(options, dbloc, &db);
+  if (status.ok()) {
+    *ptr = new MDB(db);
+  }
+  return status;
+}
+
+MDBFactory::~MDBFactory() {
+  delete dbopts_.filter_policy;
+  delete dbopts_.block_cache;
+}
 
 struct MDB::Tx {
   const Snapshot* snap;
   WriteBatch bat;
 };
 
-MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
+MDB::MDB(DB* db) : MXDB(db) {}
 
-MDB::~MDB() {}
+MDB::~MDB() { delete dx_; }
 
 Status MDB::SaveFsroot(const Slice& encoding) {
   return dx_->Put(WriteOptions(), "/", encoding);

@@ -182,8 +182,8 @@ class Filesystem : public FilesystemIf {
 
   // Constant after server opening
   FilesystemOptions options_;
+  MDBFactory* mfac_;
   MDB* mdb_;
-  DB* db_;
 };
 #undef OVERRIDE
 

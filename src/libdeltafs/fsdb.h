@@ -33,21 +33,34 @@
  */
 #pragma once
 
-#include "pdlfs-common/mdb.h"
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db/readonly.h"
+#include "pdlfs-common/leveldb/db/snapshot.h"
+#include "pdlfs-common/leveldb/db/write_batch.h"
+#include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
+class MDB;
 
-// Options for controlling MDB behavior.
-struct MDBOptions {
-  explicit MDBOptions(DB* db);
-  DB* db;
+// Creating MDB according to user configuration.
+class MDBFactory {
+ public:
+  explicit MDBFactory();
+  Status OpenMDB(const std::string& dbloc, MDB** ptr);
+  ~MDBFactory();
+
+ private:
+  DBOptions dbopts_;
 };
 
 // An MXDB instantiation that binds to our own DB implementation. Our DB is a
 // modified LevelDB realization of a LSM-Tree.
 class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
  public:
-  explicit MDB(const MDBOptions& opts);
   ~MDB();
 
   Status SaveFsroot(const Slice& encoding);
@@ -59,8 +72,10 @@ class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
   Status Delete(const DirId& id, const Slice& name);
 
  private:
+  friend class MDBFactory;
   void operator=(const MDB&);
   MDB(const MDB&);
+  MDB(DB* db);
 
   struct Tx;
 };
