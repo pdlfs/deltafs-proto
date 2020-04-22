@@ -314,7 +314,7 @@ void DBImpl::DeleteObsoleteFiles() {
         if (type == kTableFile) {
           table_cache_->Evict(number);
         }
-        xLog(options_.info_log, 3, "Delete type=%d #%llu\n", int(type),
+        xLog(options_.info_log, 3, "Delete type=%d #%llu", int(type),
              static_cast<unsigned long long>(number));
         if (!options_.gc_skip_deletion) {
           xLog(options_.info_log, 3, "Remove %s", filenames[i].c_str());
@@ -763,7 +763,7 @@ void DBImpl::BackgroundCompaction() {
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
     xLog(options_.info_log, 3,
-         "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
+         "Manual compaction at level-%d from %s .. %s; will stop at %s",
          m->level, (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
          (m->end ? m->end->DebugString().c_str() : "(end)"),
          (m->done ? "(end)" : manual_end.DebugString().c_str()));
@@ -788,7 +788,7 @@ void DBImpl::BackgroundCompaction() {
       RecordBackgroundError(status);
     }
     VersionSet::LevelSummaryStorage tmp;
-    xLog(options_.info_log, 3, "Moved #%lld to level-%d %lld bytes %s: %s\n",
+    xLog(options_.info_log, 3, "Moved #%lld to level-%d %lld bytes %s: %s",
          static_cast<unsigned long long>(f->number), c->level() + 1,
          static_cast<unsigned long long>(f->file_size),
          status.ToString().c_str(), versions_->LevelSummary(&tmp));

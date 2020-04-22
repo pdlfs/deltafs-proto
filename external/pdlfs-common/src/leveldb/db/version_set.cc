@@ -1475,7 +1475,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
                                      &expanded1);
       if (expanded1.size() == c->inputs_[1].size()) {
         xLog(options_->info_log, 3,
-             "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
+             "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)",
              level, int(c->inputs_[0].size()), int(c->inputs_[1].size()),
              long(inputs0_size), long(inputs1_size), int(expanded0.size()),
              int(expanded1.size()), long(expanded0_size), long(inputs1_size));
