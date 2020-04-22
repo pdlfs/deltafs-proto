@@ -46,8 +46,32 @@
 namespace pdlfs {
 struct FilesystemDbOptions {
   FilesystemDbOptions();
+  // Max size for a memory table.
+  size_t write_buffer_size;
+  // Planned size for each on-disk table file.
+  size_t table_file_size;
+  // Size for a table block.
+  size_t block_size;
+  // Max number of table files we open.
+  size_t table_cache_size;
+  // Bloom filter bits per key.
   size_t filter_bits_per_key;
+  // Block cache size.
   size_t block_cache_size;
+  // The size ratio between two levels.
+  int level_factor;
+  // Planned number of files for level 1.
+  int l1_compaction_trigger;
+  // Number of files in level-0 until compaction starts.
+  int l0_compaction_trigger;
+  // Number of files in level-0 until writes are slowed down.
+  int l0_soft_limit;
+  // Number of files in level-0 until writes are entirely stalled.
+  int l0_hard_limit;
+  // Disable background table compaction.
+  bool disable_compaction;
+  // Enable snappy compression.
+  bool compression;
 };
 
 class FilesystemDb {
@@ -69,6 +93,7 @@ class FilesystemDb {
   MDB* mdb_;
   FilesystemDbOptions options_;
   const FilterPolicy* filter_;
+  Cache* table_cache_;
   Cache* block_cache_;
   DB* db_;
 };

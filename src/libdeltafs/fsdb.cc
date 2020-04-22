@@ -39,14 +39,40 @@
 namespace pdlfs {
 
 FilesystemDbOptions::FilesystemDbOptions()
-    : filter_bits_per_key(12), block_cache_size(8u << 20u) {}
+    : write_buffer_size(2u << 20u),
+      table_file_size(2u << 20u),
+      block_size(64u << 10u),
+      table_cache_size(1024),
+      filter_bits_per_key(14),
+      block_cache_size(32u << 20u),
+      level_factor(10),
+      l1_compaction_trigger(5),
+      l0_compaction_trigger(4),
+      l0_soft_limit(8),
+      l0_hard_limit(12),
+      disable_compaction(false),
+      compression(false) {}
 
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions options;
   options.error_if_exists = options.create_if_missing = true;
+  options.disable_compaction = options_.disable_compaction;
+  options.disable_seek_compaction = true;
+  options.skip_lock_file = true;
   options.info_log = Logger::Default();
+  options.table_cache = table_cache_;
   options.block_cache = block_cache_;
   options.filter_policy = filter_;
+  options.write_buffer_size = options_.write_buffer_size;
+  options.table_file_size = options_.table_file_size;
+  options.block_size = options_.block_size;
+  options.level_factor = options_.level_factor;
+  options.l1_compaction_trigger = options_.l1_compaction_trigger;
+  options.l0_compaction_trigger = options_.l0_compaction_trigger;
+  options.l0_soft_limit = options_.l0_soft_limit;
+  options.l0_hard_limit = options_.l0_hard_limit;
+  options.compression =
+      options_.compression ? kSnappyCompression : kNoCompression;
   Status status = DB::Open(options, dbloc, &db_);
   if (status.ok()) {
     mdb_ = new MDB(db_);
@@ -63,12 +89,14 @@ FilesystemDb::FilesystemDb(const FilesystemDbOptions& options)
     : mdb_(NULL),
       options_(options),
       filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
+      table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),
       db_(NULL) {}
 
 FilesystemDb::~FilesystemDb() {
   delete db_;
   delete block_cache_;
+  delete table_cache_;
   delete filter_;
   delete mdb_;
 }
