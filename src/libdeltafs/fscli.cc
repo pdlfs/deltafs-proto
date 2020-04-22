@@ -1155,13 +1155,14 @@ void FilesystemCli::FormatRoot() {
   rtstat_.AssertAllSet();
 }
 
-FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
+FilesystemCli::FilesystemCli(const FilesystemCliOptions& options,
+                             Filesystem* fs)
     : dirs_(NULL),
       plru_(NULL),
       pars_(NULL),
       options_(options),
       stub_(NULL),
-      fs_(NULL),
+      fs_(fs),
       rpc_(NULL) {
   dirs_ = new HashTable<Dir>;
   dirlist_.next = &dirlist_;
@@ -1185,16 +1186,8 @@ FilesystemCliOptions::FilesystemCliOptions()
       vsrvs(1),
       nsrvs(1) {}
 
-Status FilesystemCli::OpenFilesystemCli(  ///
-    const FilesystemOptions& options, const std::string& fsloc) {
-  Filesystem* fs = new Filesystem(options);
-  Status s = fs->OpenFilesystem(fsloc);
-  if (s.ok()) {
-    fs_ = fs;
-  } else {
-    delete fs;
-  }
-  return s;
+Status FilesystemCli::OpenLocalFilesystem(const std::string& fsloc) {
+  return fs_->OpenFilesystem(fsloc);
 }
 
 Status FilesystemCli::Open(RPC* rpc, const std::string* uri) {

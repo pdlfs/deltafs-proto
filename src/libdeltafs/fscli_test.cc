@@ -46,8 +46,15 @@ class FilesystemCliTest {
   typedef FilesystemCli::AT AT;
   FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
-    fscli_ = new FilesystemCli(options_);
     me_.gid = me_.uid = 1;
+    fscli_ = NULL;
+  }
+
+  Status OpenFilesystemCli() {
+    fscli_ = new FilesystemCli(
+        fscli_options_,
+        new Filesystem(options_, new FilesystemDb(db_options_)));
+    return fscli_->OpenLocalFilesystem(fsloc_);
   }
 
   ~FilesystemCliTest() {  ///
@@ -87,15 +94,16 @@ class FilesystemCliTest {
   }
 
   Stat tmp_;
-  FilesystemOptions fsopts_;
-  FilesystemCliOptions options_;
+  FilesystemCliOptions fscli_options_;
   FilesystemCli* fscli_;
+  FilesystemDbOptions db_options_;
+  FilesystemOptions options_;
   std::string fsloc_;
   User me_;
 };
 
 TEST(FilesystemCliTest, OpenAndClose) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   ASSERT_OK(fscli_->TEST_ProbeDir(DirId(0)));
   ASSERT_EQ(fscli_->TEST_TotalDirsInMemory(), 0);
   ASSERT_OK(fscli_->TEST_ProbePartition(DirId(0), 0));
@@ -104,7 +112,7 @@ TEST(FilesystemCliTest, OpenAndClose) {
 }
 
 TEST(FilesystemCliTest, Files) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   ASSERT_OK(Creat("/1"));
   ASSERT_CONFLICT(Creat("/1"));
   ASSERT_OK(Exist("/1"));
@@ -117,7 +125,7 @@ TEST(FilesystemCliTest, Files) {
 }
 
 TEST(FilesystemCliTest, Dirs) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   ASSERT_OK(Exist("/"));
   ASSERT_OK(Exist("//"));
   ASSERT_OK(Exist("///"));
@@ -135,7 +143,7 @@ TEST(FilesystemCliTest, Dirs) {
 }
 
 TEST(FilesystemCliTest, Subdirs) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1/a"));
   ASSERT_CONFLICT(Mkdir("/1/a"));
@@ -151,7 +159,7 @@ TEST(FilesystemCliTest, Subdirs) {
 }
 
 TEST(FilesystemCliTest, Resolv) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   ASSERT_OK(Mkdir("/1"));
   ASSERT_OK(Mkdir("/1/2"));
   ASSERT_OK(Mkdir("/1/2/3"));
@@ -171,7 +179,7 @@ TEST(FilesystemCliTest, Resolv) {
 }
 
 TEST(FilesystemCliTest, Atdir) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   AT *d0, *d1, *d2, *d3, *d4, *d5;
   ASSERT_OK(Atdir("//", &d0));
   ASSERT_OK(Mkdir("/1", d0));
@@ -209,7 +217,7 @@ TEST(FilesystemCliTest, Atdir) {
 }
 
 TEST(FilesystemCliTest, BatchCtx) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   BATCH *bat, *bat1, *bat2;
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
@@ -228,7 +236,7 @@ TEST(FilesystemCliTest, BatchCtx) {
 }
 
 TEST(FilesystemCliTest, BatchCreats) {
-  ASSERT_OK(fscli_->OpenFilesystemCli(fsopts_, fsloc_));
+  ASSERT_OK(OpenFilesystemCli());
   BATCH* bat;
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));

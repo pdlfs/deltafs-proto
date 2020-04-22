@@ -44,40 +44,33 @@
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {
-class MDB;
-
-// Creating MDB according to user configuration.
-class MDBFactory {
- public:
-  explicit MDBFactory();
-  Status OpenMDB(const std::string& dbloc, MDB** ptr);
-  ~MDBFactory();
-
- private:
-  DBOptions dbopts_;
+struct FilesystemDbOptions {
+  FilesystemDbOptions();
+  size_t filter_bits_per_key;
+  size_t block_cache_size;
 };
 
-// An MXDB instantiation that binds to our own DB implementation. Our DB is a
-// modified LevelDB realization of a LSM-Tree.
-class MDB : public MXDB<DB, Slice, Status, kNameInKey> {
+class FilesystemDb {
  public:
-  ~MDB();
+  explicit FilesystemDb(const FilesystemDbOptions& options);
+  ~FilesystemDb();
 
-  Status SaveFsroot(const Slice& encoding);
-  Status LoadFsroot(std::string* tmp);
-  Status Flush();
-
+  Status Open(const std::string& dbloc);
   Status Get(const DirId& id, const Slice& name, Stat* stat);
   Status Set(const DirId& id, const Slice& name, const Stat& stat);
   Status Delete(const DirId& id, const Slice& name);
+  Status Flush();
 
  private:
-  friend class MDBFactory;
-  void operator=(const MDB&);
-  MDB(const MDB&);
-  MDB(DB* db);
-
   struct Tx;
+  void operator=(const FilesystemDb& fsdb);
+  FilesystemDb(const FilesystemDb&);
+  typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
+  MDB* mdb_;
+  FilesystemDbOptions options_;
+  const FilterPolicy* filter_;
+  Cache* block_cache_;
+  DB* db_;
 };
 
 }  // namespace pdlfs

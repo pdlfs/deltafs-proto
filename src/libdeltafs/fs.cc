@@ -312,7 +312,7 @@ Status Filesystem::Lstat1(  ///
   // write operations are blocked. The split operation bulk deletes
   // the half of partition that has been moved and install a new
   // directory index.
-  return mdb_->Get(at, name, stat);
+  return db_->Get(at, name, stat);
 }
 
 Status Filesystem::Mknos1(  ///
@@ -395,7 +395,7 @@ Status Filesystem::CheckAndPut(  ///
     uint32_t type, uint32_t mode, Stat* stat) {
   Status s;
   if (!options_.skip_name_collision_checks) {
-    s = mdb_->Get(at, name, stat);
+    s = db_->Get(at, name, stat);
     if (s.ok()) {
       s = Status::AlreadyExists(Slice());
     } else if (s.IsNotFound()) {
@@ -425,7 +425,7 @@ Status Filesystem::Put(  ///
   stat->SetModifyTime(0);
   stat->SetChangeTime(0);
   stat->AssertAllSet();
-  return mdb_->Set(at, name, *stat);
+  return db_->Set(at, name, *stat);
 }
 
 namespace {
@@ -561,23 +561,21 @@ FilesystemOptions::FilesystemOptions()
       srvid(0),
       mydno(0) {}
 
-Filesystem::Filesystem(const FilesystemOptions& options)
-    : inoq_(0), options_(options), mdb_(NULL) {
+Filesystem::Filesystem(const FilesystemOptions& options, FilesystemDb* db)
+    : inoq_(0), options_(options), db_(db) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
   dirs_ = new HashTable<Dir>();
-  mfac_ = new MDBFactory;
 }
 
 Filesystem::~Filesystem() {
   delete dlru_;
   assert(dirs_->Empty());
   delete dirs_;
-  delete mdb_;  // Must be deleted before mfac_
-  delete mfac_;
+  delete db_;
 }
 
 Status Filesystem::OpenFilesystem(const std::string& fsloc) {
-  return mfac_->OpenMDB(fsloc, &mdb_);
+  return db_->Open(fsloc);
 }
 
 }  // namespace pdlfs

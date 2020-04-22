@@ -38,64 +38,61 @@
 
 namespace pdlfs {
 
-MDBFactory::MDBFactory() {}
+FilesystemDbOptions::FilesystemDbOptions()
+    : filter_bits_per_key(12), block_cache_size(8u << 20u) {}
 
-Status MDBFactory::OpenMDB(const std::string& dbloc, MDB** ptr) {
-  *ptr = NULL;
-  DB* db;
+Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions options;
-  options.filter_policy = NewBloomFilterPolicy(12);
-  options.block_cache = NewLRUCache(8 << 20);
-  options.create_if_missing = options.error_if_exists = true;
-  Status status = DB::Open(options, dbloc, &db);
+  options.error_if_exists = options.create_if_missing = true;
+  options.block_cache = block_cache_;
+  options.filter_policy = filter_;
+  Status status = DB::Open(options, dbloc, &db_);
   if (status.ok()) {
-    *ptr = new MDB(db);
+    mdb_ = new MDB(db_);
   }
   return status;
 }
 
-MDBFactory::~MDBFactory() {
-  delete dbopts_.filter_policy;
-  delete dbopts_.block_cache;
-}
-
-struct MDB::Tx {
+struct FilesystemDb::Tx {
   const Snapshot* snap;
   WriteBatch bat;
 };
 
-MDB::MDB(DB* db) : MXDB(db) {}
+FilesystemDb::FilesystemDb(const FilesystemDbOptions& options)
+    : mdb_(NULL),
+      options_(options),
+      filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
+      block_cache_(NewLRUCache(options_.block_cache_size)),
+      db_(NULL) {}
 
-MDB::~MDB() { delete dx_; }
-
-Status MDB::SaveFsroot(const Slice& encoding) {
-  return dx_->Put(WriteOptions(), "/", encoding);
+FilesystemDb::~FilesystemDb() {
+  delete db_;
+  delete block_cache_;
+  delete filter_;
+  delete mdb_;
 }
 
-Status MDB::LoadFsroot(std::string* tmp) {
-  return dx_->Get(ReadOptions(), "/", tmp);
+Status FilesystemDb::Flush() {  ///
+  return db_->FlushMemTable(FlushOptions());
 }
 
-Status MDB::Flush() {  ///
-  return dx_->FlushMemTable(FlushOptions());
-}
-
-Status MDB::Get(const DirId& id, const Slice& fname, Stat* stat) {
-  ReadOptions read_opts;
+Status FilesystemDb::Set(  ///
+    const DirId& id, const Slice& fname, const Stat& stat) {
+  WriteOptions options;
   Tx* const tx = NULL;
-  return GET<Key>(id, fname, stat, NULL, &read_opts, tx);
+  return mdb_->SET<Key>(id, fname, stat, fname, &options, tx);
 }
 
-Status MDB::Set(const DirId& id, const Slice& fname, const Stat& stat) {
-  WriteOptions write_opts;
+Status FilesystemDb::Get(const DirId& id, const Slice& fname, Stat* stat) {
+  ReadOptions options;
   Tx* const tx = NULL;
-  return SET<Key>(id, fname, stat, fname, &write_opts, tx);
+  return mdb_->GET<Key>(id, fname, stat, NULL, &options, tx);
 }
 
-Status MDB::Delete(const DirId& id, const Slice& fname) {
-  WriteOptions write_opts;
+Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
+  WriteOptions options;
   Tx* const tx = NULL;
-  return DELETE<Key>(id, fname, &write_opts, tx);
+  return mdb_->DELETE<Key>(id, fname, &options, tx);
 }
 
 }  // namespace pdlfs

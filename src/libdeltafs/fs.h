@@ -73,11 +73,10 @@ struct FilesystemOptions {
 #endif
 class Filesystem : public FilesystemIf {
  public:
-  explicit Filesystem(const FilesystemOptions& options);
+  Filesystem(const FilesystemOptions& options, FilesystemDb* db);
   virtual ~Filesystem();
 
   Status OpenFilesystem(const std::string& fsloc);
-
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode,
                        uint32_t* n) OVERRIDE;
@@ -182,8 +181,7 @@ class Filesystem : public FilesystemIf {
 
   // Constant after server opening
   FilesystemOptions options_;
-  MDBFactory* mfac_;
-  MDB* mdb_;
+  FilesystemDb* db_;
 };
 #undef OVERRIDE
 

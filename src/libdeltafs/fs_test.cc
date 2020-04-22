@@ -47,13 +47,13 @@ class FilesystemTest {
     due_ = -1;
   }
 
-  ~FilesystemTest() {  ///
-    delete fs_;
+  Status OpenFilesystem() {
+    fs_ = new Filesystem(options_, new FilesystemDb(db_options_));
+    return fs_->OpenFilesystem(fsloc_);
   }
 
-  Status OpenFilesystem() {
-    fs_ = new Filesystem(options_);
-    return fs_->OpenFilesystem(fsloc_);
+  ~FilesystemTest() {  ///
+    delete fs_;
   }
 
   Status Exist(uint64_t dir_id, const std::string& name) {
@@ -101,6 +101,7 @@ class FilesystemTest {
 
   uint32_t dirmode_;
   uint64_t due_;
+  FilesystemDbOptions db_options_;
   FilesystemOptions options_;
   Filesystem* fs_;
   std::string fsloc_;

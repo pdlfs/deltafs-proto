@@ -58,19 +58,17 @@ struct FilesystemCliOptions {
   int nsrvs;
 };
 
+class Filesystem;
 class DirIndex;
 
 // A filesystem client may either talk to a local metadata manager via the
 // FilesystemIf interface or talk to a remote filesystem server through rpc.
 class FilesystemCli {
  public:
-  explicit FilesystemCli(const FilesystemCliOptions& options);
-  ~FilesystemCli();
-
-  Status OpenFilesystemCli(const FilesystemOptions& options,
-                           const std::string& fsloc);
-
+  FilesystemCli(const FilesystemCliOptions& options, Filesystem* fs);
+  Status OpenLocalFilesystem(const std::string& fsloc);
   Status Open(RPC* rpc, const std::string* uri);
+  ~FilesystemCli();
 
   // Reference to a resolved parent directory serving as a relative root for
   // pathnames
@@ -282,7 +280,7 @@ class FilesystemCli {
   Lease rtlease_;
   FilesystemCliOptions options_;
   rpc::If** stub_;
-  FilesystemIf* fs_;
+  Filesystem* fs_;
   RPC* rpc_;
 };
 
