@@ -44,6 +44,7 @@ FilesystemDbOptions::FilesystemDbOptions()
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions options;
   options.error_if_exists = options.create_if_missing = true;
+  options.info_log = Logger::Default();
   options.block_cache = block_cache_;
   options.filter_policy = filter_;
   Status status = DB::Open(options, dbloc, &db_);
