@@ -38,7 +38,7 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/testharness.h"
 
-#include <stdio.h>
+#include <vector>
 
 namespace pdlfs {
 
@@ -69,23 +69,38 @@ TEST(FilesystemDbTest, OpenAndClose) {  ///
 
 namespace {  // Db benchmark
 
-// Number of key/values to place in the database.
-int FLAGS_num = 1000000;
-
 // Number of concurrent threads to run.
 int FLAGS_threads = 1;
+
+// Number of key/values to place in the database per thread.
+int FLAGS_num = 8;
+
+// Simply print operations to be sent to db.
+bool FLAGS_dryrun = false;
 
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
 
-// Number of bytes to use as a cache of uncompressed data. Set by main.
+// Number of bytes to use as a cache of uncompressed data.
+// Initialized to default by main().
 int FLAGS_cache_size = -1;
 
-// Maximum number of files to keep open at the same time. Set ny main.
-int FLAGS_open_files = -1;
+// Maximum number of files to keep open at the same time.
+// Initialized to default by main().
+int FLAGS_max_open_files = -1;
 
-// Bloom filter bits per key. Negative means use default settings. Set by main.
+// Bloom filter bits per key. Negative means use default settings.
+// Initialized to default by main().
 int FLAGS_bloom_bits = -1;
+
+// Enable snappy compression.
+bool FLAGS_snappy = false;
+
+// All files are inserted into a single parent directory.
+bool FLAGS_shared_dir = false;
+
+// Disable all background compaction.
+bool FLAGS_disable_compaction = false;
 
 // Sequential or random.
 bool FLAGS_seq = false;
@@ -93,8 +108,32 @@ bool FLAGS_seq = false;
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
 
-// Use the db with the following name.
+// Use the db at the following name.
 const char* FLAGS_db = NULL;
+
+// Transform a 64-bit (8-byte) integer into a 12-byte filename.
+const char base64_table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=";
+Slice Base64Encoding(char* const dst, uint64_t input) {
+  const char* in = reinterpret_cast<char*>(&input);
+  char* p = dst;
+  *p++ = base64_table[in[0] >> 2];
+  *p++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+  *p++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+  *p++ = base64_table[in[2] & 0x3f];
+
+  *p++ = base64_table[in[3] >> 2];
+  *p++ = base64_table[((in[3] & 0x03) << 4) | (in[4] >> 4)];
+  *p++ = base64_table[((in[4] & 0x0f) << 2) | (in[5] >> 6)];
+  *p++ = base64_table[in[5] & 0x3f];
+
+  *p++ = base64_table[in[6] >> 2];
+  *p++ = base64_table[((in[6] & 0x03) << 4) | (in[7] >> 4)];
+  *p++ = base64_table[(in[7] & 0x0f) << 2];
+  *p++ = '+';
+  assert(p - dst == 12);
+  return Slice(dst, p - dst);
+}
 
 void AppendWithSpace(std::string* str, Slice msg) {
   if (msg.empty()) return;
@@ -232,13 +271,43 @@ struct SharedState {
 
 // Per-thread state for concurrent executions of the same benchmark.
 struct ThreadState {
-  int tid;      // 0..n-1 when running in n threads
-  Random rand;  // Has different seeds for different threads
+  int tid;  // 0..n-1 when running in n threads
+  Random rand;
   SharedState* shared;
   Stats stats;
+  std::vector<uint32_t> fids;
+  DirId parent_dir;
+  Stat stat;
 
-  explicit ThreadState(int tid) : tid(tid), rand(1000 + tid), shared(NULL) {}
+  int operator()(int i) {  // For random shuffling file inode numbers
+    return rand.Next() % i;
+  }
+
+  explicit ThreadState(int tid)
+      : tid(tid), rand(1000 + tid), shared(NULL), parent_dir(0, 0) {
+    fids.reserve(FLAGS_num);
+    for (int i = 0; i < FLAGS_num; i++) {
+      fids.push_back(i);
+    }
+    if (!FLAGS_seq) {
+      std::random_shuffle(fids.begin(), fids.end(), *this);
+    }
+    if (!FLAGS_shared_dir) {
+      parent_dir = DirId(0, tid + 1);
+    }
+    stat.SetDnodeNo(0);
+    stat.SetInodeNo(0);
+    stat.SetFileMode(0660);
+    stat.SetFileSize(0);
+    stat.SetUserId(1);
+    stat.SetGroupId(1);
+    stat.SetZerothServer(-1);
+    stat.SetChangeTime(CurrentMicros());
+    stat.SetModifyTime(0);
+    stat.AssertAllSet();
+  }
 };
+
 }  // namespace
 
 class Benchmark {
@@ -248,22 +317,26 @@ class Benchmark {
 
   void PrintHeader() {
     PrintEnvironment();
-    fprintf(stdout, "Keys:       %d bytes prefix + filename\n",
-            Key(0, 0, static_cast<KeyType>(0)).Encode().size());
-    fprintf(stdout, "Entries:    %d\n", FLAGS_num);
     PrintWarnings();
+    fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
+    fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
+    fprintf(stdout, "Cache size:         %d MB\n", FLAGS_cache_size >> 20);
+    fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
+    fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
+    fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
+    fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
+    fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
+    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
+    fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
   void PrintWarnings() {
 #if defined(__GNUC__) && !defined(__OPTIMIZE__)
-    fprintf(
-        stdout,
-        "WARNING: Optimization is disabled: benchmarks unnecessarily slow\n");
+    fprintf(stdout, "WARNING: C++ optimization disabled\n");
 #endif
 #ifndef NDEBUG
-    fprintf(stdout,
-            "WARNING: Assertions are enabled; benchmarks unnecessarily slow\n");
+    fprintf(stdout, "WARNING: C++ assertions are on\n");
 #endif
 
     // See if snappy is working by attempting to compress a compressible string
@@ -382,21 +455,25 @@ class Benchmark {
 
   void Write(ThreadState* thread) {
     Status s;
-    int64_t bytes = 0;
-    Stat stat;
+    const DirId& par = thread->parent_dir;
+    const uint64_t tid = uint64_t(thread->tid) << 32;
     for (int i = 0; i < FLAGS_num; i++) {
-      const int k = FLAGS_seq ? i : int(thread->rand.Next() % FLAGS_num);
-      char key[100];
-      snprintf(key, sizeof(key), "%016d", k);
-      stat.SetInodeNo(k);
-      s = db_->Set(DirId(0, 0), Slice(key, 16), stat);
-      if (!s.ok()) {
-        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
-        exit(1);
+      const uint64_t fid = tid | thread->fids[i];
+      char tmp[20];
+      Slice fname = Base64Encoding(tmp, fid);
+      thread->stat.SetInodeNo(fid);
+      if (FLAGS_dryrun) {
+        fprintf(stderr, "put dir[%lld,%lld]/%s: fid=%lld\n", par.dno, par.ino,
+                fname.ToString().c_str(), fid);
+      } else {
+        s = db_->Set(par, fname, thread->stat);
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          exit(1);
+        }
       }
       thread->stats.FinishedSingleOp();
     }
-    thread->stats.AddBytes(bytes);
   }
 
  public:
@@ -420,7 +497,7 @@ class Benchmark {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
       exit(1);
     }
-    RunBenchmark(FLAGS_threads, "Write", &Benchmark::Write);
+    RunBenchmark(FLAGS_threads, "write", &Benchmark::Write);
   }
 };
 }  // namespace pdlfs
@@ -430,8 +507,9 @@ static void BM_Usage() {
 }
 
 static void BM_Main(int* argc, char*** argv) {
-  pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
+  pdlfs::FLAGS_max_open_files = pdlfs::FilesystemDbOptions().table_cache_size;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
+  pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
   std::string default_db_path;
 
   for (int i = 2; i < *argc; i++) {
@@ -440,6 +518,18 @@ static void BM_Main(int* argc, char*** argv) {
     if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
         (n == 0 || n == 1)) {
       pdlfs::FLAGS_histogram = n;
+    } else if (sscanf((*argv)[i], "--dryrun=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dryrun = n;
+    } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_snappy = n;
+    } else if (sscanf((*argv)[i], "--no_compact=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_disable_compaction = n;
+    } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_shared_dir = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
@@ -447,12 +537,12 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
+    } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_max_open_files = n;
     } else if (sscanf((*argv)[i], "--cache_size=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_cache_size = n;
     } else if (sscanf((*argv)[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_bloom_bits = n;
-    } else if (sscanf((*argv)[i], "--open_files=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_open_files = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
