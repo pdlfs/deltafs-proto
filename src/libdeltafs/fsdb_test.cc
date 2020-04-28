@@ -72,6 +72,7 @@ namespace {  // Db benchmark
 const char* FLAGS_benchmarks =
     "fillrandom,"
     "compact,"
+    "readrandom,"
     "readrandom,";
 
 // Number of concurrent threads to run.
@@ -290,13 +291,14 @@ struct ThreadState {
   DirId parent_dir;
   Stat stat;
 
-  ThreadState(int tid, bool seq) : tid(tid), shared(NULL), parent_dir(0, 0) {
+  ThreadState(int tid, int base_seed, bool random_order)
+      : tid(tid), shared(NULL), parent_dir(0, 0) {
     fids.reserve(FLAGS_num);
     for (int i = 0; i < FLAGS_num; i++) {
       fids.push_back(i);
     }
-    if (!seq) {
-      std::random_shuffle(fids.begin(), fids.end(), STLRand(1000 + tid));
+    if (random_order) {
+      std::random_shuffle(fids.begin(), fids.end(), STLRand(base_seed + tid));
     }
     if (!FLAGS_shared_dir) {
       parent_dir = DirId(0, tid + 1);
@@ -421,7 +423,7 @@ class Benchmark {
     }
   }
 
-  void RunBenchmark(int n, Slice name,
+  void RunBenchmark(int n, int m, Slice name,
                     void (Benchmark::*method)(ThreadState*)) {
     SharedState shared(n);
 
@@ -431,7 +433,7 @@ class Benchmark {
       arg[i].method = method;
       arg[i].shared = &shared;
       arg[i].thread = new ThreadState(
-          i, name.ToString().find("random") != std::string::npos);
+          i, m * 1000, name.ToString().find("random") != std::string::npos);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
     }
@@ -552,6 +554,7 @@ class Benchmark {
   void Run() {
     PrintHeader();
     const char* benchmarks = FLAGS_benchmarks;
+    int m = 0;
     while (benchmarks != NULL) {
       const char* sep = strchr(benchmarks, ',');
       Slice name;
@@ -595,7 +598,7 @@ class Benchmark {
       }
 
       if (method != NULL) {
-        RunBenchmark(FLAGS_threads, name, method);
+        RunBenchmark(FLAGS_threads, m++, name, method);
       }
     }
   }
