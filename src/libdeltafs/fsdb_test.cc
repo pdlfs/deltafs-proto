@@ -242,14 +242,15 @@ class Stats {
       // elapsed times.
       double elapsed = (finish_ - start_) * 1e-6;
       char rate[100];
-      snprintf(rate, sizeof(rate), "%6.1f MB/s",
-               (bytes_ / 1048576.0) / elapsed);
+      snprintf(rate, sizeof(rate), "%6.1f MB/s, %lld bytes",
+               (bytes_ / 1048576.0) / elapsed, bytes_);
       extra = rate;
     }
     AppendWithSpace(&extra, message_);
 
-    fprintf(stdout, "%-12s : %11.3f micros/op;%s%s\n", name.ToString().c_str(),
-            seconds_ * 1e6 / done_, (extra.empty() ? "" : " "), extra.c_str());
+    fprintf(stdout, "%-12s : %11.3f micros/op, %9d ops;%s%s\n",
+            name.ToString().c_str(), seconds_ * 1e6 / done_, done_,
+            (extra.empty() ? "" : " "), extra.c_str());
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
     }
@@ -487,9 +488,12 @@ class Benchmark {
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
-    char msg[100];
-    snprintf(msg, sizeof(msg), "(%d of %d inserted)", ok, FLAGS_num);
-    thread->stats.AddMessage(msg);
+    if (thread->tid == 0) {
+      char msg[100];
+      snprintf(msg, sizeof(msg), "(thread 0: %d of %d inserted)", ok,
+               FLAGS_num);
+      thread->stats.AddMessage(msg);
+    }
   }
 
   void Compact(ThreadState* thread) { db_->DrainCompaction(); }
@@ -520,9 +524,12 @@ class Benchmark {
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);
-    char msg[100];
-    snprintf(msg, sizeof(msg), "(%d of %d found)", found, FLAGS_reads);
-    thread->stats.AddMessage(msg);
+    if (thread->tid == 0) {
+      char msg[100];
+      snprintf(msg, sizeof(msg), "(thread 0: %d of %d found)", found,
+               FLAGS_reads);
+      thread->stats.AddMessage(msg);
+    }
   }
 
   void Open() {
