@@ -68,7 +68,8 @@ TEST(FilesystemDbTest, OpenAndClose) {  ///
 }
 
 namespace {  // Db benchmark
-static const char* FLAGS_benchmarks =
+// Comma-separated list of operations to run in the specified order.
+const char* FLAGS_benchmarks =
     "fillrandom,"
     "compact,"
     "readrandom,";
@@ -462,6 +463,7 @@ class Benchmark {
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
+    int ok = 0;
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
       char tmp[20];
@@ -472,7 +474,9 @@ class Benchmark {
                 fname.ToString().c_str(), fid);
       } else {
         Status s = db_->Put(par, fname, thread->stat, &stats);
-        if (!s.ok()) {
+        if (s.ok()) {
+          ok++;
+        } else {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           exit(1);
         }
@@ -481,6 +485,9 @@ class Benchmark {
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
+    char msg[100];
+    snprintf(msg, sizeof(msg), "(%d of %d inserted)", ok, FLAGS_num);
+    thread->stats.AddMessage(msg);
   }
 
   void Compact(ThreadState* thread) { db_->DrainCompaction(); }
@@ -489,7 +496,8 @@ class Benchmark {
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    for (int i = 0; i < FLAGS_num; i++) {
+    int found = 0;
+    for (int i = 0; i < FLAGS_reads; i++) {
       const uint64_t fid = tid | thread->fids[i];
       char tmp[20];
       Slice fname = Base64Encoding(tmp, fid);
@@ -499,7 +507,9 @@ class Benchmark {
       } else {
         Stat stat;
         Status s = db_->Get(par, fname, &stat, &stats);
-        if (!s.ok()) {
+        if (s.ok()) {
+          found++;
+        } else if (!s.IsNotFound()) {
           fprintf(stderr, "get error: %s\n", s.ToString().c_str());
           exit(1);
         }
@@ -508,6 +518,9 @@ class Benchmark {
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);
+    char msg[100];
+    snprintf(msg, sizeof(msg), "(%d of %d found)", found, FLAGS_reads);
+    thread->stats.AddMessage(msg);
   }
 
   void Open() {
