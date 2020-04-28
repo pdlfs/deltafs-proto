@@ -461,16 +461,17 @@ class Benchmark {
   void Write(ThreadState* thread) {
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
+    FilesystemDbStats stats;
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
       char tmp[20];
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
       if (FLAGS_dryrun) {
-        fprintf(stderr, "put dir[%lld,%lld]/%s: fid=%lld\n", par.dno, par.ino,
+        fprintf(stdout, "put dir[%lld,%lld]/%s: fid=%lld\n", par.dno, par.ino,
                 fname.ToString().c_str(), fid);
       } else {
-        Status s = db_->Set(par, fname, thread->stat);
+        Status s = db_->Put(par, fname, thread->stat, &stats);
         if (!s.ok()) {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           exit(1);
@@ -478,6 +479,8 @@ class Benchmark {
       }
       thread->stats.FinishedSingleOp();
     }
+    int64_t bytes = stats.putkeybytes + stats.putbytes;
+    thread->stats.AddBytes(bytes);
   }
 
   void Compact(ThreadState* thread) { db_->DrainCompaction(); }
@@ -485,16 +488,17 @@ class Benchmark {
   void Read(ThreadState* thread) {
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
+    FilesystemDbStats stats;
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
       char tmp[20];
       Slice fname = Base64Encoding(tmp, fid);
       if (FLAGS_dryrun) {
-        fprintf(stderr, "get dir[%lld,%lld]/%s\n", par.dno, par.ino,
+        fprintf(stdout, "get dir[%lld,%lld]/%s\n", par.dno, par.ino,
                 fname.ToString().c_str());
       } else {
         Stat stat;
-        Status s = db_->Get(par, fname, &stat);
+        Status s = db_->Get(par, fname, &stat, &stats);
         if (!s.ok()) {
           fprintf(stderr, "get error: %s\n", s.ToString().c_str());
           exit(1);
@@ -502,6 +506,8 @@ class Benchmark {
       }
       thread->stats.FinishedSingleOp();
     }
+    int64_t bytes = stats.getkeybytes + stats.getbytes;
+    thread->stats.AddBytes(bytes);
   }
 
   void Open() {

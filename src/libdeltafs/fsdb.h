@@ -74,15 +74,33 @@ struct FilesystemDbOptions {
   bool compression;
 };
 
+struct FilesystemDbStats {
+  FilesystemDbStats();
+  // Total amount of key bytes pushed to db.
+  uint64_t putkeybytes;
+  // Total amount of val bytes pushed to db.
+  uint64_t putbytes;
+  // Total number of put operations.
+  uint64_t puts;
+  // Total number of key bytes read out of db.
+  uint64_t getkeybytes;
+  // Total number of val bytes read out of db.
+  uint64_t getbytes;
+  // Total number of get operations.
+  uint64_t gets;
+};
+
 class FilesystemDb {
  public:
   explicit FilesystemDb(const FilesystemDbOptions& options);
   ~FilesystemDb();
 
   Status Open(const std::string& dbloc);
-  Status Get(const DirId& id, const Slice& name, Stat* stat);
-  Status Set(const DirId& id, const Slice& name, const Stat& stat);
-  Status Delete(const DirId& id, const Slice& name);
+  Status Get(const DirId& id, const Slice& fname, Stat* stat,
+             FilesystemDbStats* stats);
+  Status Put(const DirId& id, const Slice& fname, const Stat& stat,
+             FilesystemDbStats* stats);
+  Status Delete(const DirId& id, const Slice& fname);
   Status DrainCompaction();
   Status Flush();
 

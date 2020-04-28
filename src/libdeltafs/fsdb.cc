@@ -53,6 +53,14 @@ FilesystemDbOptions::FilesystemDbOptions()
       disable_compaction(false),
       compression(false) {}
 
+FilesystemDbStats::FilesystemDbStats()
+    : putkeybytes(0),
+      putbytes(0),
+      puts(0),
+      getkeybytes(0),
+      getbytes(0),
+      gets(0) {}
+
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions options;
   options.error_if_exists = options.create_if_missing = true;
@@ -105,17 +113,20 @@ Status FilesystemDb::DrainCompaction() { return db_->DrainCompactions(); }
 
 Status FilesystemDb::Flush() { return db_->FlushMemTable(FlushOptions()); }
 
-Status FilesystemDb::Set(  ///
-    const DirId& id, const Slice& fname, const Stat& stat) {
+Status FilesystemDb::Put(  ///
+    const DirId& id, const Slice& fname, const Stat& stat,
+    FilesystemDbStats* const stats) {
   WriteOptions options;
   Tx* const tx = NULL;
-  return mdb_->SET<Key>(id, fname, stat, fname, &options, tx);
+  return mdb_->PUT<Key>(id, fname, stat, fname, &options, tx, stats);
 }
 
-Status FilesystemDb::Get(const DirId& id, const Slice& fname, Stat* stat) {
+Status FilesystemDb::Get(  ///
+    const DirId& id, const Slice& fname, Stat* const stat,
+    FilesystemDbStats* const stats) {
   ReadOptions options;
   Tx* const tx = NULL;
-  return mdb_->GET<Key>(id, fname, stat, NULL, &options, tx);
+  return mdb_->GET<Key>(id, fname, stat, NULL, &options, tx, stats);
 }
 
 Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {

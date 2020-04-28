@@ -312,7 +312,7 @@ Status Filesystem::Lstat1(  ///
   // write operations are blocked. The split operation bulk deletes
   // the half of partition that has been moved and install a new
   // directory index.
-  return db_->Get(at, name, stat);
+  return db_->Get(at, name, stat, NULL);
 }
 
 Status Filesystem::Mknos1(  ///
@@ -395,7 +395,7 @@ Status Filesystem::CheckAndPut(  ///
     uint32_t type, uint32_t mode, Stat* stat) {
   Status s;
   if (!options_.skip_name_collision_checks) {
-    s = db_->Get(at, name, stat);
+    s = db_->Get(at, name, stat, NULL);
     if (s.ok()) {
       s = Status::AlreadyExists(Slice());
     } else if (s.IsNotFound()) {
@@ -425,7 +425,7 @@ Status Filesystem::Put(  ///
   stat->SetModifyTime(0);
   stat->SetChangeTime(0);
   stat->AssertAllSet();
-  return db_->Set(at, name, *stat);
+  return db_->Put(at, name, *stat, NULL);
 }
 
 namespace {
