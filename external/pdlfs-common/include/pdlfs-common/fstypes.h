@@ -303,19 +303,19 @@ class Stat {
 // and reuse the result until the specified due. Not used in tablefs.
 class LookupStat {
 #if defined(DELTAFS_PROTO)
-  char dir_dno_[8];
+  uint64_t dir_dno_;
 #endif
 #if defined(DELTAFS)
-  char reg_id_[8];
-  char snap_id_[8];
+  uint64_t reg_id_;
+  uint64_t snap_id_;
 #endif
-  char dir_ino_[8];
-  char dir_mode_[4];
-  char zeroth_server_[4];
-  char user_id_[4];
-  char group_id_[4];
+  uint64_t dir_ino_;
   // Absolute time in microseconds
-  char lease_due_[8];
+  uint64_t lease_due_;
+  uint32_t dir_mode_;
+  uint32_t zeroth_server_;
+  uint32_t user_id_;
+  uint32_t group_id_;
 
 #ifndef NDEBUG
 #if defined(DELTAFS_PROTO)
@@ -326,11 +326,11 @@ class LookupStat {
   bool is_snap_id_set_;
 #endif
   bool is_dir_ino_set_;
+  bool is_lease_due_set_;
   bool is_dir_mode_set_;
   bool is_zeroth_server_set_;
   bool is_user_id_set_;
   bool is_group_id_set_;
-  bool is_lease_due_set_;
 #endif
 
  public:
@@ -354,31 +354,31 @@ class LookupStat {
     assert(is_snap_id_set_);
 #endif
     assert(is_dir_ino_set_);
+    assert(is_lease_due_set_);
     assert(is_dir_mode_set_);
     assert(is_zeroth_server_set_);
     assert(is_user_id_set_);
     assert(is_group_id_set_);
-    assert(is_lease_due_set_);
 #endif
   }
 
 #if defined(DELTAFS_PROTO)
-  uint64_t DnodeNo() const { return DecodeFixed64(dir_dno_); }
+  uint64_t DnodeNo() const { return (dir_dno_); }
 #endif
 #if defined(DELTAFS)
-  uint64_t RegId() const { return DecodeFixed64(reg_id_); }
-  uint64_t SnapId() const { return DecodeFixed64(snap_id_); }
+  uint64_t RegId() const { return (reg_id_); }
+  uint64_t SnapId() const { return (snap_id_); }
 #endif
-  uint64_t InodeNo() const { return DecodeFixed64(dir_ino_); }
-  uint32_t DirMode() const { return DecodeFixed32(dir_mode_); }
-  uint32_t ZerothServer() const { return DecodeFixed32(zeroth_server_); }
-  uint32_t UserId() const { return DecodeFixed32(user_id_); }
-  uint32_t GroupId() const { return DecodeFixed32(group_id_); }
-  uint64_t LeaseDue() const { return DecodeFixed64(lease_due_); }
+  uint64_t InodeNo() const { return (dir_ino_); }
+  uint32_t DirMode() const { return (dir_mode_); }
+  uint32_t ZerothServer() const { return (zeroth_server_); }
+  uint32_t UserId() const { return (user_id_); }
+  uint32_t GroupId() const { return (group_id_); }
+  uint64_t LeaseDue() const { return (lease_due_); }
 
 #if defined(DELTAFS_PROTO)
   void SetDnodeNo(uint64_t dir_dno) {
-    EncodeFixed64(dir_dno_, dir_dno);
+    dir_dno_ = dir_dno;
 #ifndef NDEBUG
     is_dir_dno_set_ = true;
 #endif
@@ -387,14 +387,14 @@ class LookupStat {
 
 #if defined(DELTAFS)
   void SetRegId(uint64_t reg_id) {
-    EncodeFixed64(reg_id_, reg_id);
+    reg_id_ = reg_id;
 #ifndef NDEBUG
     is_reg_id_set_ = true;
 #endif
   }
 
   void SetSnapId(uint64_t snap_id) {
-    EncodeFixed64(snap_id_, snap_id);
+    snap_id_ = snap_id;
 #ifndef NDEBUG
     is_snap_id_set_ = true;
 #endif
@@ -402,42 +402,42 @@ class LookupStat {
 #endif
 
   void SetInodeNo(uint64_t dir_ino) {
-    EncodeFixed64(dir_ino_, dir_ino);
+    dir_ino_ = dir_ino;
 #ifndef NDEBUG
     is_dir_ino_set_ = true;
 #endif
   }
 
   void SetDirMode(uint32_t mode) {
-    EncodeFixed32(dir_mode_, mode);
+    dir_mode_ = mode;
 #ifndef NDEBUG
     is_dir_mode_set_ = true;
 #endif
   }
 
   void SetZerothServer(uint32_t server) {
-    EncodeFixed32(zeroth_server_, server);
+    zeroth_server_ = server;
 #ifndef NDEBUG
     is_zeroth_server_set_ = true;
 #endif
   }
 
   void SetUserId(uint32_t usr) {
-    EncodeFixed32(user_id_, usr);
+    user_id_ = usr;
 #ifndef NDEBUG
     is_user_id_set_ = true;
 #endif
   }
 
   void SetGroupId(uint32_t grp) {
-    EncodeFixed32(group_id_, grp);
+    group_id_ = grp;
 #ifndef NDEBUG
     is_group_id_set_ = true;
 #endif
   }
 
   void SetLeaseDue(uint64_t due) {
-    EncodeFixed64(lease_due_, due);
+    lease_due_ = due;
 #ifndef NDEBUG
     is_lease_due_set_ = true;
 #endif
