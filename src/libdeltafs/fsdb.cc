@@ -101,9 +101,9 @@ FilesystemDb::~FilesystemDb() {
   delete mdb_;
 }
 
-Status FilesystemDb::Flush() {  ///
-  return db_->FlushMemTable(FlushOptions());
-}
+Status FilesystemDb::DrainCompaction() { return db_->DrainCompactions(); }
+
+Status FilesystemDb::Flush() { return db_->FlushMemTable(FlushOptions()); }
 
 Status FilesystemDb::Set(  ///
     const DirId& id, const Slice& fname, const Stat& stat) {

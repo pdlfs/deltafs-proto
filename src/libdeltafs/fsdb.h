@@ -83,6 +83,7 @@ class FilesystemDb {
   Status Get(const DirId& id, const Slice& name, Stat* stat);
   Status Set(const DirId& id, const Slice& name, const Stat& stat);
   Status Delete(const DirId& id, const Slice& name);
+  Status DrainCompaction();
   Status Flush();
 
  private:

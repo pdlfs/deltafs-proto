@@ -68,12 +68,19 @@ TEST(FilesystemDbTest, OpenAndClose) {  ///
 }
 
 namespace {  // Db benchmark
+static const char* FLAGS_benchmarks =
+    "fillrandom,"
+    "compact,"
+    "readrandom,";
 
 // Number of concurrent threads to run.
 int FLAGS_threads = 1;
 
-// Number of key/values to place in the database per thread.
+// Number of KV pairs to insert per thread.
 int FLAGS_num = 8;
+
+// Number of KV pairs to read from db.
+int FLAGS_reads = -1;
 
 // Simply print operations to be sent to db.
 bool FLAGS_dryrun = false;
@@ -101,9 +108,6 @@ bool FLAGS_shared_dir = false;
 
 // Disable all background compaction.
 bool FLAGS_disable_compaction = false;
-
-// Sequential or random.
-bool FLAGS_seq = false;
 
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
@@ -269,28 +273,29 @@ struct SharedState {
       : cv(&mu), total(total), num_initialized(0), num_done(0), start(false) {}
 };
 
+// A wrapper over our own random object.
+struct STLRand {
+  STLRand(int seed) : rnd(seed) {}
+  int operator()(int i) { return rnd.Next() % i; }
+  Random rnd;
+};
+
 // Per-thread state for concurrent executions of the same benchmark.
 struct ThreadState {
   int tid;  // 0..n-1 when running in n threads
-  Random rand;
   SharedState* shared;
   Stats stats;
   std::vector<uint32_t> fids;
   DirId parent_dir;
   Stat stat;
 
-  int operator()(int i) {  // For random shuffling file inode numbers
-    return rand.Next() % i;
-  }
-
-  explicit ThreadState(int tid)
-      : tid(tid), rand(1000 + tid), shared(NULL), parent_dir(0, 0) {
+  ThreadState(int tid, bool seq) : tid(tid), shared(NULL), parent_dir(0, 0) {
     fids.reserve(FLAGS_num);
     for (int i = 0; i < FLAGS_num; i++) {
       fids.push_back(i);
     }
-    if (!FLAGS_seq) {
-      std::random_shuffle(fids.begin(), fids.end(), *this);
+    if (!seq) {
+      std::random_shuffle(fids.begin(), fids.end(), STLRand(1000 + tid));
     }
     if (!FLAGS_shared_dir) {
       parent_dir = DirId(0, tid + 1);
@@ -312,7 +317,6 @@ struct ThreadState {
 
 class Benchmark {
  private:
-  FilesystemDbOptions options_;
   FilesystemDb* db_;
 
   void PrintHeader() {
@@ -425,7 +429,8 @@ class Benchmark {
       arg[i].bm = this;
       arg[i].method = method;
       arg[i].shared = &shared;
-      arg[i].thread = new ThreadState(i);
+      arg[i].thread = new ThreadState(
+          i, name.ToString().find("random") != std::string::npos);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
     }
@@ -454,7 +459,6 @@ class Benchmark {
   }
 
   void Write(ThreadState* thread) {
-    Status s;
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
     for (int i = 0; i < FLAGS_num; i++) {
@@ -466,13 +470,54 @@ class Benchmark {
         fprintf(stderr, "put dir[%lld,%lld]/%s: fid=%lld\n", par.dno, par.ino,
                 fname.ToString().c_str(), fid);
       } else {
-        s = db_->Set(par, fname, thread->stat);
+        Status s = db_->Set(par, fname, thread->stat);
         if (!s.ok()) {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           exit(1);
         }
       }
       thread->stats.FinishedSingleOp();
+    }
+  }
+
+  void Compact(ThreadState* thread) {
+    db_->DrainCompaction();
+  }
+
+  void Read(ThreadState* thread) {
+    const DirId& par = thread->parent_dir;
+    const uint64_t tid = uint64_t(thread->tid) << 32;
+    for (int i = 0; i < FLAGS_num; i++) {
+      const uint64_t fid = tid | thread->fids[i];
+      char tmp[20];
+      Slice fname = Base64Encoding(tmp, fid);
+      if (FLAGS_dryrun) {
+        fprintf(stderr, "get dir[%lld,%lld]/%s\n", par.dno, par.ino,
+                fname.ToString().c_str());
+      } else {
+        Stat stat;
+        Status s = db_->Get(par, fname, &stat);
+        if (!s.ok()) {
+          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+          exit(1);
+        }
+      }
+      thread->stats.FinishedSingleOp();
+    }
+  }
+
+  void Open() {
+    FilesystemDbOptions options;
+    options.compression = FLAGS_snappy;
+    options.disable_compaction = FLAGS_disable_compaction;
+    options.table_cache_size = FLAGS_max_open_files;
+    options.block_cache_size = FLAGS_cache_size;
+    options.filter_bits_per_key = FLAGS_bloom_bits;
+    db_ = new FilesystemDb(options);
+    Status s = db_->Open(FLAGS_db);
+    if (!s.ok()) {
+      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
+      exit(1);
     }
   }
 
@@ -489,21 +534,59 @@ class Benchmark {
 
   void Run() {
     PrintHeader();
-    options_.filter_bits_per_key = FLAGS_bloom_bits;
-    options_.block_cache_size = FLAGS_cache_size;
-    db_ = new FilesystemDb(options_);
-    Status s = db_->Open(FLAGS_db);
-    if (!s.ok()) {
-      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
-      exit(1);
+    const char* benchmarks = FLAGS_benchmarks;
+    while (benchmarks != NULL) {
+      const char* sep = strchr(benchmarks, ',');
+      Slice name;
+      if (sep == NULL) {
+        name = benchmarks;
+        benchmarks = NULL;
+      } else {
+        name = Slice(benchmarks, sep - benchmarks);
+        benchmarks = sep + 1;
+      }
+
+      void (Benchmark::*method)(ThreadState*) = NULL;
+      bool fresh_db = false;
+
+      if (name == Slice("fillrandom")) {
+        fresh_db = true;
+        method = &Benchmark::Write;
+      } else if (name == Slice("compact")) {
+        method = &Benchmark::Compact;
+      } else if (name == Slice("readrandom")) {
+        method = &Benchmark::Read;
+      } else {
+        if (!name.empty()) {  // No error message for empty name
+          fprintf(stderr, "unknown benchmark '%s'\n", name.ToString().c_str());
+        }
+      }
+
+      if (fresh_db) {
+        if (FLAGS_use_existing_db) {
+          fprintf(stdout, "%-12s : skipped (--use_existing_db is true)\n",
+                  name.ToString().c_str());
+          method = NULL;
+        } else {
+          delete db_;
+          db_ = NULL;
+          DestroyDB(FLAGS_db, DBOptions());
+          Open();
+        }
+      } else if (db_ == NULL) {
+        Open();
+      }
+
+      if (method != NULL) {
+        RunBenchmark(FLAGS_threads, name, method);
+      }
     }
-    RunBenchmark(FLAGS_threads, "write", &Benchmark::Write);
   }
 };
 }  // namespace pdlfs
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench [options] to run db benchmark.\n");
+  fprintf(stderr, "Use --bench to run db benchmark.\n");
 }
 
 static void BM_Main(int* argc, char*** argv) {
@@ -535,6 +618,8 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_use_existing_db = n;
     } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_num = n;
+    } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
@@ -551,6 +636,10 @@ static void BM_Main(int* argc, char*** argv) {
     }
   }
 
+  if (pdlfs::FLAGS_reads == -1) {
+    pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
+  }
+
   // Choose a location for the test database if none given with --db=<path>
   if (pdlfs::FLAGS_db == NULL) {
     default_db_path = pdlfs::test::TmpDir() + "/fsdb_bench";
@@ -559,7 +648,6 @@ static void BM_Main(int* argc, char*** argv) {
 
   pdlfs::Benchmark benchmark;
   benchmark.Run();
-  return;
 }
 
 int main(int argc, char* argv[]) {
