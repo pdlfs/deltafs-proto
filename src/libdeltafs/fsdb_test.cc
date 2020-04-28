@@ -480,9 +480,7 @@ class Benchmark {
     }
   }
 
-  void Compact(ThreadState* thread) {
-    db_->DrainCompaction();
-  }
+  void Compact(ThreadState* thread) { db_->DrainCompaction(); }
 
   void Read(ThreadState* thread) {
     const DirId& par = thread->parent_dir;
@@ -590,16 +588,18 @@ static void BM_Usage() {
 }
 
 static void BM_Main(int* argc, char*** argv) {
+  pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
   pdlfs::FLAGS_max_open_files = pdlfs::FilesystemDbOptions().table_cache_size;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
-  pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
   std::string default_db_path;
 
   for (int i = 2; i < *argc; i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
-        (n == 0 || n == 1)) {
+    if (pdlfs::Slice((*argv)[i]).starts_with("--benchmarks=")) {
+      pdlfs::FLAGS_benchmarks = (*argv)[i] + strlen("--benchmarks=");
+    } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
       pdlfs::FLAGS_histogram = n;
     } else if (sscanf((*argv)[i], "--dryrun=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
