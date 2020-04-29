@@ -64,27 +64,27 @@ FilesystemDbStats::FilesystemDbStats()
       gets(0) {}
 
 Status FilesystemDb::Open(const std::string& dbloc) {
-  DBOptions options;
-  options.error_if_exists = options.create_if_missing = true;
-  options.disable_compaction = options_.disable_compaction;
-  options.disable_seek_compaction = true;
-  options.skip_lock_file = true;
-  options.table_cache = table_cache_;
-  options.block_cache = block_cache_;
-  options.filter_policy = filter_;
-  options.write_buffer_size = options_.write_buffer_size;
-  options.table_file_size = options_.table_file_size;
-  options.block_size = options_.block_size;
-  options.block_restart_interval = options_.block_restart_interval;
-  options.level_factor = options_.level_factor;
-  options.l1_compaction_trigger = options_.l1_compaction_trigger;
-  options.l0_compaction_trigger = options_.l0_compaction_trigger;
-  options.l0_soft_limit = options_.l0_soft_limit;
-  options.l0_hard_limit = options_.l0_hard_limit;
-  options.info_log = options_.use_default_logger ? Logger::Default() : NULL;
-  options.compression =
+  DBOptions dbopts;
+  dbopts.error_if_exists = dbopts.create_if_missing = true;
+  dbopts.disable_compaction = options_.disable_compaction;
+  dbopts.disable_seek_compaction = true;
+  dbopts.skip_lock_file = true;
+  dbopts.table_cache = table_cache_;
+  dbopts.block_cache = block_cache_;
+  dbopts.filter_policy = filter_;
+  dbopts.write_buffer_size = options_.write_buffer_size;
+  dbopts.table_file_size = options_.table_file_size;
+  dbopts.block_size = options_.block_size;
+  dbopts.block_restart_interval = options_.block_restart_interval;
+  dbopts.level_factor = options_.level_factor;
+  dbopts.l1_compaction_trigger = options_.l1_compaction_trigger;
+  dbopts.l0_compaction_trigger = options_.l0_compaction_trigger;
+  dbopts.l0_soft_limit = options_.l0_soft_limit;
+  dbopts.l0_hard_limit = options_.l0_hard_limit;
+  dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
+  dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
-  Status status = DB::Open(options, dbloc, &db_);
+  Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
     mdb_ = new MDB(db_);
   }
