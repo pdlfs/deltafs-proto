@@ -275,7 +275,7 @@ class Stats {
     }
     AppendWithSpace(&extra, message_);
 
-    fprintf(stdout, "%-12s : %11.3f micros/op, %9.0f ops;%s%s\n",
+    fprintf(stdout, "%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
     if (FLAGS_histogram) {
