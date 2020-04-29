@@ -52,7 +52,7 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc
      db/db_test.cc db/db_format_test.cc db/readonly_test.cc
      db/version_edit_test.cc db/version_set_test.cc
-     db/write_batch_test.cc dbfiles_test.cc filter_block_test.cc
+     db/write_batch_test.cc filenames_test.cc filter_block_test.cc
      index_block_test.cc skiplist_test.cc
      table_test.cc)
 
