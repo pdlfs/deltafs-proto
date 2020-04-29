@@ -17,7 +17,7 @@
 #include "db_iter.h"
 #include "db_impl.h"
 
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/iterator.h"
 

@@ -21,7 +21,7 @@
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"

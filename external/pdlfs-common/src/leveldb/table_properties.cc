@@ -11,7 +11,7 @@
 
 #include "pdlfs-common/leveldb/table_properties.h"
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 
 namespace pdlfs {
 

@@ -11,7 +11,7 @@
 #pragma once
 
 #include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/db/readonly.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/port.h"

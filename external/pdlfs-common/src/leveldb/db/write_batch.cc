@@ -18,7 +18,7 @@
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/db/write_batch.h"
 
 // WriteBatch::rep_ :=

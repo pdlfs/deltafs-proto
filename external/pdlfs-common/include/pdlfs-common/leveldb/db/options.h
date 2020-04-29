@@ -19,7 +19,7 @@
 #include <stddef.h>
 
 #include "pdlfs-common/compression_type.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 
 namespace pdlfs {
 

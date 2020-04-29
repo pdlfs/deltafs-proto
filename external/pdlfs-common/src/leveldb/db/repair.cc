@@ -22,7 +22,7 @@
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/dbfiles.h"

@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/db/write_batch.h"
 
 namespace pdlfs {
