@@ -266,14 +266,14 @@ class Stats {
       // elapsed times.
       double elapsed = (finish_ - start_) * 1e-6;
       char rate[100];
-      snprintf(rate, sizeof(rate), "%6.1f MB/s, %lld bytes",
-               (bytes_ / 1048576.0) / elapsed, bytes_);
+      snprintf(rate, sizeof(rate), "%6.1f MB/s, %.0f bytes",
+               (bytes_ / 1048576.0) / elapsed, double(bytes_));
       extra = rate;
     }
     AppendWithSpace(&extra, message_);
 
-    fprintf(stdout, "%-12s : %11.3f micros/op, %9d ops;%s%s\n",
-            name.ToString().c_str(), seconds_ * 1e6 / done_, done_,
+    fprintf(stdout, "%-12s : %11.3f micros/op, %9.0f ops;%s%s\n",
+            name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
@@ -497,8 +497,8 @@ class Benchmark {
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
       if (FLAGS_dryrun) {
-        fprintf(stdout, "put dir[%lld,%lld]/%s: fid=%lld\n", par.dno, par.ino,
-                fname.ToString().c_str(), fid);
+        fprintf(stdout, "put dir[%.0f,%.0f]/%s: fid=%.0f\n", double(par.dno),
+                double(par.ino), fname.ToString().c_str(), double(fid));
       } else {
         Status s = db_->Put(par, fname, thread->stat, &stats);
         if (s.ok()) {
@@ -532,8 +532,8 @@ class Benchmark {
       char tmp[20];
       Slice fname = Base64Encoding(tmp, fid);
       if (FLAGS_dryrun) {
-        fprintf(stdout, "get dir[%lld,%lld]/%s\n", par.dno, par.ino,
-                fname.ToString().c_str());
+        fprintf(stdout, "get dir[%.0f,%.0f]/%s\n", double(par.dno),
+                double(par.ino), fname.ToString().c_str());
       } else {
         Stat stat;
         Status s = db_->Get(par, fname, &stat, &stats);
