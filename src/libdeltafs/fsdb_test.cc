@@ -128,7 +128,7 @@ const char* FLAGS_db = NULL;
 const char base64_table[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=";
 Slice Base64Encoding(char* const dst, uint64_t input) {
-  const char* in = reinterpret_cast<char*>(&input);
+  const unsigned char* in = reinterpret_cast<unsigned char*>(&input);
   char* p = dst;
   *p++ = base64_table[in[0] >> 2];
   *p++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
