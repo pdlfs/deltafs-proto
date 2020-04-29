@@ -223,7 +223,7 @@ class Stats {
 
   void AddMessage(Slice msg) { AppendWithSpace(&message_, msg); }
 
-  void FinishedSingleOp() {
+  void FinishedSingleOp(int total) {
     if (FLAGS_histogram) {
       double now = CurrentMicros();
       double micros = now - last_op_finish_;
@@ -251,7 +251,8 @@ class Stats {
         next_report_ += 50000;
       else
         next_report_ += 100000;
-      fprintf(stderr, "... finished %d ops%30s\r", done_, "");
+      fprintf(stderr, "... finished %d ops (%.0f%%)%30s\r", done_,
+              double(done_) / total, "");
       fflush(stderr);
     }
   }
@@ -508,7 +509,7 @@ class Benchmark {
           exit(1);
         }
       }
-      thread->stats.FinishedSingleOp();
+      thread->stats.FinishedSingleOp(FLAGS_num);
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
@@ -538,7 +539,7 @@ class Benchmark {
           exit(1);
         }
       }
-      thread->stats.FinishedSingleOp();
+      thread->stats.FinishedSingleOp(FLAGS_reads);
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);
