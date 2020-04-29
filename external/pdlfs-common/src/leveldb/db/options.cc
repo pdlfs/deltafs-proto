@@ -14,8 +14,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-#include "options_internal.h"
 
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/filter_policy.h"

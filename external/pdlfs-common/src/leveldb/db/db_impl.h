@@ -16,7 +16,6 @@
  */
 #pragma once
 
-#include "options_internal.h"
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/env.h"
