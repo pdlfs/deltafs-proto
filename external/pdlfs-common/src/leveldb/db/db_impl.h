@@ -31,7 +31,6 @@
 
 namespace pdlfs {
 
-class ColumnImpl;
 class MemTable;
 class TableCache;
 class Version;
@@ -88,7 +87,6 @@ class DBImpl : public DB {
 
  protected:
   friend class DB;
-  friend class ColumnImpl;
   struct CompactionState;
   struct InsertionState;
   struct Writer;
