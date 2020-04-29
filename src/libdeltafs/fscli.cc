@@ -508,7 +508,7 @@ bool IsLookupOk(const FilesystemCliOptions& options, const LookupStat& parent,
     return ((mode & S_IXOTH) == S_IXOTH);
   }
 }
-};  // namespace
+}  // namespace
 
 Status FilesystemCli::Fetch1(  ///
     const User& who, const LookupStat& p, const Slice& name, Dir* dir,
