@@ -51,6 +51,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       l0_compaction_trigger(4),
       l0_soft_limit(8),
       l0_hard_limit(12),
+      use_default_logger(false),
       disable_compaction(false),
       compression(false) {}
 
@@ -68,7 +69,6 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   options.disable_compaction = options_.disable_compaction;
   options.disable_seek_compaction = true;
   options.skip_lock_file = true;
-  options.info_log = Logger::Default();
   options.table_cache = table_cache_;
   options.block_cache = block_cache_;
   options.filter_policy = filter_;
@@ -81,6 +81,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   options.l0_compaction_trigger = options_.l0_compaction_trigger;
   options.l0_soft_limit = options_.l0_soft_limit;
   options.l0_hard_limit = options_.l0_hard_limit;
+  options.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   options.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
   Status status = DB::Open(options, dbloc, &db_);

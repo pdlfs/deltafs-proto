@@ -70,6 +70,8 @@ struct FilesystemDbOptions {
   int l0_soft_limit;
   // Number of files in level-0 until writes are entirely stalled.
   int l0_hard_limit;
+  // Log to stderr.
+  bool use_default_logger;
   // Disable background table compaction.
   bool disable_compaction;
   // Enable snappy compression.
