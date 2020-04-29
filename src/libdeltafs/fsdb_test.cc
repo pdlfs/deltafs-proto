@@ -355,7 +355,7 @@ class Benchmark {
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
-    fprintf(stdout, "Cache size:         %d MB\n", FLAGS_cache_size >> 20);
+    fprintf(stdout, "Block cache size:   %d MB\n", FLAGS_cache_size >> 20);
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
     fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
@@ -493,7 +493,6 @@ class Benchmark {
     const DirId& par = thread->parent_dir;
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    int ok = 0;
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
       char tmp[20];
@@ -504,9 +503,7 @@ class Benchmark {
                 double(par.ino), fname.ToString().c_str(), double(fid));
       } else {
         Status s = db_->Put(par, fname, thread->stat, &stats);
-        if (s.ok()) {
-          ok++;
-        } else {
+        if (!s.ok()) {
           fprintf(stderr, "put error: %s\n", s.ToString().c_str());
           exit(1);
         }
@@ -515,12 +512,6 @@ class Benchmark {
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
-    if (thread->tid == 0) {
-      char msg[100];
-      snprintf(msg, sizeof(msg), "(thread 0: %d of %d inserted)", ok,
-               FLAGS_num);
-      thread->stats.AddMessage(msg);
-    }
   }
 
   void Compact(ThreadState* thread) { db_->DrainCompaction(); }
@@ -686,14 +677,14 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--block_restart_interval=%d%c", &n, &junk) ==
                1) {
       pdlfs::FLAGS_block_restart_interval = n;
-    } else if (sscanf((*argv)[i], "--cache_size=%d%c", &n, &junk) == 1) {
+    } else if (sscanf((*argv)[i], "--block_cache_size=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_cache_size = n;
     } else if (sscanf((*argv)[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_bloom_bits = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
-      fprintf(stderr, "Invalid flag: '%s'\n", (*argv)[i]);
+      fprintf(stderr, "Invalid flag: \"%s\"\n", (*argv)[i]);
       BM_Usage();
       exit(1);
     }
