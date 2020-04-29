@@ -20,7 +20,7 @@
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/table.h"
 

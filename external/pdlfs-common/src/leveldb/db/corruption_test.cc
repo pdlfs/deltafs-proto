@@ -19,7 +19,7 @@
 
 #include "pdlfs-common/leveldb/db/db.h"
 #include "pdlfs-common/leveldb/db/write_batch.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/table.h"
 
 #include "pdlfs-common/cache.h"

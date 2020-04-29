@@ -19,7 +19,7 @@
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/leveldb/db/write_batch.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 
 #include "pdlfs-common/env.h"
 

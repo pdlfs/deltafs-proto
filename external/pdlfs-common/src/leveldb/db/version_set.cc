@@ -21,7 +21,7 @@
 #include "../merger.h"
 #include "../two_level_iterator.h"
 
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/infolog.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 

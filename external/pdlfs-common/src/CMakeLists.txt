@@ -44,7 +44,7 @@ set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
      db/builder.cc db/db.cc db/db_impl.cc db/db_iter.cc db/db_format.cc
      db/memtable.cc db/options.cc db/readonly.cc db/readonly_impl.cc
      db/repair.cc db/table_cache.cc db/version_edit.cc
-     db/version_set.cc db/write_batch.cc dbfiles.cc filter_block.cc
+     db/version_set.cc db/write_batch.cc filenames.cc filter_block.cc
      filter_policy.cc format.cc index_block.cc iterator.cc merger.cc
      table.cc table_builder.cc table_properties.cc
      two_level_iterator.cc)
