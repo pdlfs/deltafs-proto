@@ -274,8 +274,8 @@ Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
 
   // Collect performance stats
   if (perf != NULL) {
-    perf->getkeybytes = keyenc.size();
-    perf->getbytes = tmp.size();
+    perf->getkeybytes += keyenc.size();
+    perf->getbytes += tmp.size();
     perf->gets++;
   }
 
