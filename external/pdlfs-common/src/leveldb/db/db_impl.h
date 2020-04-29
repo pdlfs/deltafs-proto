@@ -30,7 +30,16 @@
 #include <set>
 
 namespace pdlfs {
-
+// Sanitize db options. The caller should delete result.info_log if it is not
+// equal to raw_options.info_log. The caller should also delete
+// result.block_cache if it is not equal to raw_options.block_cache. Finally,
+// the caller should delete result.table_cache if it is not equal to
+// raw_options.table_cache.
+extern DBOptions SanitizeOptions(const std::string& dbname,
+                                 const InternalKeyComparator* icmp,
+                                 const InternalFilterPolicy* ipolicy,
+                                 const DBOptions& raw_options,
+                                 bool create_infolog);
 class MemTable;
 class TableCache;
 class Version;

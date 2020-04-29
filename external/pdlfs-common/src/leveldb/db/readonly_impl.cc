@@ -10,10 +10,10 @@
  */
 
 #include "readonly_impl.h"
+#include "db_impl.h"
 #include "db_iter.h"
 #include "table_cache.h"
 #include "version_set.h"
-
 #include "../merger.h"
 
 #include "pdlfs-common/leveldb/db/snapshot.h"
