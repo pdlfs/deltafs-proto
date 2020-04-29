@@ -16,10 +16,10 @@
  */
 #pragma once
 
-#include <stddef.h>
-
 #include "pdlfs-common/compression_type.h"
-#include "pdlfs-common/leveldb/db/db_format.h"
+#include "pdlfs-common/leveldb/db/types.h"
+
+#include <stddef.h>
 
 namespace pdlfs {
 

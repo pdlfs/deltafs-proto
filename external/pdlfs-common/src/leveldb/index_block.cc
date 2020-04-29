@@ -18,6 +18,7 @@
 #include "pdlfs-common/leveldb/index_block.h"
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/block_builder.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/iterator.h"

@@ -16,9 +16,12 @@
  */
 #pragma once
 
-#include "pdlfs-common/coding.h"
+#include "pdlfs-common/leveldb/db/types.h"
+
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
 
@@ -57,7 +60,6 @@ enum ValueType {
 // ValueType, not the lowest).
 static const ValueType kValueTypeForSeek = kTypeValue;
 
-typedef uint64_t SequenceNumber;
 typedef int64_t SequenceOff;
 
 // We leave eight bits empty at the bottom so a type and sequence#
@@ -229,57 +231,4 @@ inline LookupKey::~LookupKey() {
   }
 }
 
-class Buffer {
- protected:
-  virtual ~Buffer() {}
-
- public:
-  virtual void Fill(const char* data, size_t size) = 0;
-};
-
-namespace buffer {
-class StringBuf : public Buffer {
- public:
-  virtual ~StringBuf() {}
-  explicit StringBuf(std::string* s) : s_(s) {}
-
-  virtual void Fill(const char* data, size_t size) {
-    if (size != 0) {
-      s_->assign(data, size);
-    }
-  }
-
- private:
-  std::string* s_;
-};
-
-class DirectBuf : public Buffer {
- public:
-  virtual ~DirectBuf() {}
-  explicit DirectBuf(char* p, size_t s) : p_(p), size_(s) {
-    assert(p_ != NULL);
-  }
-
-  virtual void Fill(const char* data, size_t size) {
-    if (size > size_) {
-      // We run out of space, so we record the size
-      // so the application can retry with a large enough buffer next time.
-      data_ = Slice(NULL, size);
-    } else {
-      data_ = Slice(p_, size);
-      if (size != 0) {
-        memcpy(p_, data, size);
-      }
-    }
-  }
-
-  Slice Read() { return data_; }
-
- private:
-  Slice data_;
-  char* p_;
-  size_t size_;
-};
-
-}  // namespace buffer
 }  // namespace pdlfs

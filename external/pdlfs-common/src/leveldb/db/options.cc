@@ -17,6 +17,7 @@
 
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/db/db_format.h"
 #include "pdlfs-common/leveldb/filenames.h"
 
 #include "pdlfs-common/cache.h"
