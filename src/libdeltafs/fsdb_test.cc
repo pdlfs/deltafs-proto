@@ -693,6 +693,7 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
+      fprintf(stderr, "Invalid flag: '%s'\n", (*argv)[i]);
       BM_Usage();
       exit(1);
     }
