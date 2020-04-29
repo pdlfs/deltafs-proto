@@ -45,6 +45,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       table_cache_size(1024),
       filter_bits_per_key(14),
       block_cache_size(32u << 20u),
+      block_restart_interval(16),
       level_factor(10),
       l1_compaction_trigger(5),
       l0_compaction_trigger(4),
@@ -74,6 +75,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   options.write_buffer_size = options_.write_buffer_size;
   options.table_file_size = options_.table_file_size;
   options.block_size = options_.block_size;
+  options.block_restart_interval = options_.block_restart_interval;
   options.level_factor = options_.level_factor;
   options.l1_compaction_trigger = options_.l1_compaction_trigger;
   options.l0_compaction_trigger = options_.l0_compaction_trigger;

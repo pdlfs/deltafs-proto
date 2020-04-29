@@ -109,6 +109,9 @@ int FLAGS_max_open_files = -1;
 // Initialized to default by main().
 int FLAGS_bloom_bits = -1;
 
+// Number of keys between restart points for delta encoding of keys.
+int FLAGS_block_restart_interval = -1;
+
 // Enable snappy compression.
 bool FLAGS_snappy = false;
 
@@ -561,6 +564,7 @@ class Benchmark {
     options.compression = FLAGS_snappy;
     options.disable_compaction = FLAGS_disable_compaction;
     options.table_cache_size = FLAGS_max_open_files;
+    options.block_restart_interval = FLAGS_block_restart_interval;
     options.block_cache_size = FLAGS_cache_size;
     options.filter_bits_per_key = FLAGS_bloom_bits;
     db_ = new FilesystemDb(options);
@@ -643,6 +647,8 @@ static void BM_Usage() {
 static void BM_Main(int* argc, char*** argv) {
   pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
   pdlfs::FLAGS_max_open_files = pdlfs::FilesystemDbOptions().table_cache_size;
+  pdlfs::FLAGS_block_restart_interval =
+      pdlfs::FilesystemDbOptions().block_restart_interval;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
   std::string default_db_path;
 
@@ -677,6 +683,9 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_max_open_files = n;
+    } else if (sscanf((*argv)[i], "--block_restart_interval=%d%c", &n, &junk) ==
+               1) {
+      pdlfs::FLAGS_block_restart_interval = n;
     } else if (sscanf((*argv)[i], "--cache_size=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_cache_size = n;
     } else if (sscanf((*argv)[i], "--bloom_bits=%d%c", &n, &junk) == 1) {

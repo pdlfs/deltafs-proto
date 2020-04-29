@@ -58,6 +58,8 @@ struct FilesystemDbOptions {
   size_t filter_bits_per_key;
   // Block cache size.
   size_t block_cache_size;
+  // Number of keys between restart points for delta encoding of keys.
+  int block_restart_interval;
   // The size ratio between two levels.
   int level_factor;
   // Planned number of files for level 1.
