@@ -17,7 +17,7 @@
 #pragma once
 
 #include "pdlfs-common/compression_type.h"
-#include "pdlfs-common/leveldb/db/types.h"
+#include "pdlfs-common/leveldb/types.h"
 
 #include <stddef.h>
 

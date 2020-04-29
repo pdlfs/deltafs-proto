@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/types.h"
+#include "pdlfs-common/leveldb/types.h"
 
 #include <assert.h>
 

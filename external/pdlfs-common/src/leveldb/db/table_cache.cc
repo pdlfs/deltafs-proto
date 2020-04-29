@@ -16,8 +16,8 @@
  */
 #include "table_cache.h"
 
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table.h"
 
 #include "pdlfs-common/coding.h"

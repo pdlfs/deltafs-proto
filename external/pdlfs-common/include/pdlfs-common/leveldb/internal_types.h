@@ -16,16 +16,13 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/types.h"
-
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/types.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
-
-#include <stdio.h>
 
 namespace pdlfs {
 // Grouping of constants. We may want to make some of these parameters set via

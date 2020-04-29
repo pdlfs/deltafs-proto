@@ -10,10 +10,10 @@
  */
 #include "db/memtable.h"
 
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/index_block.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/coding.h"

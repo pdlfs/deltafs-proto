@@ -21,12 +21,11 @@
 #include "version_edit.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/db_format.h"
-
 #include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/infolog.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/env.h"

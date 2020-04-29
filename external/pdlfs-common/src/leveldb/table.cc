@@ -20,11 +20,11 @@
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/index_block.h"
 #include "pdlfs-common/leveldb/iterator.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_properties.h"
 

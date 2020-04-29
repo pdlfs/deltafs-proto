@@ -18,7 +18,7 @@
 
 #include "table_file.h"
 
-#include "pdlfs-common/leveldb/db/db_format.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/status.h"
 
 #include <set>

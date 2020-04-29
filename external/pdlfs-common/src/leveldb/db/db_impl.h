@@ -19,9 +19,9 @@
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/db_format.h"
-#include "pdlfs-common/leveldb/db/snapshot.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/snapshot.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"
 

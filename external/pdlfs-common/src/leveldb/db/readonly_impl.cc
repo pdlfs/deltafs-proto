@@ -16,8 +16,8 @@
 #include "table_cache.h"
 #include "version_set.h"
 
-#include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/snapshot.h"
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"

@@ -16,8 +16,8 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/db_format.h"
-#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/status.h"
 
 /* clang-format off */
