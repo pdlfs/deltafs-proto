@@ -36,9 +36,16 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/pdlfs_platform.h"
 #include "pdlfs-common/testharness.h"
 
+#include <algorithm>
 #include <vector>
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 namespace pdlfs {
 
@@ -141,6 +148,23 @@ Slice Base64Encoding(char* const dst, uint64_t input) {
   return Slice(dst, p - dst);
 }
 
+#if defined(PDLFS_OS_LINUX)
+Slice TrimSpace(Slice s) {
+  size_t start = 0;
+  while (start < s.size() && isspace(s[start])) {
+    start++;
+  }
+  size_t limit = s.size();
+  while (limit > start && isspace(s[limit - 1])) {
+    limit--;
+  }
+
+  Slice r = s;
+  r.remove_suffix(s.size() - limit);
+  r.remove_prefix(start);
+  return r;
+}
+#endif
 void AppendWithSpace(std::string* str, Slice msg) {
   if (msg.empty()) return;
   if (!str->empty()) {
@@ -358,8 +382,8 @@ class Benchmark {
   }
 
   void PrintEnvironment() {
-#if defined(__linux)
-    time_t now = time(nullptr);
+#if defined(PDLFS_OS_LINUX)
+    time_t now = time(NULL);
     fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
 
     FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
