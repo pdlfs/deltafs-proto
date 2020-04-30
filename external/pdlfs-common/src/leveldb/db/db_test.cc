@@ -1802,7 +1802,7 @@ TEST(DBTest, MissingSSTFile) {
   ASSERT_TRUE(s.ToString().find("issing") != std::string::npos) << s.ToString();
 }
 
-TEST(DBTest, StillReadSST) {
+TEST(DBTest, NoLongerReadSST) {
   ASSERT_OK(Put("foo", "bar"));
   ASSERT_EQ("bar", Get("foo"));
 
@@ -1815,7 +1815,7 @@ TEST(DBTest, StillReadSST) {
   options.paranoid_checks = true;
   Status s = TryReopen(&options);
   ASSERT_TRUE(s.ok());
-  ASSERT_EQ("bar", Get("foo"));
+  ASSERT_EQ("NOT_FOUND", Get("foo"));
 }
 
 TEST(DBTest, FilesDeletedAfterCompaction) {
