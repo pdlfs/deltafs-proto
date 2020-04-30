@@ -54,8 +54,7 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/db_test.cc db/internal_types_test.cc db/readonly_test.cc
      db/version_edit_test.cc db/version_set_test.cc
      db/write_batch_test.cc filenames_test.cc filter_block_test.cc
-     index_block_test.cc skiplist_test.cc
-     table_test.cc)
+     skiplist_test.cc table_test.cc)
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
