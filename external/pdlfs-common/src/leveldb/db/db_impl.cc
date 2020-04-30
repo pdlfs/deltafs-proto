@@ -22,7 +22,6 @@
 #include "version_set.h"
 
 #include "../merger.h"
-#include "../table_stats.h"
 #include "../two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/block.h"
@@ -33,6 +32,7 @@
 #include "pdlfs-common/leveldb/iterator_wrapper.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -1705,14 +1705,14 @@ static Status FetchFirstKey(Table* table, Iterator* iter, InternalKey* result,
     }
   } else {
     result->DecodeFrom(iter->key());
-    const bool has_stats = TableStats::HasStats(table);
-    if (has_stats && options.paranoid_checks) {
+    const TableProperties* const props = table->GetProperties();
+    if (props != NULL && options.paranoid_checks) {
       ParsedInternalKey parsed;
       if (!ParseInternalKey(result->Encode(), &parsed)) {
         s = Status::Corruption("First key corrupted");
       } else {
-        Slice reported = TableStats::FirstKey(table);
-        const InternalKeyComparator* icmp =
+        Slice reported = props->first_key();
+        const InternalKeyComparator* const icmp =
             reinterpret_cast<const InternalKeyComparator*>(options.comparator);
         if (icmp->Compare(result->Encode(), reported) != 0) {
           s = Status::Corruption("First key corrupted");
@@ -1734,14 +1734,14 @@ static Status FetchLastKey(Table* table, Iterator* iter, InternalKey* result,
     }
   } else {
     result->DecodeFrom(iter->key());
-    const bool has_stats = TableStats::HasStats(table);
-    if (has_stats && options.paranoid_checks) {
+    const TableProperties* const props = table->GetProperties();
+    if (props != NULL && options.paranoid_checks) {
       ParsedInternalKey parsed;
       if (!ParseInternalKey(result->Encode(), &parsed)) {
         s = Status::Corruption("Last key corrupted");
       } else {
-        Slice reported = TableStats::LastKey(table);
-        const InternalKeyComparator* icmp =
+        Slice reported = props->last_key();
+        const InternalKeyComparator* const icmp =
             reinterpret_cast<const InternalKeyComparator*>(options.comparator);
         if (icmp->Compare(result->Encode(), reported) != 0) {
           s = Status::Corruption("Last key corrupted");
@@ -1765,13 +1765,13 @@ Status DBImpl::LoadLevel0Table(InsertionState* insert) {
   s = it->status();
   if (s.ok()) {
     assert(table != NULL);
-    const bool has_stats = TableStats::HasStats(table);
+    const TableProperties* const props = table->GetProperties();
     if (!insert->options->no_seq_adjustment) {
-      if (!has_stats) {
+      if (props == NULL) {
         s = Status::NotFound("Missing table stats");
       } else {
-        info->min_seq = TableStats::MinSeq(table);
-        info->max_seq = TableStats::MaxSeq(table);
+        info->min_seq = props->min_seq();
+        info->max_seq = props->max_seq();
         if (info->min_seq > info->max_seq) {
           s = Status::Corruption("Min seq > Max seq?");
         }
