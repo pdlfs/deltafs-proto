@@ -25,7 +25,7 @@ class Buffer {
   virtual ~Buffer() {}
 };
 
-namespace buffer {
+namespace db {
 class StringBuf : public Buffer {
  public:
   explicit StringBuf(std::string* s) : s_(s) {}
@@ -67,5 +67,5 @@ class DirectBuf : public Buffer {
   size_t size_;
 };
 
-}  // namespace buffer
+}  // namespace db
 }  // namespace pdlfs

@@ -1253,14 +1253,14 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
-  buffer::StringBuf buf(value);
+  db::StringBuf buf(value);
   Status s = Get(options, key, &buf);
   return s;
 }
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key, Slice* value,
                    char* scratch, size_t scratch_size) {
-  buffer::DirectBuf buf(scratch, scratch_size);
+  db::DirectBuf buf(scratch, scratch_size);
   Status s = Get(options, key, &buf);
   if (s.ok()) {
     *value = buf.Read();

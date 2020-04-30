@@ -158,14 +158,14 @@ Status ReadonlyDBImpl::InternalGet(const ReadOptions& options, const Slice& key,
 
 Status ReadonlyDBImpl::Get(const ReadOptions& options, const Slice& key,
                            std::string* value) {
-  buffer::StringBuf buf(value);
+  db::StringBuf buf(value);
   Status s = InternalGet(options, key, &buf);
   return s;
 }
 
 Status ReadonlyDBImpl::Get(const ReadOptions& options, const Slice& key,
                            Slice* value, char* scratch, size_t scratch_size) {
-  buffer::DirectBuf buf(scratch, scratch_size);
+  db::DirectBuf buf(scratch, scratch_size);
   Status s = InternalGet(options, key, &buf);
   if (s.ok()) {
     *value = buf.Read();
