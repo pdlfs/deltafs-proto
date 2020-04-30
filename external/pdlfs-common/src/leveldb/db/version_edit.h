@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "table_file.h"
+#include "builder.h"
 
 #include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/status.h"
