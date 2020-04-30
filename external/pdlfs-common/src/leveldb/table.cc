@@ -16,7 +16,6 @@
  */
 #include "filter_block.h"
 #include "index_block.h"
-#include "table_stats.h"
 #include "two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/block.h"
@@ -63,30 +62,27 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     return Status::Corruption("file is too short to be an sstable");
   }
 
+  // Read the footer
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);
-  if (!s.ok()) return s;
-
+  if (!s.ok()) {
+    return s;
+  }
   Footer footer;
   s = footer.DecodeFrom(&footer_input);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
 
   // Read the index block
   BlockContents contents;
-  IndexBlockReader* index_block = NULL;
-  if (s.ok()) {
-    ReadOptions opt;
-    if (options.paranoid_checks) {
-      opt.verify_checksums = true;
-    }
-    s = ReadBlock(file, opt, footer.index_handle(), &contents);
-    if (s.ok()) {
-      index_block = new IndexBlockReader(contents);
-    }
+  ReadOptions opt;
+  if (options.paranoid_checks) {
+    opt.verify_checksums = true;
   }
-
+  s = ReadBlock(file, opt, footer.index_handle(), &contents);
   if (s.ok()) {
     // We've successfully read the footer and the index block: we're
     // ready to serve requests.
@@ -94,16 +90,14 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     rep->options = options;
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
-    rep->index_block = index_block;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    rep->index_block = new IndexBlockReader(contents);
     rep->filter_data = NULL;
     rep->filter = NULL;
     rep->props_valid = false;
 
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
-  } else {
-    delete index_block;
   }
 
   return s;
@@ -128,7 +122,7 @@ void Table::ReadMeta(const Footer& footer) {
   Slice props_key("table.properties");
   iter->Seek(props_key);
   if (iter->Valid() && iter->key() == props_key) {
-    ReadProps(iter->value());
+    ReadProperties(iter->value());
   }
 
   if (r->options.filter_policy != NULL) {
@@ -168,9 +162,9 @@ void Table::ReadFilter(const Slice& handle_value) {
   }
 }
 
-void Table::ReadProps(const Slice& handle_value) {
+void Table::ReadProperties(const Slice& props_handle_value) {
   Rep* r = rep_;
-  Slice v = handle_value;
+  Slice v = props_handle_value;
   BlockHandle handle;
   if (!handle.DecodeFrom(&v).ok()) {
     return;
