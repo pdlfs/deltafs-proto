@@ -39,13 +39,22 @@ os:
   - linux
   - osx
 
+osx_image: xcode11.3
+dist: bionic
+
 env:
   global:
     - GIT_SSL_NO_VERIFY=true
 
-before_script:
-  - ${CXX} --version
-  - ${CC} --version
+addons:
+  apt:
+    update: false
+    packages:
+      - libsnappy-dev
+  homebrew:
+    update: false
+    packages:
+      - snappy
 
 script:
   - date
@@ -56,11 +65,11 @@ script:
     cmake --verbose=1 -DCMAKE_INSTALL_PREFIX=/tmp/deltafs \
           -DCMAKE_CXX_COMPILER=`which $CXX` \
           -DCMAKE_C_COMPILER=`which $CC` \
+          -DDELTAFS_COMMON_INTREE=ON \
+          -DDELTAFS_CXX_STANDARD=11 \
+          -DPDLFS_SNAPPY=ON \
           -DBUILD_SHARED_LIBS=ON \
           -DBUILD_TESTS=ON \
-          -DTABLEFS_COMMON_INTREE=ON \
-          -DTABLEFS_PORT_KVRANGE=OFF \
-          -DTABLEFS_PORT_LEVELDB=OFF \
           ..
   - make
   - ctest -VV --output-on-failure
