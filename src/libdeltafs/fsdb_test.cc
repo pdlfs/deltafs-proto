@@ -40,12 +40,11 @@
 #include "pdlfs-common/testharness.h"
 
 #include <algorithm>
-#include <vector>
-
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <vector>
 
 namespace pdlfs {
 
@@ -252,7 +251,7 @@ class Stats {
       else
         next_report_ += 100000;
       fprintf(stderr, "... finished %d ops (%.0f%%)%30s\r", done_,
-              double(done_) / total, "");
+              100.0 * done_ / total, "");
       fflush(stderr);
     }
   }
