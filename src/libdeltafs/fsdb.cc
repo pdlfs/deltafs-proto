@@ -31,10 +31,16 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include "fsdb.h"
 
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/options.h"
+#include "pdlfs-common/leveldb/snapshot.h"
+#include "pdlfs-common/leveldb/write_batch.h"
+
 #include "pdlfs-common/cache.h"
+#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 
@@ -84,6 +90,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
+  dbopts.env = env_;
   Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
     mdb_ = new MDB(db_);
@@ -96,9 +103,10 @@ struct FilesystemDb::Tx {
   WriteBatch bat;
 };
 
-FilesystemDb::FilesystemDb(const FilesystemDbOptions& options)
+FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* env)
     : mdb_(NULL),
       options_(options),
+      env_(env),
       filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
       table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),

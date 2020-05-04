@@ -36,15 +36,15 @@ DerivePointerAlignment: false
 IncludeBlocks:   Regroup
 IncludeCategories:
   - Regex:           '^"deltafs/'
-    Priority:        1
-  - Regex:           '^"pdlfs-common/leveldb'
     Priority:        2
-  - Regex:           '^"pdlfs-common/'
+  - Regex:           '^"pdlfs-common/leveldb'
     Priority:        3
+  - Regex:           '^"pdlfs-common/'
+    Priority:        4
   - Regex:           '^<.*\.h>'
-    Priority:        4
+    Priority:        5
   - Regex:           '^<.*'
-    Priority:        4
+    Priority:        5
   - Regex:           '.*'
-    Priority:        0
+    Priority:        1
 ...

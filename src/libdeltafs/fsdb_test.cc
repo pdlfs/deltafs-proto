@@ -33,10 +33,15 @@
  */
 #include "fsdb.h"
 
-#include "pdlfs-common/env.h"
+#include "fs.h"
+#include "fsenv.h"
+
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/options.h"
+
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/pdlfs_platform.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
 #include <algorithm>
@@ -51,12 +56,13 @@ namespace pdlfs {
 class FilesystemDbTest {
  public:
   FilesystemDbTest() : dbloc_(test::TmpDir() + "/fsdb_test") {
+    env_ = Env::GetUnBufferedIoEnv();
     DestroyDB(dbloc_, DBOptions());
     db_ = NULL;
   }
 
   Status OpenDb() {
-    db_ = new FilesystemDb(options_);
+    db_ = new FilesystemDb(options_, env_);
     return db_->Open(dbloc_);
   }
 
@@ -67,6 +73,7 @@ class FilesystemDbTest {
   std::string dbloc_;
   FilesystemDbOptions options_;
   FilesystemDb* db_;
+  Env* env_;
 };
 
 TEST(FilesystemDbTest, OpenAndClose) {  ///
@@ -348,6 +355,7 @@ struct ThreadState {
 
 class Benchmark {
  private:
+  FilesystemEnvWrapper* env_;
   FilesystemDb* db_;
 
   void PrintHeader() {
@@ -558,7 +566,7 @@ class Benchmark {
     options.block_restart_interval = FLAGS_block_restart_interval;
     options.block_cache_size = FLAGS_cache_size;
     options.filter_bits_per_key = FLAGS_bloom_bits;
-    db_ = new FilesystemDb(options);
+    db_ = new FilesystemDb(options, env_);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -567,13 +575,14 @@ class Benchmark {
   }
 
  public:
-  Benchmark() : db_(NULL) {
+  Benchmark() : env_(new FilesystemEnvWrapper(FilesystemOptions())), db_(NULL) {
     if (!FLAGS_use_existing_db) {
       DestroyDB(FLAGS_db, DBOptions());
     }
   }
 
   ~Benchmark() {  ///
+    delete env_;
     delete db_;
   }
 

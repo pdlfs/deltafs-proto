@@ -32,9 +32,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fscli.h"
+
 #include "fs.h"
 #include "fscomm.h"
 #include "fsdb.h"
+
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/options.h"
 
 #include "pdlfs-common/testharness.h"
 
@@ -47,13 +51,14 @@ class FilesystemCliTest {
   FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
+    env_ = Env::GetUnBufferedIoEnv();
     fscli_ = NULL;
   }
 
   Status OpenFilesystemCli() {
     fscli_ = new FilesystemCli(
         fscli_options_,
-        new Filesystem(options_, new FilesystemDb(db_options_)));
+        new Filesystem(options_, new FilesystemDb(db_options_, env_)));
     return fscli_->OpenLocalFilesystem(fsloc_);
   }
 
@@ -94,6 +99,7 @@ class FilesystemCliTest {
   }
 
   Stat tmp_;
+  Env* env_;
   FilesystemCliOptions fscli_options_;
   FilesystemCli* fscli_;
   FilesystemDbOptions db_options_;

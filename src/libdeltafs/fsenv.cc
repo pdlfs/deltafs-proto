@@ -34,11 +34,12 @@
 #include "fsenv.h"
 
 #include "pdlfs-common/leveldb/filenames.h"
+
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
 
-FilesystemEnv::FilesystemEnv(const FilesystemOptions& options)
+FilesystemEnvWrapper::FilesystemEnvWrapper(const FilesystemOptions& options)
     : EnvWrapper(Env::GetUnBufferedIoEnv()) {}
 
 namespace {
@@ -52,7 +53,7 @@ inline void CleanUpRepo(std::list<T*>* v) {
 
 }  // namespace
 
-FilesystemEnv::~FilesystemEnv() {
+FilesystemEnvWrapper::~FilesystemEnvWrapper() {
   CleanUpRepo(&sequentialfile_repo_);
   CleanUpRepo(&randomaccessfile_repo_);
   CleanUpRepo(&writablefile_repo_);
@@ -71,22 +72,22 @@ inline uint64_t SumUpBytes(const std::list<T*>* v) {
 
 }  // namespace
 
-size_t FilesystemEnv::TotalTableFilesOpenedForWrite() {
+size_t FilesystemEnvWrapper::TotalTableFilesOpenedForWrite() {
   MutexLock l(&mu_);
   return writablefile_repo_.size();
 }
 
-uint64_t FilesystemEnv::TotalDbBytesWritten() {
+uint64_t FilesystemEnvWrapper::TotalDbBytesWritten() {
   MutexLock l(&mu_);
   return SumUpBytes(&writablefile_repo_);
 }
 
-size_t FilesystemEnv::TotalTableFilesOpenedForRead() {
+size_t FilesystemEnvWrapper::TotalTableFilesOpenedForRead() {
   MutexLock l(&mu_);
   return randomaccessfile_repo_.size();
 }
 
-uint64_t FilesystemEnv::TotalDbBytesRead() {
+uint64_t FilesystemEnvWrapper::TotalDbBytesRead() {
   MutexLock l(&mu_);
   return SumUpBytes(&randomaccessfile_repo_);
 }
@@ -105,7 +106,8 @@ bool IsTableFile(const char* filename) {
 
 }  // namespace
 
-Status FilesystemEnv::NewSequentialFile(const char* f, SequentialFile** r) {
+Status FilesystemEnvWrapper::NewSequentialFile(  ///
+    const char* f, SequentialFile** r) {
   SequentialFile* file;
   Status s = target()->NewSequentialFile(f, &file);
   if (!s.ok()) {
@@ -121,7 +123,8 @@ Status FilesystemEnv::NewSequentialFile(const char* f, SequentialFile** r) {
   return s;
 }
 
-Status FilesystemEnv::NewRandomAccessFile(const char* f, RandomAccessFile** r) {
+Status FilesystemEnvWrapper::NewRandomAccessFile(  ///
+    const char* f, RandomAccessFile** r) {
   RandomAccessFile* file;
   Status s = target()->NewRandomAccessFile(f, &file);
   if (!s.ok()) {
@@ -137,7 +140,7 @@ Status FilesystemEnv::NewRandomAccessFile(const char* f, RandomAccessFile** r) {
   return s;
 }
 
-Status FilesystemEnv::NewWritableFile(const char* f, WritableFile** r) {
+Status FilesystemEnvWrapper::NewWritableFile(const char* f, WritableFile** r) {
   WritableFile* file;
   Status s = target()->NewWritableFile(f, &file);
   if (!s.ok()) {

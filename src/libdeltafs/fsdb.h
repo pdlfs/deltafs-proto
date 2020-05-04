@@ -33,17 +33,14 @@
  */
 #pragma once
 
-#include "pdlfs-common/env.h"
 #include "pdlfs-common/fsdbx.h"
-#include "pdlfs-common/fstypes.h"
-#include "pdlfs-common/leveldb/db.h"
-#include "pdlfs-common/leveldb/filter_policy.h"
-#include "pdlfs-common/leveldb/readonly.h"
-#include "pdlfs-common/leveldb/snapshot.h"
-#include "pdlfs-common/leveldb/write_batch.h"
-#include "pdlfs-common/status.h"
 
 namespace pdlfs {
+
+class FilterPolicy;
+class Cache;
+class Env;
+
 struct FilesystemDbOptions {
   FilesystemDbOptions();
   // Max size for a memory table.
@@ -96,7 +93,7 @@ struct FilesystemDbStats {
 
 class FilesystemDb {
  public:
-  explicit FilesystemDb(const FilesystemDbOptions& options);
+  FilesystemDb(const FilesystemDbOptions& options, Env* env);
   ~FilesystemDb();
 
   Status Open(const std::string& dbloc);
@@ -115,6 +112,7 @@ class FilesystemDb {
   typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
   MDB* mdb_;
   FilesystemDbOptions options_;
+  Env* env_;  // Not owned by us
   const FilterPolicy* filter_;
   Cache* table_cache_;
   Cache* block_cache_;

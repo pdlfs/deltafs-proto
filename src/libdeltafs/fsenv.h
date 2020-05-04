@@ -40,16 +40,18 @@
 #include <list>
 
 namespace pdlfs {
+
 struct FilesystemOptions;
+
 #if __cplusplus >= 201103L
 #define OVERRIDE override
 #else
 #define OVERRIDE
 #endif
-class FilesystemEnv : public EnvWrapper {
+class FilesystemEnvWrapper : public EnvWrapper {
  public:
-  explicit FilesystemEnv(const FilesystemOptions& options);
-  virtual ~FilesystemEnv();
+  explicit FilesystemEnvWrapper(const FilesystemOptions& options);
+  virtual ~FilesystemEnvWrapper();
 
   virtual Status NewSequentialFile(const char* f, SequentialFile** r) OVERRIDE;
   virtual Status NewRandomAccessFile(const char* f,
