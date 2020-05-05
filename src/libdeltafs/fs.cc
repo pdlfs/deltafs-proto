@@ -384,7 +384,7 @@ Status Filesystem::Mknos1(  ///
   while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
     stat->SetInodeNo(startino + m);
     stat->AssertAllSet();
-    s = CheckAndPut(who, at, name, stat, &stats);
+    s = CheckAndPut(at, name, stat, &stats);
     if (!s.ok()) {
       break;
     }
@@ -428,7 +428,7 @@ Status Filesystem::Mknod1(  ///
   dir->busy[i] = true;
   // Temporarily unlock for db operations
   dir->mu->Unlock();
-  s = CheckAndPut(who, at, name, stat, &stats);
+  s = CheckAndPut(at, name, stat, &stats);
   dir->mu->Lock();
   dir->stats->Merge(stats);
   dir->busy[i] = false;
@@ -437,7 +437,7 @@ Status Filesystem::Mknod1(  ///
 }
 
 Status Filesystem::CheckAndPut(  ///
-    const User& who, const DirId& at, const Slice& name, Stat* const stat,
+    const DirId& at, const Slice& name, Stat* const stat,
     FilesystemDbStats* const stats) {
   Status s;
   if (!options_.skip_name_collision_checks) {

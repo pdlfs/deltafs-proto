@@ -115,8 +115,8 @@ class Filesystem : public FilesystemIf {
   Status Lstat1(const User& who, const DirId& at, const Slice& name, Dir* dir,
                 const LookupStat& parent, Stat* stat);
 
-  Status CheckAndPut(const User& who, const DirId& at, const Slice& name,
-                     Stat* stat, FilesystemDbStats* stats);
+  Status CheckAndPut(const DirId& at, const Slice& name, Stat* stat,
+                     FilesystemDbStats* stats);
 
   // No copying allowed
   void operator=(const Filesystem& fs);
