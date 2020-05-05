@@ -34,7 +34,6 @@
 #pragma once
 
 #include "fsapi.h"
-#include "fsdb.h"
 
 #include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lru.h"
@@ -43,8 +42,10 @@
 namespace pdlfs {
 
 struct DirIndexOptions;
+struct DirId;
 struct User;
 
+class FilesystemDb;
 class DirIndex;
 
 // Options for controlling the filesystem.
@@ -135,7 +136,7 @@ class Filesystem : public FilesystemIf {
   // Per-directory control block.
   // Struct simultaneously serves as an hash table entry.
   struct Dir {
-    DirId id;
+    DirId* id;
     DirHandl* lru_handle;
     DirIndexOptions* giga_opts;
     DirIndex* giga;

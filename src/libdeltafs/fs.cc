@@ -33,6 +33,8 @@
  */
 #include "fs.h"
 
+#include "fsdb.h"
+
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/hash.h"
@@ -448,6 +450,7 @@ void Filesystem::DeleteDir(const Slice& key, Dir* dir) {
   Filesystem* const fs = dir->fs;
   fs->mutex_.AssertHeld();
   fs->dirs_->Remove(dir->key(), dir->hash);
+  delete dir->id;
   delete dir->giga_opts;
   delete dir->giga;
   delete dir->cv;
@@ -475,7 +478,7 @@ Status Filesystem::MaybeFetchDir(Dir* dir) {
   dir->giga_opts->num_virtual_servers = options_.vsrvs;
   dir->giga_opts->num_servers = options_.nsrvs;
 
-  const uint32_t zsrv = PickupServer(dir->id);
+  const uint32_t zsrv = PickupServer(*dir->id);
   dir->giga = new DirIndex(zsrv, dir->giga_opts);
   dir->giga->SetAll();
 
@@ -533,7 +536,7 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   dir->key_length = key.size();
   memcpy(dir->key_data, key.data(), key.size());
   dir->hash = hash;
-  dir->id = id;
+  dir->id = new DirId(id);
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
   dir->fs = this;
