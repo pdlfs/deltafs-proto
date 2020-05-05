@@ -92,15 +92,20 @@ class Filesystem : public FilesystemIf {
                        const Slice& name, Stat* stat) OVERRIDE;
 
   void SetDb(FilesystemDb* db);
-  // Deterministically assign a zeroth server to
-  // a given directory id.
+  // Deterministically calculate a zeroth server based on a specified directory
+  // id.
   static uint32_t PickupServer(const DirId& id);
 
+  Status TEST_Lstat(const User& who, const LookupStat& parent,
+                    const Slice& name, Stat* stat, FilesystemDbStats* stats);
+  Status TEST_Mkfle(const User& who, const LookupStat& parent,
+                    const Slice& name, const Stat& stat,
+                    FilesystemDbStats* stats);
   FilesystemDir* TEST_ProbeDir(const DirId& id);
   const FilesystemDbStats& TEST_FetchDbStats(FilesystemDir* dir);
   void TEST_Release(FilesystemDir* dir);
   uint32_t TEST_TotalDirsInMemory();
-  uint64_t TEST_LastIno();
+  uint64_t TEST_LastIno();  // Return the last ino assigned
 
  private:
   struct Dir;
@@ -109,14 +114,15 @@ class Filesystem : public FilesystemIf {
                 uint64_t startino, const LookupStat& parent, Dir* dir,
                 Stat* stat, uint32_t* n, FilesystemDbStats* stats);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
+                const LookupStat& parent, Dir* dir, const Stat& stat,
+                FilesystemDbStats* stats);
+  Status Lokup1(const User& who, const DirId& at, const Slice& name,
+                const LookupStat& parent, Dir* dir, LookupStat* stat,
+                FilesystemDbStats* stats);
+  Status Lstat1(const User& who, const DirId& at, const Slice& name,
                 const LookupStat& parent, Dir* dir, Stat* stat,
                 FilesystemDbStats* stats);
-  Status Lokup1(const User& who, const DirId& at, const Slice& name, Dir* dir,
-                const LookupStat& parent, LookupStat* stat,
-                FilesystemDbStats* stats);
-  Status Lstat1(const User& who, const DirId& at, const Slice& name, Dir* dir,
-                const LookupStat& parent, Stat* stat, FilesystemDbStats* stats);
-  Status CheckAndPut(const DirId& at, const Slice& name, Stat* stat,
+  Status CheckAndPut(const DirId& at, const Slice& name, const Stat& stat,
                      FilesystemDbStats* stats);
 
   // No copying allowed

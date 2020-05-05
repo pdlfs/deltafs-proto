@@ -55,16 +55,16 @@ uint32_t Filesystem::PickupServer(const DirId& id) {
 }
 
 Status Filesystem::Lokup(  ///
-    const User& who, const LookupStat& p, const Slice& name,
+    const User& who, const LookupStat& parent, const Slice& name,
     LookupStat* const stat) {
   FilesystemDbStats stats;
-  DirId at(p);
+  DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
     mutex_.Unlock();
-    s = Lokup1(who, at, name, dir, p, stat, &stats);
+    s = Lokup1(who, at, name, parent, dir, stat, &stats);
     mutex_.Lock();
     Release(dir);
   }
@@ -72,15 +72,16 @@ Status Filesystem::Lokup(  ///
 }
 
 Status Filesystem::Lstat(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* const stat) {
+    const User& who, const LookupStat& parent, const Slice& name,
+    Stat* const stat) {
   FilesystemDbStats stats;
-  DirId at(p);
+  DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
     mutex_.Unlock();
-    s = Lstat1(who, at, name, dir, p, stat, &stats);
+    s = Lstat1(who, at, name, parent, dir, stat, &stats);
     mutex_.Lock();
     Release(dir);
   }
@@ -143,7 +144,7 @@ Status Filesystem::Mkfle(  ///
     stat->SetInodeNo(myino);
     stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, parent, dir, stat, &stats);
+    s = Mknod1(who, at, name, parent, dir, *stat, &stats);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -174,7 +175,7 @@ Status Filesystem::Mkdir(  ///
     stat->SetInodeNo(myino);
     stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, parent, dir, stat, &stats);
+    s = Mknod1(who, at, name, parent, dir, *stat, &stats);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -203,6 +204,38 @@ const FilesystemDbStats& Filesystem::TEST_FetchDbStats(FilesystemDir* dir) {
 void Filesystem::TEST_Release(FilesystemDir* dir) {
   MutexLock lock(&mutex_);
   Release(reinterpret_cast<Dir*>(dir));
+}
+
+Status Filesystem::TEST_Lstat(  ///
+    const User& who, const LookupStat& parent, const Slice& name,
+    Stat* const stat, FilesystemDbStats* const stats) {
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Lstat1(who, at, name, parent, dir, stat, stats);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
+}
+
+Status Filesystem::TEST_Mkfle(  ///
+    const User& who, const LookupStat& parent, const Slice& name,
+    const Stat& stat, FilesystemDbStats* const stats) {
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Mknod1(who, at, name, parent, dir, stat, stats);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
 }
 
 uint32_t Filesystem::TEST_TotalDirsInMemory() {
@@ -283,11 +316,10 @@ bool IsLeaseOk(  ///
 }  // namespace
 
 Status Filesystem::Lokup1(  ///
-    const User& who, const DirId& at, const Slice& name, Dir* dir,
-    const LookupStat& p, LookupStat* const stat,
-    FilesystemDbStats* const stats) {
+    const User& who, const DirId& at, const Slice& name, const LookupStat& p,
+    Dir* const dir, LookupStat* const stat, FilesystemDbStats* const stats) {
   Stat tmp;
-  Status s = Lstat1(who, at, name, dir, p, &tmp, stats);
+  Status s = Lstat1(who, at, name, p, dir, &tmp, stats);
   if (s.ok()) {
     if (!S_ISDIR(tmp.FileMode())) {
       s = Status::DirExpected(Slice("Not a dir"));
@@ -301,8 +333,8 @@ Status Filesystem::Lokup1(  ///
 }
 
 Status Filesystem::Lstat1(  ///
-    const User& who, const DirId& at, const Slice& name, Dir* dir,
-    const LookupStat& p, Stat* const stat, FilesystemDbStats* const stats) {
+    const User& who, const DirId& at, const Slice& name, const LookupStat& p,
+    Dir* const dir, Stat* const stat, FilesystemDbStats* const stats) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AssertionFailed("Lease has expired");
   if (!IsLookupOk(options_, p, who))
@@ -390,7 +422,7 @@ Status Filesystem::Mknos1(  ///
   while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
     stat->SetInodeNo(startino + m);
     stat->AssertAllSet();
-    s = CheckAndPut(at, name, stat, stats);
+    s = CheckAndPut(at, name, *stat, stats);
     if (!s.ok()) {
       break;
     }
@@ -408,7 +440,7 @@ Status Filesystem::Mknos1(  ///
 
 Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, const LookupStat& p,
-    Dir* const dir, Stat* const stat, FilesystemDbStats* const stats) {
+    Dir* const dir, const Stat& stat, FilesystemDbStats* const stats) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AssertionFailed("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
@@ -442,11 +474,12 @@ Status Filesystem::Mknod1(  ///
 }
 
 Status Filesystem::CheckAndPut(  ///
-    const DirId& at, const Slice& name, Stat* const stat,
+    const DirId& at, const Slice& name, const Stat& stat,
     FilesystemDbStats* const stats) {
   Status s;
   if (!options_.skip_name_collision_checks) {
-    s = db_->Get(at, name, stat, stats);
+    Stat tmp;
+    s = db_->Get(at, name, &tmp, stats);
     if (s.ok()) {
       s = Status::AlreadyExists(name);
     } else if (s.IsNotFound()) {
@@ -454,7 +487,7 @@ Status Filesystem::CheckAndPut(  ///
     }
   }
   if (s.ok()) {
-    s = db_->Put(at, name, *stat, stats);
+    s = db_->Put(at, name, stat, stats);
   }
   return s;
 }
