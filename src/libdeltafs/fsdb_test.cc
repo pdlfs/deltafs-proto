@@ -48,6 +48,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <vector>
 
@@ -350,7 +351,7 @@ struct ThreadState {
     parent_lstat.AssertAllSet();
     stat.SetDnodeNo(0);
     stat.SetInodeNo(0);  // To be be overridden later
-    stat.SetFileMode(0660);
+    stat.SetFileMode(0660 | S_IFREG);
     stat.SetFileSize(0);
     stat.SetUserId(1);
     stat.SetGroupId(1);
