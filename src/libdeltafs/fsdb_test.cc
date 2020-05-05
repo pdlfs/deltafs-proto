@@ -324,7 +324,7 @@ struct ThreadState {
   SharedState* shared;
   Stats stats;
   std::vector<uint32_t> fids;
-  LookupStat parent_stat;
+  LookupStat parent_lstat;
   DirId parent_dir;
   Stat stat;
 
@@ -340,14 +340,14 @@ struct ThreadState {
     if (!FLAGS_shared_dir) {
       parent_dir = DirId(0, tid + 1);
     }
-    parent_stat.SetDnodeNo(parent_dir.dno);
-    parent_stat.SetInodeNo(parent_dir.ino);
-    parent_stat.SetDirMode(0777);
-    parent_stat.SetZerothServer(0);
-    parent_stat.SetUserId(1);
-    parent_stat.SetGroupId(1);
-    parent_stat.SetLeaseDue(-1);
-    parent_stat.AssertAllSet();
+    parent_lstat.SetDnodeNo(parent_dir.dno);
+    parent_lstat.SetInodeNo(parent_dir.ino);
+    parent_lstat.SetDirMode(0777);
+    parent_lstat.SetZerothServer(0);
+    parent_lstat.SetUserId(1);
+    parent_lstat.SetGroupId(1);
+    parent_lstat.SetLeaseDue(-1);
+    parent_lstat.AssertAllSet();
     stat.SetDnodeNo(0);
     stat.SetInodeNo(0);  // To be be overridden later
     stat.SetFileMode(0660);
@@ -537,7 +537,7 @@ class Benchmark {
       } else {
         Status s;
         if (FLAGS_withfs) {
-          s = fs_->Mkfle(me_, thread->parent_stat, fname, 0660, &buf);
+          s = fs_->Mkfle(me_, thread->parent_lstat, fname, 0660, &buf);
         } else {
           s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
         }
@@ -549,7 +549,7 @@ class Benchmark {
       thread->stats.FinishedSingleOp(FLAGS_num);
     }
     if (FLAGS_withfs) {
-      if (FLAGS_shared_dir && thread->tid == 0)
+      if (!FLAGS_shared_dir || thread->tid == 0)
         stats.Merge(fs_->TEST_FetchDbStats(dir));
       fs_->TEST_Release(dir);
     }
@@ -589,7 +589,7 @@ class Benchmark {
       } else {
         Status s;
         if (FLAGS_withfs) {
-          s = fs_->Lstat(me_, thread->parent_stat, fname, &buf);
+          s = fs_->Lstat(me_, thread->parent_lstat, fname, &buf);
         } else {
           s = db_->Get(thread->parent_dir, fname, &buf, &stats);
         }
@@ -603,7 +603,7 @@ class Benchmark {
       thread->stats.FinishedSingleOp(FLAGS_reads);
     }
     if (FLAGS_withfs) {
-      if (FLAGS_shared_dir && thread->tid == 0)
+      if (!FLAGS_shared_dir || thread->tid == 0)
         stats.Merge(fs_->TEST_FetchDbStats(dir));
       fs_->TEST_Release(dir);
     }
