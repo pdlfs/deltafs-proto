@@ -55,14 +55,16 @@ uint32_t Filesystem::PickupServer(const DirId& id) {
 }
 
 Status Filesystem::Lokup(  ///
-    const User& who, const LookupStat& p, const Slice& name, LookupStat* stat) {
+    const User& who, const LookupStat& p, const Slice& name,
+    LookupStat* const stat) {
+  FilesystemDbStats stats;
   DirId at(p);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
     mutex_.Unlock();
-    s = Lokup1(who, at, name, dir, p, stat);
+    s = Lokup1(who, at, name, dir, p, stat, &stats);
     mutex_.Lock();
     Release(dir);
   }
@@ -70,14 +72,15 @@ Status Filesystem::Lokup(  ///
 }
 
 Status Filesystem::Lstat(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+    const User& who, const LookupStat& p, const Slice& name, Stat* const stat) {
+  FilesystemDbStats stats;
   DirId at(p);
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
     mutex_.Unlock();
-    s = Lstat1(who, at, name, dir, p, stat);
+    s = Lstat1(who, at, name, dir, p, stat, &stats);
     mutex_.Lock();
     Release(dir);
   }
@@ -88,6 +91,7 @@ Status Filesystem::Lstat(  ///
 Status Filesystem::Mkfls(  ///
     const User& who, const LookupStat& parent, const Slice& namearr,
     uint32_t mode, uint32_t* n) {
+  FilesystemDbStats stats;
   DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
@@ -106,7 +110,7 @@ Status Filesystem::Mkfls(  ///
     uint64_t myino = inoq_;  // The last ino for the batch
     uint64_t startino = myino - *n + 1;
     mutex_.Unlock();
-    s = Mknos1(who, at, namearr, startino, parent, dir, &stat, n);
+    s = Mknos1(who, at, namearr, startino, parent, dir, &stat, n, &stats);
     mutex_.Lock();
     // Reuse inodes left by the batch
     if (!s.ok()) {
@@ -120,7 +124,8 @@ Status Filesystem::Mkfls(  ///
 
 Status Filesystem::Mkfle(  ///
     const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
-    Stat* stat) {
+    Stat* const stat) {
+  FilesystemDbStats stats;
   DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
@@ -138,7 +143,7 @@ Status Filesystem::Mkfle(  ///
     stat->SetInodeNo(myino);
     stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, parent, dir, stat);
+    s = Mknod1(who, at, name, parent, dir, stat, &stats);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -150,7 +155,8 @@ Status Filesystem::Mkfle(  ///
 
 Status Filesystem::Mkdir(  ///
     const User& who, const LookupStat& parent, const Slice& name, uint32_t mode,
-    Stat* stat) {
+    Stat* const stat) {
+  FilesystemDbStats stats;
   DirId at(parent);
   Dir* dir;
   MutexLock lock(&mutex_);
@@ -168,7 +174,7 @@ Status Filesystem::Mkdir(  ///
     stat->SetInodeNo(myino);
     stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, parent, dir, stat);
+    s = Mknod1(who, at, name, parent, dir, stat, &stats);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -278,9 +284,10 @@ bool IsLeaseOk(  ///
 
 Status Filesystem::Lokup1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
-    const LookupStat& p, LookupStat* stat) {
+    const LookupStat& p, LookupStat* const stat,
+    FilesystemDbStats* const stats) {
   Stat tmp;
-  Status s = Lstat1(who, at, name, dir, p, &tmp);
+  Status s = Lstat1(who, at, name, dir, p, &tmp, stats);
   if (s.ok()) {
     if (!S_ISDIR(tmp.FileMode())) {
       s = Status::DirExpected(Slice("Not a dir"));
@@ -295,12 +302,11 @@ Status Filesystem::Lokup1(  ///
 
 Status Filesystem::Lstat1(  ///
     const User& who, const DirId& at, const Slice& name, Dir* dir,
-    const LookupStat& p, Stat* stat) {
+    const LookupStat& p, Stat* const stat, FilesystemDbStats* const stats) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
-    return Status::AccessDenied("Lease has expired");
+    return Status::AssertionFailed("Lease has expired");
   if (!IsLookupOk(options_, p, who))
     return Status::AccessDenied("No dir x perm");
-  FilesystemDbStats stats;
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
@@ -350,20 +356,20 @@ Status Filesystem::Lstat1(  ///
   // write operations are blocked. The split operation bulk deletes
   // the half of partition that has been moved and install a new
   // directory index.
-  s = db_->Get(at, name, stat, &stats);
+  s = db_->Get(at, name, stat, stats);
   dir->mu->Lock();
-  dir->stats->Merge(stats);
+  dir->stats->Merge(*stats);
   return s;
 }
 
 Status Filesystem::Mknos1(  ///
     const User& who, const DirId& at, const Slice& namearr, uint64_t startino,
-    const LookupStat& p, Dir* const dir, Stat* const stat, uint32_t* const n) {
+    const LookupStat& p, Dir* const dir, Stat* const stat, uint32_t* const n,
+    FilesystemDbStats* const stats) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
-    return Status::AccessDenied("Lease has expired");
+    return Status::AssertionFailed("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
     return Status::AccessDenied("No write perm");
-  FilesystemDbStats stats;
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
@@ -384,7 +390,7 @@ Status Filesystem::Mknos1(  ///
   while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
     stat->SetInodeNo(startino + m);
     stat->AssertAllSet();
-    s = CheckAndPut(at, name, stat, &stats);
+    s = CheckAndPut(at, name, stat, stats);
     if (!s.ok()) {
       break;
     }
@@ -392,7 +398,7 @@ Status Filesystem::Mknos1(  ///
   }
   *n = m;
   dir->mu->Lock();
-  dir->stats->Merge(stats);
+  dir->stats->Merge(*stats);
   for (uint32_t i = 0; i < kWays; i++) {
     dir->busy[i] = false;
   }
@@ -402,12 +408,11 @@ Status Filesystem::Mknos1(  ///
 
 Status Filesystem::Mknod1(  ///
     const User& who, const DirId& at, const Slice& name, const LookupStat& p,
-    Dir* const dir, Stat* const stat) {
+    Dir* const dir, Stat* const stat, FilesystemDbStats* const stats) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
-    return Status::AccessDenied("Lease has expired");
+    return Status::AssertionFailed("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
     return Status::AccessDenied("No write perm");
-  FilesystemDbStats stats;
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
@@ -428,9 +433,9 @@ Status Filesystem::Mknod1(  ///
   dir->busy[i] = true;
   // Temporarily unlock for db operations
   dir->mu->Unlock();
-  s = CheckAndPut(at, name, stat, &stats);
+  s = CheckAndPut(at, name, stat, stats);
   dir->mu->Lock();
-  dir->stats->Merge(stats);
+  dir->stats->Merge(*stats);
   dir->busy[i] = false;
   dir->cv->SignalAll();
   return s;

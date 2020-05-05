@@ -107,14 +107,15 @@ class Filesystem : public FilesystemIf {
 
   Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
                 uint64_t startino, const LookupStat& parent, Dir* dir,
-                Stat* stat, uint32_t* n);
+                Stat* stat, uint32_t* n, FilesystemDbStats* stats);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
-                const LookupStat& parent, Dir* dir, Stat* stat);
+                const LookupStat& parent, Dir* dir, Stat* stat,
+                FilesystemDbStats* stats);
   Status Lokup1(const User& who, const DirId& at, const Slice& name, Dir* dir,
-                const LookupStat& parent, LookupStat* stat);
+                const LookupStat& parent, LookupStat* stat,
+                FilesystemDbStats* stats);
   Status Lstat1(const User& who, const DirId& at, const Slice& name, Dir* dir,
-                const LookupStat& parent, Stat* stat);
-
+                const LookupStat& parent, Stat* stat, FilesystemDbStats* stats);
   Status CheckAndPut(const DirId& at, const Slice& name, Stat* stat,
                      FilesystemDbStats* stats);
 
