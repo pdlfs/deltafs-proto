@@ -99,9 +99,6 @@ int FLAGS_reads = -1;
 // Fire ops through the Filesystem interface atop FilesystemDb.
 bool FLAGS_withfs = false;
 
-// Simply print operations to be sent to db.
-bool FLAGS_dryrun = false;
-
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
 
@@ -119,6 +116,12 @@ int FLAGS_bloom_bits = -1;
 
 // Number of keys between restart points for delta encoding of keys.
 int FLAGS_block_restart_interval = -1;
+
+// User id for the bench.
+int FLAGS_uid = 1;
+
+// Group id.
+int FLAGS_gid = 1;
 
 // Enable snappy compression.
 bool FLAGS_snappy = false;
@@ -345,16 +348,16 @@ struct ThreadState {
     parent_lstat.SetInodeNo(parent_dir.ino);
     parent_lstat.SetDirMode(0777);
     parent_lstat.SetZerothServer(0);
-    parent_lstat.SetUserId(1);
-    parent_lstat.SetGroupId(1);
+    parent_lstat.SetUserId(FLAGS_uid);
+    parent_lstat.SetGroupId(FLAGS_gid);
     parent_lstat.SetLeaseDue(-1);
     parent_lstat.AssertAllSet();
     stat.SetDnodeNo(0);
     stat.SetInodeNo(0);  // To be be overridden later
     stat.SetFileMode(0660 | S_IFREG);
     stat.SetFileSize(0);
-    stat.SetUserId(1);
-    stat.SetGroupId(1);
+    stat.SetUserId(FLAGS_uid);
+    stat.SetGroupId(FLAGS_gid);
     stat.SetZerothServer(-1);
     stat.SetChangeTime(0);
     stat.SetModifyTime(0);
@@ -384,7 +387,6 @@ class Benchmark {
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_withfs);
-    fprintf(stdout, "Dry run:            %d\n", FLAGS_dryrun);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -521,38 +523,22 @@ class Benchmark {
   void Write(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    FilesystemDir* dir;
-    if (FLAGS_withfs) {
-      dir = fs_->TEST_ProbeDir(thread->parent_dir);
-    }
     char tmp[20];
-    Stat buf;
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
-      if (FLAGS_dryrun) {
-        fprintf(stdout, "put dir[%ld,%ld]/%s: fid=%ld\n",
-                long(thread->parent_dir.dno), long(thread->parent_dir.ino),
-                fname.ToString().c_str(), long(fid));
-      } else {
-        Status s;
-        if (FLAGS_withfs) {
-          s = fs_->Mkfle(me_, thread->parent_lstat, fname, 0660, &buf);
-        } else {
-          s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
-        }
-        if (!s.ok()) {
-          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
-          exit(1);
-        }
+      Status s;
+      if (FLAGS_withfs)
+        s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
+                            &stats);
+      else
+        s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
+      if (!s.ok()) {
+        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+        exit(1);
       }
       thread->stats.FinishedSingleOp(FLAGS_num);
-    }
-    if (FLAGS_withfs) {
-      if (!FLAGS_shared_dir || thread->tid == 0)
-        stats.Merge(fs_->TEST_FetchDbStats(dir));
-      fs_->TEST_Release(dir);
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
@@ -574,39 +560,25 @@ class Benchmark {
   void Read(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    FilesystemDir* dir;
-    if (FLAGS_withfs) {
-      dir = fs_->TEST_ProbeDir(thread->parent_dir);
-    }
     char tmp[20];
     Stat buf;
     int found = 0;
     for (int i = 0; i < FLAGS_reads; i++) {
       const uint64_t fid = tid | thread->fids[i];
       Slice fname = Base64Encoding(tmp, fid);
-      if (FLAGS_dryrun) {
-        fprintf(stdout, "get dir[%ld,%ld]/%s\n", long(thread->parent_dir.dno),
-                long(thread->parent_dir.ino), fname.ToString().c_str());
+      Status s;
+      if (FLAGS_withfs) {
+        s = fs_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
       } else {
-        Status s;
-        if (FLAGS_withfs) {
-          s = fs_->Lstat(me_, thread->parent_lstat, fname, &buf);
-        } else {
-          s = db_->Get(thread->parent_dir, fname, &buf, &stats);
-        }
-        if (s.ok()) {
-          found++;
-        } else if (!s.IsNotFound()) {
-          fprintf(stderr, "get error: %s\n", s.ToString().c_str());
-          exit(1);
-        }
+        s = db_->Get(thread->parent_dir, fname, &buf, &stats);
+      }
+      if (s.ok()) {
+        found++;
+      } else if (!s.IsNotFound()) {
+        fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+        exit(1);
       }
       thread->stats.FinishedSingleOp(FLAGS_reads);
-    }
-    if (FLAGS_withfs) {
-      if (!FLAGS_shared_dir || thread->tid == 0)
-        stats.Merge(fs_->TEST_FetchDbStats(dir));
-      fs_->TEST_Release(dir);
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);
@@ -641,7 +613,8 @@ class Benchmark {
 
  public:
   Benchmark() : db_(NULL), fs_(NULL) {
-    me_.gid = me_.uid = 1;
+    me_.uid = FLAGS_uid;
+    me_.gid = FLAGS_gid;
     if (!FLAGS_use_existing_db) {
       DestroyDB(FLAGS_db, DBOptions());
     }
@@ -731,9 +704,6 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--withfs=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_withfs = n;
-    } else if (sscanf((*argv)[i], "--dryrun=%d%c", &n, &junk) == 1 &&
-               (n == 0 || n == 1)) {
-      pdlfs::FLAGS_dryrun = n;
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;
