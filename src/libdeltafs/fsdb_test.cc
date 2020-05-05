@@ -355,7 +355,7 @@ struct ThreadState {
     stat.SetUserId(1);
     stat.SetGroupId(1);
     stat.SetZerothServer(-1);
-    stat.SetChangeTime(CurrentMicros());
+    stat.SetChangeTime(0);
     stat.SetModifyTime(0);
     stat.AssertAllSet();
   }
@@ -520,6 +520,10 @@ class Benchmark {
   void Write(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
+    FilesystemDir* dir;
+    if (FLAGS_withfs) {
+      dir = fs_->TEST_ProbeDir(thread->parent_dir);
+    }
     char tmp[20];
     Stat buf;
     for (int i = 0; i < FLAGS_num; i++) {
@@ -544,15 +548,35 @@ class Benchmark {
       }
       thread->stats.FinishedSingleOp(FLAGS_num);
     }
+    if (FLAGS_withfs) {
+      if (FLAGS_shared_dir && thread->tid == 0)
+        stats.Merge(fs_->TEST_FetchDbStats(dir));
+      fs_->TEST_Release(dir);
+    }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
   }
 
-  void Compact(ThreadState* thread) { db_->DrainCompaction(); }
+  void Compact(ThreadState* thread) {
+    Status s = db_->Flush();
+    if (!s.ok()) {
+      fprintf(stderr, "flush error: %s\n", s.ToString().c_str());
+      exit(1);
+    }
+    s = db_->DrainCompaction();
+    if (!s.ok()) {
+      fprintf(stderr, "drain compaction error: %s\n", s.ToString().c_str());
+      exit(1);
+    }
+  }
 
   void Read(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
+    FilesystemDir* dir;
+    if (FLAGS_withfs) {
+      dir = fs_->TEST_ProbeDir(thread->parent_dir);
+    }
     char tmp[20];
     Stat buf;
     int found = 0;
@@ -577,6 +601,11 @@ class Benchmark {
         }
       }
       thread->stats.FinishedSingleOp(FLAGS_reads);
+    }
+    if (FLAGS_withfs) {
+      if (FLAGS_shared_dir && thread->tid == 0)
+        stats.Merge(fs_->TEST_FetchDbStats(dir));
+      fs_->TEST_Release(dir);
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);

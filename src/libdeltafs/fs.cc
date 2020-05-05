@@ -428,8 +428,8 @@ Status Filesystem::CheckAndPut(  ///
     uint64_t mydno = options_.mydno;
     uint32_t mymo = type;
     mymo |= (mode & ACCESSPERMS);
-    s = Put(who, at, name, mydno, myino, PickupServer(DirId(mydno, myino)),
-            mymo, stat, stats);
+    uint32_t zsrv = S_ISDIR(type) ? PickupServer(DirId(mydno, myino)) : -1;
+    s = Put(who, at, name, mydno, myino, zsrv, mymo, stat, stats);
   }
   return s;
 }
