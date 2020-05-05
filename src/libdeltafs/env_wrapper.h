@@ -48,7 +48,7 @@
 namespace pdlfs {
 
 // An Env wrapper implementation that collects read and write performance stats
-// for performance monitoring and debugging.
+// for files created through it.
 class FilesystemDbEnvWrapper : public EnvWrapper {
  public:
   explicit FilesystemDbEnvWrapper(const FilesystemDbOptions& options);
