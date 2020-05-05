@@ -93,12 +93,20 @@ Status Filesystem::Mkfls(  ///
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
+    Stat stat;
+    stat.SetDnodeNo(options_.mydno);
+    stat.SetChangeTime(0);
+    stat.SetModifyTime(0);
+    stat.SetUserId(who.uid);
+    stat.SetGroupId(who.gid);
+    stat.SetFileSize(0);
+    stat.SetFileMode(S_IFREG | (mode & ACCESSPERMS));
+    stat.SetZerothServer(-1);
     inoq_ += *n;
     uint64_t myino = inoq_;  // The last ino for the batch
     uint64_t startino = myino - *n + 1;
-    const uint32_t t = S_IFREG;
     mutex_.Unlock();
-    s = Mknos1(who, at, namearr, startino, t, mode, parent, dir, n);
+    s = Mknos1(who, at, namearr, startino, parent, dir, &stat, n);
     mutex_.Lock();
     // Reuse inodes left by the batch
     if (!s.ok()) {
@@ -118,10 +126,19 @@ Status Filesystem::Mkfle(  ///
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
-    uint64_t myino = ++inoq_;
-    const uint32_t t = S_IFREG;
+    stat->SetDnodeNo(options_.mydno);
+    stat->SetChangeTime(0);
+    stat->SetModifyTime(0);
+    stat->SetUserId(who.uid);
+    stat->SetGroupId(who.gid);
+    stat->SetFileSize(0);
+    stat->SetFileMode(S_IFREG | (mode & ACCESSPERMS));
+    stat->SetZerothServer(-1);
+    const uint64_t myino = ++inoq_;
+    stat->SetInodeNo(myino);
+    stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, myino, t, mode, parent, dir, stat);
+    s = Mknod1(who, at, name, parent, dir, stat);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -139,10 +156,19 @@ Status Filesystem::Mkdir(  ///
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
-    uint64_t myino = ++inoq_;
-    const uint32_t t = S_IFDIR;
+    stat->SetDnodeNo(options_.mydno);
+    stat->SetChangeTime(0);
+    stat->SetModifyTime(0);
+    stat->SetUserId(who.uid);
+    stat->SetGroupId(who.gid);
+    stat->SetFileSize(0);
+    stat->SetFileMode(S_IFDIR | (mode & ACCESSPERMS));
+    const uint64_t myino = ++inoq_;
+    stat->SetZerothServer(PickupServer(DirId(options_.mydno, myino)));
+    stat->SetInodeNo(myino);
+    stat->AssertAllSet();
     mutex_.Unlock();
-    s = Mknod1(who, at, name, myino, t, mode, parent, dir, stat);
+    s = Mknod1(who, at, name, parent, dir, stat);
     mutex_.Lock();
     if (!s.ok()) {
       TryReuseIno(myino);
@@ -332,8 +358,7 @@ Status Filesystem::Lstat1(  ///
 
 Status Filesystem::Mknos1(  ///
     const User& who, const DirId& at, const Slice& namearr, uint64_t startino,
-    uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
-    uint32_t* const n) {
+    const LookupStat& p, Dir* const dir, Stat* const stat, uint32_t* const n) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
@@ -353,12 +378,13 @@ Status Filesystem::Mknos1(  ///
     dir->busy[i] = true;
   }
   dir->mu->Unlock();
-  Stat tmp;
   size_t m = 0;
   Slice input = namearr;
   Slice name;
   while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
-    s = CheckAndPut(who, at, name, startino + m, type, mode, &tmp, &stats);
+    stat->SetInodeNo(startino + m);
+    stat->AssertAllSet();
+    s = CheckAndPut(who, at, name, stat, &stats);
     if (!s.ok()) {
       break;
     }
@@ -375,9 +401,8 @@ Status Filesystem::Mknos1(  ///
 }
 
 Status Filesystem::Mknod1(  ///
-    const User& who, const DirId& at, const Slice& name, uint64_t myino,
-    uint32_t type, uint32_t mode, const LookupStat& p, Dir* const dir,
-    Stat* const stat) {
+    const User& who, const DirId& at, const Slice& name, const LookupStat& p,
+    Dir* const dir, Stat* const stat) {
   if (!IsLeaseOk(options_, p, CurrentMicros()))
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
@@ -403,7 +428,7 @@ Status Filesystem::Mknod1(  ///
   dir->busy[i] = true;
   // Temporarily unlock for db operations
   dir->mu->Unlock();
-  s = CheckAndPut(who, at, name, myino, type, mode, stat, &stats);
+  s = CheckAndPut(who, at, name, stat, &stats);
   dir->mu->Lock();
   dir->stats->Merge(stats);
   dir->busy[i] = false;
@@ -412,43 +437,21 @@ Status Filesystem::Mknod1(  ///
 }
 
 Status Filesystem::CheckAndPut(  ///
-    const User& who, const DirId& at, const Slice& name, uint64_t myino,
-    uint32_t type, uint32_t mode, Stat* const stat,
+    const User& who, const DirId& at, const Slice& name, Stat* const stat,
     FilesystemDbStats* const stats) {
   Status s;
   if (!options_.skip_name_collision_checks) {
-    s = db_->Get(at, name, stat, NULL);
+    s = db_->Get(at, name, stat, stats);
     if (s.ok()) {
-      s = Status::AlreadyExists(Slice());
+      s = Status::AlreadyExists(name);
     } else if (s.IsNotFound()) {
       s = Status::OK();
     }
   }
   if (s.ok()) {
-    uint64_t mydno = options_.mydno;
-    uint32_t mymo = type;
-    mymo |= (mode & ACCESSPERMS);
-    uint32_t zsrv = S_ISDIR(type) ? PickupServer(DirId(mydno, myino)) : -1;
-    s = Put(who, at, name, mydno, myino, zsrv, mymo, stat, stats);
+    s = db_->Put(at, name, *stat, stats);
   }
   return s;
-}
-
-Status Filesystem::Put(  ///
-    const User& who, const DirId& at, const Slice& name, uint64_t mydno,
-    uint64_t myino, uint32_t zsrv, uint32_t mymo, Stat* const stat,
-    FilesystemDbStats* const stats) {
-  stat->SetDnodeNo(mydno);
-  stat->SetInodeNo(myino);
-  stat->SetZerothServer(zsrv);
-  stat->SetFileMode(mymo);
-  stat->SetFileSize(0);
-  stat->SetUserId(who.uid);
-  stat->SetGroupId(who.gid);
-  stat->SetModifyTime(0);
-  stat->SetChangeTime(0);
-  stat->AssertAllSet();
-  return db_->Put(at, name, *stat, stats);
 }
 
 namespace {

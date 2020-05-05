@@ -106,10 +106,9 @@ class Filesystem : public FilesystemIf {
   struct Dir;
 
   Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
-                uint64_t startino, uint32_t type, uint32_t mode,
-                const LookupStat& parent, Dir* dir, uint32_t* n);
+                uint64_t startino, const LookupStat& parent, Dir* dir,
+                Stat* stat, uint32_t* n);
   Status Mknod1(const User& who, const DirId& at, const Slice& name,
-                uint64_t ino, uint32_t type, uint32_t mode,
                 const LookupStat& parent, Dir* dir, Stat* stat);
   Status Lokup1(const User& who, const DirId& at, const Slice& name, Dir* dir,
                 const LookupStat& parent, LookupStat* stat);
@@ -117,11 +116,7 @@ class Filesystem : public FilesystemIf {
                 const LookupStat& parent, Stat* stat);
 
   Status CheckAndPut(const User& who, const DirId& at, const Slice& name,
-                     uint64_t ino, uint32_t type, uint32_t mode, Stat* stat,
-                     FilesystemDbStats* stats);
-  Status Put(const User& who, const DirId& at, const Slice& name, uint64_t dno,
-             uint64_t ino, uint32_t zsrv, uint32_t mode, Stat* stat,
-             FilesystemDbStats* stats);
+                     Stat* stat, FilesystemDbStats* stats);
 
   // No copying allowed
   void operator=(const Filesystem& fs);
