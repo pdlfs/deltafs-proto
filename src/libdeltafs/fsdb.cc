@@ -46,7 +46,7 @@
 namespace pdlfs {
 
 FilesystemDbOptions::FilesystemDbOptions()
-    : write_buffer_size(2u << 20u),
+    : write_buffer_size(4u << 20u),
       table_file_size(2u << 20u),
       block_size(64u << 10u),
       table_cache_size(1024),
