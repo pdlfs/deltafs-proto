@@ -32,7 +32,9 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fscli.h"
+
 #include "fs.h"
+#include "fsdb.h"
 
 #include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/mutexlock.h"
@@ -998,6 +1000,7 @@ void FilesystemCli::Release(Dir* dir) {
   if (!dir->refs) {
     dirs_->Remove(dir->key(), dir->hash);
     LIST_Remove(dir);
+    delete dir->id;
     delete dir->giga_opts;
     delete dir->giga;
     delete dir->mu;
@@ -1017,7 +1020,7 @@ Status FilesystemCli::FetchDir(uint32_t zeroth_server, Dir* dir) {
   dir->giga_opts->num_virtual_servers = options_.vsrvs;
   dir->giga_opts->num_servers = options_.nsrvs;
 
-  const uint32_t zsrv = Filesystem::PickupServer(dir->id);
+  const uint32_t zsrv = Filesystem::PickupServer(*dir->id);
   dir->giga = new DirIndex(zsrv, dir->giga_opts);
   dir->giga->SetAll();
 
@@ -1038,14 +1041,14 @@ Status FilesystemCli::AcquireDir(const DirId& id, Dir** result) {
   Dir* dir = *pos;
   if (dir != NULL) {
     *result = dir;
-    assert(dir->id == id);
+    assert(*dir->id == id);
     dir->refs++;
     return s;
   }
 
   // If we cannot find the entry, we create it...
   dir = static_cast<Dir*>(malloc(sizeof(Dir) - 1 + key.size()));
-  dir->id = id;
+  dir->id = new DirId(id);
   dir->key_length = key.size();
   memcpy(dir->key_data, key.data(), key.size());
   dir->hash = hash;
@@ -1093,7 +1096,7 @@ void FilesystemCli::Ref(Partition* part) {
 Status FilesystemCli::AcquirePartition(Dir* dir, int ix, Partition** result) {
   mutex_.AssertHeld();
   char tmp[30];
-  Slice key = LRUKey(dir->id, ix, tmp);
+  Slice key = LRUKey(*dir->id, ix, tmp);
   const uint32_t hash = HashKey(key);
   Status s;
 

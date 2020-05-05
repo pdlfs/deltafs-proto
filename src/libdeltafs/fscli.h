@@ -35,7 +35,6 @@
 
 #include "fscomm.h"
 
-#include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
@@ -43,8 +42,11 @@
 
 namespace pdlfs {
 
-struct FilesystemOptions;
 struct DirIndexOptions;
+struct DirId;
+
+class Filesystem;
+class DirIndex;
 
 struct FilesystemCliOptions {
   FilesystemCliOptions();
@@ -57,9 +59,6 @@ struct FilesystemCliOptions {
   // Number of servers
   int nsrvs;
 };
-
-class Filesystem;
-class DirIndex;
 
 // A filesystem client may either talk to a local metadata manager via the
 // FilesystemIf interface or talk to a remote filesystem server through rpc.
@@ -204,7 +203,7 @@ class FilesystemCli {
   // partitions. Per-directory giga status is serialized here.
   // Struct simultaneously serves as an hash table entry.
   struct Dir {
-    DirId id;
+    DirId* id;
     DirIndexOptions* giga_opts;
     DirIndex* giga;
     Dir* next_hash;
