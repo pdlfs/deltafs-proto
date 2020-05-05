@@ -333,7 +333,7 @@ struct ThreadState {
       : tid(tid), shared(NULL), parent_dir(0, 0) {
     fids.reserve(FLAGS_num);
     for (int i = 0; i < FLAGS_num; i++) {
-      fids.push_back(i);
+      fids.push_back(i + 1);
     }
     if (random_order) {
       std::random_shuffle(fids.begin(), fids.end(), STLRand(base_seed + tid));
