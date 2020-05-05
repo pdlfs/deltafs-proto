@@ -39,6 +39,11 @@
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
 
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 namespace pdlfs {
 
 struct DirIndexOptions;
@@ -67,17 +72,11 @@ struct FilesystemOptions {
   int mydno;
 };
 
-#if __cplusplus >= 201103L
-#define OVERRIDE override
-#else
-#define OVERRIDE
-#endif
 class Filesystem : public FilesystemIf {
  public:
-  Filesystem(const FilesystemOptions& options, FilesystemDb* db);
+  explicit Filesystem(const FilesystemOptions& options);
   virtual ~Filesystem();
 
-  Status OpenFilesystem(const std::string& fsloc);
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode,
                        uint32_t* n) OVERRIDE;
@@ -90,6 +89,7 @@ class Filesystem : public FilesystemIf {
   virtual Status Lstat(const User& who, const LookupStat& parent,
                        const Slice& name, Stat* stat) OVERRIDE;
 
+  void SetDb(FilesystemDb* db);
   // Deterministically assign a zeroth server to
   // a given directory id.
   static uint32_t PickupServer(const DirId& id);
@@ -182,8 +182,8 @@ class Filesystem : public FilesystemIf {
 
   // Constant after server opening
   FilesystemOptions options_;
-  FilesystemDb* db_;
+  FilesystemDb* db_;  // db_ is not owned by us
 };
-#undef OVERRIDE
 
 }  // namespace pdlfs
+#undef OVERRIDE

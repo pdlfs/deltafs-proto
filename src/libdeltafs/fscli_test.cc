@@ -48,21 +48,31 @@ class FilesystemCliTest {
  public:
   typedef FilesystemCli::BATCH BATCH;
   typedef FilesystemCli::AT AT;
-  FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
+  FilesystemCliTest()
+      : fsdb_(NULL),
+        fs_(NULL),
+        fscli_(NULL),
+        fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
-    fscli_ = NULL;
   }
 
   Status OpenFilesystemCli() {
-    fscli_ = new FilesystemCli(
-        fscli_options_,
-        new Filesystem(options_, new FilesystemDb(db_options_)));
-    return fscli_->OpenLocalFilesystem(fsloc_);
+    fsdb_ = new FilesystemDb(fsdbopts_);
+    Status s = fsdb_->Open(fsloc_);
+    if (s.ok()) {
+      fscli_ = new FilesystemCli(fscliopts_);
+      fs_ = new Filesystem(fsopts_);
+      fscli_->SetLocalFilesystem(fs_);
+      fs_->SetDb(fsdb_);
+    }
+    return s;
   }
 
-  ~FilesystemCliTest() {  ///
+  ~FilesystemCliTest() {
     delete fscli_;
+    delete fs_;
+    delete fsdb_;
   }
 
   Status Atdir(const char* path, AT** result, const AT* at = NULL) {
@@ -98,10 +108,12 @@ class FilesystemCliTest {
   }
 
   Stat tmp_;
-  FilesystemCliOptions fscli_options_;
+  FilesystemDbOptions fsdbopts_;
+  FilesystemDb* fsdb_;
+  FilesystemOptions fsopts_;
+  Filesystem* fs_;
+  FilesystemCliOptions fscliopts_;
   FilesystemCli* fscli_;
-  FilesystemDbOptions db_options_;
-  FilesystemOptions options_;
   std::string fsloc_;
   User me_;
 };

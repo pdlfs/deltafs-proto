@@ -1158,14 +1158,13 @@ void FilesystemCli::FormatRoot() {
   rtstat_.AssertAllSet();
 }
 
-FilesystemCli::FilesystemCli(const FilesystemCliOptions& options,
-                             Filesystem* fs)
+FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
     : dirs_(NULL),
       plru_(NULL),
       pars_(NULL),
       options_(options),
       stub_(NULL),
-      fs_(fs),
+      fs_(NULL),
       rpc_(NULL) {
   dirs_ = new HashTable<Dir>;
   dirlist_.next = &dirlist_;
@@ -1189,8 +1188,8 @@ FilesystemCliOptions::FilesystemCliOptions()
       vsrvs(1),
       nsrvs(1) {}
 
-Status FilesystemCli::OpenLocalFilesystem(const std::string& fsloc) {
-  return fs_->OpenFilesystem(fsloc);
+void FilesystemCli::SetLocalFilesystem(Filesystem* fs) {
+  fs_ = fs;  // This is a weak reference; fs_ is not owned by us
 }
 
 Status FilesystemCli::Open(RPC* rpc, const std::string* uri) {
@@ -1217,7 +1216,6 @@ FilesystemCli::~FilesystemCli() {
   }
   delete[] stub_;
   delete rpc_;
-  delete fs_;
 }
 
 }  // namespace pdlfs

@@ -564,21 +564,20 @@ FilesystemOptions::FilesystemOptions()
       srvid(0),
       mydno(0) {}
 
-Filesystem::Filesystem(const FilesystemOptions& options, FilesystemDb* db)
-    : inoq_(0), options_(options), db_(db) {
+Filesystem::Filesystem(const FilesystemOptions& options)
+    : inoq_(0), options_(options), db_(NULL) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
   dirs_ = new HashTable<Dir>();
+}
+
+void Filesystem::SetDb(FilesystemDb* db) {
+  db_ = db;  // This is a weak reference; db_ is not owned by us
 }
 
 Filesystem::~Filesystem() {
   delete dlru_;
   assert(dirs_->Empty());
   delete dirs_;
-  delete db_;
-}
-
-Status Filesystem::OpenFilesystem(const std::string& fsloc) {
-  return db_->Open(fsloc);
 }
 
 }  // namespace pdlfs

@@ -64,8 +64,8 @@ struct FilesystemCliOptions {
 // FilesystemIf interface or talk to a remote filesystem server through rpc.
 class FilesystemCli {
  public:
-  FilesystemCli(const FilesystemCliOptions& options, Filesystem* fs);
-  Status OpenLocalFilesystem(const std::string& fsloc);
+  explicit FilesystemCli(const FilesystemCliOptions& options);
+  void SetLocalFilesystem(Filesystem* fs);
   Status Open(RPC* rpc, const std::string* uri);
   ~FilesystemCli();
 
