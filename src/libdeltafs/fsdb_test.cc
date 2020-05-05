@@ -33,8 +33,8 @@
  */
 #include "fsdb.h"
 
+#include "env_wrapper.h"
 #include "fs.h"
-#include "fsenv.h"
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
