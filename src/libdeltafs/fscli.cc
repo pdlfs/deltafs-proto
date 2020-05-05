@@ -681,8 +681,8 @@ Status FilesystemCli::Lokup2(  ///
 
   *stat = NULL;
 
-  // Wait for concurrent conflicting name lookups or changes and check again in
-  // case some other thread has done the work for us while we are waiting...
+  // Wait for concurrent lookups. After they finish, check again in case some
+  // other thread has done the work for us while we are waiting...
   uint32_t const i = hash & uint32_t(kWays - 1);
   while (part->busy[i]) part->cv->Wait();
   part->busy[i] = true;
@@ -874,12 +874,15 @@ Status FilesystemCli::Lstat2(  ///
   return s;
 }
 
-// Delete a lease from memory.
+// This function is called when the last reference to a directory lease is
+// released. It deletes the lease by freeing its memory and removing its record
+// from its parent partition. Future lookups to the directory will result in new
+// fs or rpc lookups and new leases.
 void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
   assert(lease->key() == key);
   Partition* const part = lease->part;
   part->mu->AssertHeld();
-  if (!lease->out)  // Skip if lease has already been removed from table
+  if (!lease->out)  // Skip if lease has already been removed from the table
     part->leases->Remove(lease);
   // Any batch context should already be closed by now
   assert(lease->batch == NULL);
@@ -887,9 +890,8 @@ void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
   free(lease);
 }
 
-// Remove an active reference to a lease potentially causing it to be deleted
-// from memory. Also remove a reference to the lease's parent partition
-// potentially causing the partition to be deleted from memory too.
+// Remove a reference to a lease. Also remove a reference to the lease's parent
+// partition.
 void FilesystemCli::Release(Lease* lease) {
   if (lease == &rtlease_) return;  // Root lease is static...
   Partition* const part = lease->part;
