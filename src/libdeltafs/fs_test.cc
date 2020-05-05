@@ -33,6 +33,8 @@
  */
 #include "fs.h"
 
+#include "fsdb.h"
+
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
 
@@ -45,14 +47,13 @@ class FilesystemTest {
   FilesystemTest() : fsloc_(test::TmpDir() + "/fs_test") {
     DestroyDB(fsloc_, DBOptions());
     fs_ = NULL;
-    env_ = Env::GetUnBufferedIoEnv();
     me_.gid = me_.uid = 1;
     dirmode_ = 0777;
     due_ = -1;
   }
 
   Status OpenFilesystem() {
-    fs_ = new Filesystem(options_, new FilesystemDb(db_options_, env_));
+    fs_ = new Filesystem(options_, new FilesystemDb(db_options_));
     return fs_->OpenFilesystem(fsloc_);
   }
 
@@ -105,7 +106,6 @@ class FilesystemTest {
 
   uint32_t dirmode_;
   uint64_t due_;
-  Env* env_;
   FilesystemDbOptions db_options_;
   FilesystemOptions options_;
   Filesystem* fs_;

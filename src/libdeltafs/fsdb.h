@@ -37,9 +37,9 @@
 
 namespace pdlfs {
 
+class FilesystemDbEnvWrapper;
 class FilterPolicy;
 class Cache;
-class Env;
 
 struct FilesystemDbOptions {
   FilesystemDbOptions();
@@ -67,6 +67,8 @@ struct FilesystemDbOptions {
   int l0_soft_limit;
   // Number of files in level-0 until writes are entirely stalled.
   int l0_hard_limit;
+  // Collect performance stats for db file io.
+  bool enable_io_monitoring;
   // Log to stderr.
   bool use_default_logger;
   // Disable background table compaction.
@@ -93,9 +95,10 @@ struct FilesystemDbStats {
 
 class FilesystemDb {
  public:
-  FilesystemDb(const FilesystemDbOptions& options, Env* env);
+  explicit FilesystemDb(const FilesystemDbOptions& options);
   ~FilesystemDb();
 
+  FilesystemDbEnvWrapper* GetDbEnv() { return dbenv_; }
   Status Open(const std::string& dbloc);
   Status Get(const DirId& id, const Slice& fname, Stat* stat,
              FilesystemDbStats* stats);
@@ -112,7 +115,7 @@ class FilesystemDb {
   typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
   MDB* mdb_;
   FilesystemDbOptions options_;
-  Env* env_;  // Not owned by us
+  FilesystemDbEnvWrapper* dbenv_;
   const FilterPolicy* filter_;
   Cache* table_cache_;
   Cache* block_cache_;

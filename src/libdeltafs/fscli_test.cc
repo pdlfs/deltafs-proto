@@ -51,14 +51,13 @@ class FilesystemCliTest {
   FilesystemCliTest() : fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
-    env_ = Env::GetUnBufferedIoEnv();
     fscli_ = NULL;
   }
 
   Status OpenFilesystemCli() {
     fscli_ = new FilesystemCli(
         fscli_options_,
-        new Filesystem(options_, new FilesystemDb(db_options_, env_)));
+        new Filesystem(options_, new FilesystemDb(db_options_)));
     return fscli_->OpenLocalFilesystem(fsloc_);
   }
 
@@ -99,7 +98,6 @@ class FilesystemCliTest {
   }
 
   Stat tmp_;
-  Env* env_;
   FilesystemCliOptions fscli_options_;
   FilesystemCli* fscli_;
   FilesystemDbOptions db_options_;

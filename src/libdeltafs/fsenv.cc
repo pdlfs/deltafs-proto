@@ -37,10 +37,13 @@
 
 #include "pdlfs-common/mutexlock.h"
 
+#include <string.h>
+
 namespace pdlfs {
 
-FilesystemEnvWrapper::FilesystemEnvWrapper(const FilesystemOptions& options)
-    : EnvWrapper(Env::GetUnBufferedIoEnv()) {}
+FilesystemDbEnvWrapper::FilesystemDbEnvWrapper(
+    const FilesystemDbOptions& options)
+    : EnvWrapper(Env::GetUnBufferedIoEnv()), options_(options) {}
 
 namespace {
 template <typename T>
@@ -49,11 +52,15 @@ inline void CleanUpRepo(std::list<T*>* v) {
   for (; it != v->end(); ++it) {
     delete *it;
   }
+  v->clear();
 }
 
 }  // namespace
 
-FilesystemEnvWrapper::~FilesystemEnvWrapper() {
+FilesystemDbEnvWrapper::~FilesystemDbEnvWrapper() { Reset(); }
+
+void FilesystemDbEnvWrapper::Reset() {
+  MutexLock ml(&mu_);
   CleanUpRepo(&sequentialfile_repo_);
   CleanUpRepo(&randomaccessfile_repo_);
   CleanUpRepo(&writablefile_repo_);
@@ -72,47 +79,50 @@ inline uint64_t SumUpBytes(const std::list<T*>* v) {
 
 }  // namespace
 
-size_t FilesystemEnvWrapper::TotalTableFilesOpenedForWrite() {
+size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForWrite() {
   MutexLock l(&mu_);
   return writablefile_repo_.size();
 }
 
-uint64_t FilesystemEnvWrapper::TotalDbBytesWritten() {
+uint64_t FilesystemDbEnvWrapper::TotalDbBytesWritten() {
   MutexLock l(&mu_);
   return SumUpBytes(&writablefile_repo_);
 }
 
-size_t FilesystemEnvWrapper::TotalTableFilesOpenedForRead() {
+size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForRead() {
   MutexLock l(&mu_);
   return randomaccessfile_repo_.size();
 }
 
-uint64_t FilesystemEnvWrapper::TotalDbBytesRead() {
+uint64_t FilesystemDbEnvWrapper::TotalDbBytesRead() {
   MutexLock l(&mu_);
   return SumUpBytes(&randomaccessfile_repo_);
 }
 
+void FilesystemDbEnvWrapper::SetDbLoc(const std::string& dbloc) {
+  dbprefix_ = dbloc + "/";
+}
+
 namespace {
-// Return true iff the specified filename is a db table file.
-bool IsTableFile(const char* filename) {
+bool IsTableFile(const std::string& dbprefix, const char* filename) {
   uint64_t filenum;
   FileType type;
-  if (ParseFileName(filename, &filenum, &type)) {
+  if (strncmp(filename, dbprefix.c_str(), dbprefix.size()) == 0 &&
+      ParseFileName(filename + dbprefix.size(), &filenum, &type)) {
     return type == kTableFile;
   } else {
     return false;
   }
 }
-
 }  // namespace
 
-Status FilesystemEnvWrapper::NewSequentialFile(  ///
+Status FilesystemDbEnvWrapper::NewSequentialFile(  ///
     const char* f, SequentialFile** r) {
   SequentialFile* file;
   Status s = target()->NewSequentialFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (IsTableFile(f)) {
+  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
     MutexLock ml(&mu_);
     SequentialFileStats* const stats = new SequentialFileStats;
     *r = new MonitoredSequentialFile(stats, file);
@@ -123,13 +133,13 @@ Status FilesystemEnvWrapper::NewSequentialFile(  ///
   return s;
 }
 
-Status FilesystemEnvWrapper::NewRandomAccessFile(  ///
+Status FilesystemDbEnvWrapper::NewRandomAccessFile(  ///
     const char* f, RandomAccessFile** r) {
   RandomAccessFile* file;
   Status s = target()->NewRandomAccessFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (IsTableFile(f)) {
+  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
     MutexLock ml(&mu_);
     RandomAccessFileStats* const stats = new RandomAccessFileStats;
     *r = new MonitoredRandomAccessFile(stats, file);
@@ -140,12 +150,13 @@ Status FilesystemEnvWrapper::NewRandomAccessFile(  ///
   return s;
 }
 
-Status FilesystemEnvWrapper::NewWritableFile(const char* f, WritableFile** r) {
+Status FilesystemDbEnvWrapper::NewWritableFile(  ///
+    const char* f, WritableFile** r) {
   WritableFile* file;
   Status s = target()->NewWritableFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (IsTableFile(f)) {
+  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
     MutexLock ml(&mu_);
     WritableFileStats* const stats = new WritableFileStats;
     *r = new pdlfs::MonitoredWritableFile(stats, file);

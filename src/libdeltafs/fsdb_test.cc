@@ -56,13 +56,12 @@ namespace pdlfs {
 class FilesystemDbTest {
  public:
   FilesystemDbTest() : dbloc_(test::TmpDir() + "/fsdb_test") {
-    env_ = Env::GetUnBufferedIoEnv();
     DestroyDB(dbloc_, DBOptions());
     db_ = NULL;
   }
 
   Status OpenDb() {
-    db_ = new FilesystemDb(options_, env_);
+    db_ = new FilesystemDb(options_);
     return db_->Open(dbloc_);
   }
 
@@ -73,7 +72,6 @@ class FilesystemDbTest {
   std::string dbloc_;
   FilesystemDbOptions options_;
   FilesystemDb* db_;
-  Env* env_;
 };
 
 TEST(FilesystemDbTest, OpenAndClose) {  ///
@@ -355,7 +353,6 @@ struct ThreadState {
 
 class Benchmark {
  private:
-  FilesystemEnvWrapper* env_;
   FilesystemDb* db_;
 
   void PrintHeader() {
@@ -490,7 +487,12 @@ class Benchmark {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
     }
     arg[0].thread->stats.Report(name);
-
+    fprintf(stdout, " - total bytes written: %llu\n",
+            static_cast<unsigned long long>(
+                db_->GetDbEnv()->TotalDbBytesWritten()));
+    fprintf(
+        stdout, " - total bytes read: %llu\n",
+        static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
     }
@@ -566,7 +568,8 @@ class Benchmark {
     options.block_restart_interval = FLAGS_block_restart_interval;
     options.block_cache_size = FLAGS_cache_size;
     options.filter_bits_per_key = FLAGS_bloom_bits;
-    db_ = new FilesystemDb(options, env_);
+    options.enable_io_monitoring = true;
+    db_ = new FilesystemDb(options);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -575,14 +578,13 @@ class Benchmark {
   }
 
  public:
-  Benchmark() : env_(new FilesystemEnvWrapper(FilesystemOptions())), db_(NULL) {
+  Benchmark() : db_(NULL) {
     if (!FLAGS_use_existing_db) {
       DestroyDB(FLAGS_db, DBOptions());
     }
   }
 
   ~Benchmark() {  ///
-    delete env_;
     delete db_;
   }
 

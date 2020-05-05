@@ -33,6 +33,8 @@
  */
 #include "fsdb.h"
 
+#include "fsenv.h"
+
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/options.h"
@@ -40,7 +42,6 @@
 #include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 
@@ -57,6 +58,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       l0_compaction_trigger(4),
       l0_soft_limit(8),
       l0_hard_limit(12),
+      enable_io_monitoring(false),
       use_default_logger(false),
       disable_compaction(false),
       compression(false) {}
@@ -90,7 +92,8 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
-  dbopts.env = env_;
+  dbenv_->SetDbLoc(dbloc);
+  dbopts.env = dbenv_;
   Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
     mdb_ = new MDB(db_);
@@ -103,10 +106,10 @@ struct FilesystemDb::Tx {
   WriteBatch bat;
 };
 
-FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* env)
+FilesystemDb::FilesystemDb(const FilesystemDbOptions& options)
     : mdb_(NULL),
       options_(options),
-      env_(env),
+      dbenv_(new FilesystemDbEnvWrapper(options)),
       filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
       table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),
@@ -117,6 +120,7 @@ FilesystemDb::~FilesystemDb() {
   delete block_cache_;
   delete table_cache_;
   delete filter_;
+  delete dbenv_;
   delete mdb_;
 }
 

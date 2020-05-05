@@ -33,25 +33,26 @@
  */
 #pragma once
 
+#include "fsdb.h"
+
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
 #include <list>
-
-namespace pdlfs {
-
-struct FilesystemOptions;
-
 #if __cplusplus >= 201103L
 #define OVERRIDE override
 #else
 #define OVERRIDE
 #endif
-class FilesystemEnvWrapper : public EnvWrapper {
+namespace pdlfs {
+
+// An Env wrapper implementation that collects read and write performance stats
+// for performance monitoring and debugging.
+class FilesystemDbEnvWrapper : public EnvWrapper {
  public:
-  explicit FilesystemEnvWrapper(const FilesystemOptions& options);
-  virtual ~FilesystemEnvWrapper();
+  explicit FilesystemDbEnvWrapper(const FilesystemDbOptions& options);
+  virtual ~FilesystemDbEnvWrapper();
 
   virtual Status NewSequentialFile(const char* f, SequentialFile** r) OVERRIDE;
   virtual Status NewRandomAccessFile(const char* f,
@@ -71,11 +72,18 @@ class FilesystemEnvWrapper : public EnvWrapper {
   // write-ahead log files, manifest files, or info log files are not counted.
   uint64_t TotalDbBytesWritten();
 
+  void SetDbLoc(const std::string& dbloc);
+  // Clear performance stats.
+  void Reset();
+
  private:
   std::list<SequentialFileStats*> sequentialfile_repo_;
   std::list<RandomAccessFileStats*> randomaccessfile_repo_;
   std::list<WritableFileStats*> writablefile_repo_;
+  std::string dbprefix_;
+  FilesystemDbOptions options_;
   port::Mutex mu_;
 };
-#undef OVERRIDE
+
 }  // namespace pdlfs
+#undef OVERRIDE
