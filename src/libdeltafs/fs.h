@@ -46,6 +46,7 @@
 #endif
 namespace pdlfs {
 
+struct FilesystemDir;
 struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
@@ -95,7 +96,9 @@ class Filesystem : public FilesystemIf {
   // a given directory id.
   static uint32_t PickupServer(const DirId& id);
 
-  Status TEST_ProbeDir(const DirId& id);  // Fake a directory access.
+  FilesystemDir* TEST_ProbeDir(const DirId& id);
+  const FilesystemDbStats& TEST_FetchDbStats(FilesystemDir* dir);
+  void TEST_Release(FilesystemDir* dir);
   uint32_t TEST_TotalDirsInMemory();
   uint64_t TEST_LastIno();
 

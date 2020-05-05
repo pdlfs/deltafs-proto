@@ -152,14 +152,25 @@ Status Filesystem::Mkdir(  ///
   return s;
 }
 
-Status Filesystem::TEST_ProbeDir(const DirId& at) {
+FilesystemDir* Filesystem::TEST_ProbeDir(const DirId& at) {
   Dir* dir;
   MutexLock lock(&mutex_);
   Status s = AcquireDir(at, &dir);
   if (s.ok()) {
-    Release(dir);
+    return reinterpret_cast<FilesystemDir*>(dir);
   }
-  return s;
+  return NULL;
+}
+
+const FilesystemDbStats& Filesystem::TEST_FetchDbStats(FilesystemDir* dir) {
+  Dir* dir0 = reinterpret_cast<Dir*>(dir);
+  MutexLock ml(dir0->mu);
+  return *dir0->stats;
+}
+
+void Filesystem::TEST_Release(FilesystemDir* dir) {
+  MutexLock lock(&mutex_);
+  Release(reinterpret_cast<Dir*>(dir));
 }
 
 uint32_t Filesystem::TEST_TotalDirsInMemory() {

@@ -122,7 +122,9 @@ class FilesystemTest {
 
 TEST(FilesystemTest, OpenAndClose) {
   ASSERT_OK(OpenFilesystem());
-  ASSERT_OK(fs_->TEST_ProbeDir(DirId(0)));
+  FilesystemDir* dir = fs_->TEST_ProbeDir(DirId(0));
+  ASSERT_TRUE(dir != NULL);
+  fs_->TEST_Release(dir);
   ASSERT_EQ(fs_->TEST_TotalDirsInMemory(), 1);
 }
 
