@@ -444,12 +444,14 @@ uint32_t LRUHash(const Slice& k) { return Hash(k.data(), k.size(), 0); }
 
 }  // namespace
 
-// Called when the last reference to a directory control block is removed.
+// This function is called when the last reference to a directory control block
+// is released. It removes the control block from the big directory table and
+// then deletes the control block.
 void Filesystem::DeleteDir(const Slice& key, Dir* dir) {
   assert(dir->key() == key);
   Filesystem* const fs = dir->fs;
   fs->mutex_.AssertHeld();
-  fs->dirs_->Remove(dir->key(), dir->hash);
+  fs->dirs_->Remove(dir);
   delete dir->id;
   delete dir->giga_opts;
   delete dir->giga;
@@ -458,9 +460,9 @@ void Filesystem::DeleteDir(const Slice& key, Dir* dir) {
   free(dir);
 }
 
-// Remove an active reference to a directory control block. After removal, the
-// control block may still be kept in memory by the LRU cache. If the control
-// block has been evicted from the cache before, it will be deleted.
+// Release a reference to a directory control block. After release, the control
+// block may still be kept in memory by the LRU cache. If the control block has
+// been evicted from the cache before, it will be deleted.
 void Filesystem::Release(Dir* const dir) {
   mutex_.AssertHeld();
   dlru_->Release(dir->lru_handle);

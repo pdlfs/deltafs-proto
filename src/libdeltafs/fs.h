@@ -165,19 +165,20 @@ class Filesystem : public FilesystemIf {
   Status AcquireDir(const DirId&, Dir**);
   // Fetch dir from db.
   Status MaybeFetchDir(Dir* dir);
-  // Release an active reference to a directory control block.
+  // Release a reference to a specified directory control block.
   void Release(Dir*);
   // It is possible for a control block to be evicted from the LRU cache while
   // the block itself is still being used by some threads. This would cause a
   // caller seeking the control block to believe that there is no such block in
   // memory and go create a new control block causing two control blocks of a
   // single directory to appear in memory. To resolve this problem, we use a
-  // separate table to index all directory control blocks that are currently
-  // kept in memory. A caller checks the table after it gets a miss from the LRU
-  // cache. If the caller finds the control block it seeks from the table, it
-  // adds a reference to the control block. We only keep a certain number of
-  // control blocks in the table. If the maximum is reached, subsequent
-  // filesystem operations may be rejected until slots in the table reappear.
+  // separate table to index all directory control blocks that exist in memory.
+  // A caller is expected to check the table whenever it gets a miss from the
+  // cache. If the caller finds the control block it seeks, it adds a new
+  // reference to the control block (and potentially re-inserts the control
+  // block to the cache). We only keep a certain number of control blocks in
+  // memory. If the maximum is reached, subsequent filesystem operations may be
+  // rejected until slots reappear.
   HashTable<Dir>* dirs_;
 
   // Constant after server opening
