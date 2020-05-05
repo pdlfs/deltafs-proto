@@ -63,6 +63,15 @@ FilesystemDbOptions::FilesystemDbOptions()
       disable_compaction(false),
       compression(false) {}
 
+void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
+  putkeybytes += other.putkeybytes;
+  putbytes += other.putbytes;
+  puts += other.puts;
+  getkeybytes += other.getkeybytes;
+  getbytes += other.getbytes;
+  gets += other.gets;
+}
+
 FilesystemDbStats::FilesystemDbStats()
     : putkeybytes(0),
       putbytes(0),

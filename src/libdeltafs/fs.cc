@@ -263,17 +263,16 @@ Status Filesystem::Lstat1(  ///
     return Status::AccessDenied("Lease has expired");
   if (!IsLookupOk(options_, p, who))
     return Status::AccessDenied("No dir x perm");
-  if (!options_.skip_partition_checks) {
-    MutexLock lock(dir->mu);
-    Status s = MaybeFetchDir(dir);
-    if (!s.ok()) {
-      return s;
-    }
-    // XXX: obtain split lock here to secure directory split status
-    if (!IsDirPartitionOk(options_, dir->giga, name))
-      return Status::AccessDenied("Wrong dir partition");
+  FilesystemDbStats stats;
+  MutexLock lock(dir->mu);
+  Status s = MaybeFetchDir(dir);
+  if (!s.ok()) {
+    return s;
   }
-
+  // XXX: obtain split lock here to secure directory split status
+  if (!IsDirPartitionOk(options_, dir->giga, name))
+    return Status::AccessDenied("Wrong dir partition");
+  dir->mu->Unlock();
   // The following Get() operation goes unlocked with an assumption
   // that the directory partition it just checked won't be later
   // split --- the name is still "in" the partition so that
@@ -314,7 +313,10 @@ Status Filesystem::Lstat1(  ///
   // write operations are blocked. The split operation bulk deletes
   // the half of partition that has been moved and install a new
   // directory index.
-  return db_->Get(at, name, stat, NULL);
+  s = db_->Get(at, name, stat, &stats);
+  dir->mu->Lock();
+  dir->stats->Merge(stats);
+  return s;
 }
 
 Status Filesystem::Mknos1(  ///
@@ -325,12 +327,13 @@ Status Filesystem::Mknos1(  ///
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
     return Status::AccessDenied("No write perm");
+  FilesystemDbStats stats;
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
     return s;
   }
-  dir->mu->AssertHeld();  // TODO: lock directory split status
+  dir->mu->AssertHeld();  // XXX: lock down directory split status
   // Lock all name subsets...
   for (uint32_t i = 0; i < kWays; i++) {
     while (dir->busy[i]) {
@@ -344,7 +347,7 @@ Status Filesystem::Mknos1(  ///
   Slice input = namearr;
   Slice name;
   while (m < (*n) && GetLengthPrefixedSlice(&input, &name)) {
-    s = CheckAndPut(who, at, name, startino + m, type, mode, &tmp);
+    s = CheckAndPut(who, at, name, startino + m, type, mode, &tmp, &stats);
     if (!s.ok()) {
       break;
     }
@@ -352,6 +355,7 @@ Status Filesystem::Mknos1(  ///
   }
   *n = m;
   dir->mu->Lock();
+  dir->stats->Merge(stats);
   for (uint32_t i = 0; i < kWays; i++) {
     dir->busy[i] = false;
   }
@@ -367,12 +371,15 @@ Status Filesystem::Mknod1(  ///
     return Status::AccessDenied("Lease has expired");
   if (!IsDirWriteOk(options_, p, who))
     return Status::AccessDenied("No write perm");
+  FilesystemDbStats stats;
   MutexLock lock(dir->mu);
   Status s = MaybeFetchDir(dir);
   if (!s.ok()) {
     return s;
   }
-  // XXX: obtain directory split lock here to secure directory split status
+  // XXX: obtain directory split lock here to fix directory split status.
+  // Checking if the name is in the partition may be deferred to a later time
+  // though.
   if (!IsDirPartitionOk(options_, dir->giga, name))
     return Status::AccessDenied("Wrong dir partition");
   // Lock the corresponding name subset in the partition for serialization...
@@ -385,8 +392,9 @@ Status Filesystem::Mknod1(  ///
   dir->busy[i] = true;
   // Temporarily unlock for db operations
   dir->mu->Unlock();
-  s = CheckAndPut(who, at, name, myino, type, mode, stat);
+  s = CheckAndPut(who, at, name, myino, type, mode, stat, &stats);
   dir->mu->Lock();
+  dir->stats->Merge(stats);
   dir->busy[i] = false;
   dir->cv->SignalAll();
   return s;
@@ -394,7 +402,8 @@ Status Filesystem::Mknod1(  ///
 
 Status Filesystem::CheckAndPut(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t myino,
-    uint32_t type, uint32_t mode, Stat* stat) {
+    uint32_t type, uint32_t mode, Stat* const stat,
+    FilesystemDbStats* const stats) {
   Status s;
   if (!options_.skip_name_collision_checks) {
     s = db_->Get(at, name, stat, NULL);
@@ -409,14 +418,15 @@ Status Filesystem::CheckAndPut(  ///
     uint32_t mymo = type;
     mymo |= (mode & ACCESSPERMS);
     s = Put(who, at, name, mydno, myino, PickupServer(DirId(mydno, myino)),
-            mymo, stat);
+            mymo, stat, stats);
   }
   return s;
 }
 
 Status Filesystem::Put(  ///
     const User& who, const DirId& at, const Slice& name, uint64_t mydno,
-    uint64_t myino, uint32_t zsrv, uint32_t mymo, Stat* stat) {
+    uint64_t myino, uint32_t zsrv, uint32_t mymo, Stat* const stat,
+    FilesystemDbStats* const stats) {
   stat->SetDnodeNo(mydno);
   stat->SetInodeNo(myino);
   stat->SetZerothServer(zsrv);
@@ -427,7 +437,7 @@ Status Filesystem::Put(  ///
   stat->SetModifyTime(0);
   stat->SetChangeTime(0);
   stat->AssertAllSet();
-  return db_->Put(at, name, *stat, NULL);
+  return db_->Put(at, name, *stat, stats);
 }
 
 namespace {
@@ -453,6 +463,7 @@ void Filesystem::DeleteDir(const Slice& key, Dir* dir) {
   fs->mutex_.AssertHeld();
   fs->dirs_->Remove(dir);
   delete dir->id;
+  delete dir->stats;
   delete dir->giga_opts;
   delete dir->giga;
   delete dir->cv;
@@ -539,6 +550,7 @@ Status Filesystem::AcquireDir(const DirId& id, Dir** result) {
   memcpy(dir->key_data, key.data(), key.size());
   dir->hash = hash;
   dir->id = new DirId(id);
+  dir->stats = new FilesystemDbStats;
   dir->mu = new port::Mutex;
   dir->cv = new port::CondVar(dir->mu);
   dir->fs = this;

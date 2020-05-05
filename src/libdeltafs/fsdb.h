@@ -79,6 +79,7 @@ struct FilesystemDbOptions {
 
 struct FilesystemDbStats {
   FilesystemDbStats();
+  void Merge(const FilesystemDbStats& other);
   // Total amount of key bytes pushed to db.
   uint64_t putkeybytes;
   // Total amount of val bytes pushed to db.

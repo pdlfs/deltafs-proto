@@ -46,6 +46,7 @@
 #endif
 namespace pdlfs {
 
+struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
 struct User;
@@ -113,9 +114,11 @@ class Filesystem : public FilesystemIf {
                 const LookupStat& parent, Stat* stat);
 
   Status CheckAndPut(const User& who, const DirId& at, const Slice& name,
-                     uint64_t ino, uint32_t type, uint32_t mode, Stat* stat);
+                     uint64_t ino, uint32_t type, uint32_t mode, Stat* stat,
+                     FilesystemDbStats* stats);
   Status Put(const User& who, const DirId& at, const Slice& name, uint64_t dno,
-             uint64_t ino, uint32_t zsrv, uint32_t mode, Stat* stat);
+             uint64_t ino, uint32_t zsrv, uint32_t mode, Stat* stat,
+             FilesystemDbStats* stats);
 
   // No copying allowed
   void operator=(const Filesystem& fs);
@@ -141,6 +144,7 @@ class Filesystem : public FilesystemIf {
     DirIndexOptions* giga_opts;
     DirIndex* giga;
     Dir* next_hash;
+    FilesystemDbStats* stats;
     Filesystem* fs;
     port::CondVar* cv;
     port::Mutex* mu;
