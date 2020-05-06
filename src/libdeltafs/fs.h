@@ -101,7 +101,7 @@ class Filesystem : public FilesystemIf {
   Status TEST_Mkfle(const User& who, const LookupStat& parent,
                     const Slice& name, const Stat& stat,
                     FilesystemDbStats* stats);
-  FilesystemDir* TEST_ProbeDir(const DirId& id);
+  FilesystemDir* TEST_ProbeDir(const DirId& dir_id);
   const FilesystemDbStats& TEST_FetchDbStats(FilesystemDir* dir);
   void TEST_Release(FilesystemDir* dir);
   uint32_t TEST_TotalDirsInMemory();

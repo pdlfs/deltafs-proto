@@ -47,6 +47,79 @@ Status Nofs() {  ///
   return Status::Disconnected("No fs manager");
 }
 }  // namespace
+
+Status FilesystemCli::TEST_Mkfle(  ///
+    const User& who, const char* const pathname, const Stat& stat,
+    FilesystemDbStats* const stats) {
+  bool has_tailing_slashes(false);
+  Lease* parent_dir(NULL);
+  Slice tgt;
+  Status status =
+      Resolu(who, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (status.ok()) {
+    if (tgt.empty()) {
+      status = Status::AssertionFailed("tgt is empty");
+    } else {
+      const LookupStat& p = *parent_dir->value;
+      MutexLock lock(&mutex_);
+      Partition* part;
+      Dir* dir;
+      int i;
+      status = AcquireAndFetch(who, p, tgt, &dir, &i);
+      if (status.ok()) {
+        status = AcquirePartition(dir, i, &part);
+        if (status.ok()) {
+          mutex_.Unlock();
+          status = fs_->TEST_Mkfle(who, p, tgt, stat, stats);
+          mutex_.Lock();
+          Release(part);
+        }
+        Release(dir);
+      }
+    }
+  }
+  if (parent_dir) {
+    Release(parent_dir);
+  }
+  return status;
+}
+
+Status FilesystemCli::TEST_Lstat(  ///
+    const User& who, const char* const pathname, Stat* const stat,
+    FilesystemDbStats* const stats) {
+  bool has_tailing_slashes(false);
+  Lease* parent_dir(NULL);
+  Slice tgt;
+  Status status =
+      Resolu(who, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (status.ok()) {
+    if (tgt.empty()) {
+      status = Status::AssertionFailed("tgt is empty");
+    } else {
+      const LookupStat& p = *parent_dir->value;
+      MutexLock lock(&mutex_);
+      Partition* part;
+      Dir* dir;
+      int i;
+      status = AcquireAndFetch(who, p, tgt, &dir, &i);
+      if (status.ok()) {
+        status = AcquirePartition(dir, i, &part);
+        if (status.ok()) {
+          mutex_.Unlock();
+          status = fs_->TEST_Lstat(who, p, tgt, stat, stats);
+          mutex_.Lock();
+          Release(part);
+        }
+        Release(dir);
+      }
+    }
+  }
+  if (parent_dir) {
+    Release(parent_dir);
+  }
+  return status;
+}
+
 // Relative root of a pathname
 struct FilesystemCli::AT {
   // Look up stat of the parent directory of the relative root
@@ -82,8 +155,8 @@ Status FilesystemCli::Atdir(  ///
 void FilesystemCli::Destroy(AT* at) { delete at; }
 
 // Each batch instance is a reference to a server-issued lease with bulk
-// insertion capabilities.
-struct FilesystemCli::BATCH {
+// insertion permissions.
+struct FilesystemCli::BAT {
   Lease* dir_lease;
 };
 
@@ -92,7 +165,7 @@ struct FilesystemCli::BATCH {
 // associated with the lease.
 Status FilesystemCli::BatchStart(  ///
     const User& who, const AT* const at, const char* const pathname,
-    BATCH** const result) {
+    BAT** const result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
@@ -108,7 +181,7 @@ Status FilesystemCli::BatchStart(  ///
       status = Lokup(who, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
         assert(dir_lease->batch != NULL);
-        BATCH* bat = new BATCH;  // Opaque handle to the batch
+        BAT* const bat = new BAT;  // Opaque handle to the batch
         bat->dir_lease = dir_lease;
         *result = bat;
       }
@@ -122,14 +195,14 @@ Status FilesystemCli::BatchStart(  ///
   return status;
 }
 
-Status FilesystemCli::BatchInsert(BATCH* bat, const char* name) {
+Status FilesystemCli::BatchInsert(BAT* bat, const char* name) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);
   BatchedCreates* const bc = lease->batch;
   MutexLock lock(&bc->mu);
   if (bc->commit_status != 0) {
-    return Status::NotSupported("Already committed");
+    return Status::AssertionFailed("Already committed");
   } else if (!bc->bg_status.ok()) {
     return bc->bg_status;
   }
@@ -144,14 +217,14 @@ Status FilesystemCli::BatchInsert(BATCH* bat, const char* name) {
   return s;
 }
 
-Status FilesystemCli::BatchCommit(BATCH* bat) {
+Status FilesystemCli::BatchCommit(BAT* bat) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);
   BatchedCreates* const bc = lease->batch;
   MutexLock lock(&bc->mu);
   if (bc->commit_status == 1) {
-    return Status::NotSupported("Being committed");
+    return Status::AssertionFailed("Batch is being committed");
   } else if (bc->commit_status == 2 || !bc->bg_status.ok()) {
     return bc->bg_status;
   }
@@ -173,7 +246,7 @@ Status FilesystemCli::BatchCommit(BATCH* bat) {
   return s;
 }
 
-Status FilesystemCli::BatchEnd(BATCH* bat) {
+Status FilesystemCli::BatchEnd(BAT* bat) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);
@@ -513,8 +586,8 @@ bool IsLookupOk(const FilesystemCliOptions& options, const LookupStat& parent,
 }  // namespace
 
 Status FilesystemCli::Fetch1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Dir* dir,
-    int* rv) {
+    const User& who, const LookupStat& p, const Slice& name, Dir* const dir,
+    int* const rv) {
   // If there is an ongoing dir index status change, wait until that change is
   // done before operating upon the index.
   MutexLock lock(dir->mu);
@@ -537,7 +610,7 @@ Status FilesystemCli::Fetch1(  ///
 // the lease. Such references must also be released after use.
 Status FilesystemCli::Lokup1(  ///
     const User& who, const LookupStat& p, const Slice& name, LokupMode mode,
-    Partition* part, Lease** stat) {
+    Partition* const part, Lease** const stat) {
   if (!IsLookupOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No x perm");
   Lease* lease;
@@ -561,7 +634,7 @@ Status FilesystemCli::Lokup1(  ///
 
 Status FilesystemCli::Mkfls1(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    bool force_flush, int i, WriBuf* buf) {
+    bool force_flush, const int i, WriBuf* const buf) {
   Status s;
   MutexLock lock(&buf->mu);  // Shall we use double buffering?
   if (force_flush || buf->n >= options_.batch_size) {
@@ -580,7 +653,7 @@ Status FilesystemCli::Mkfls1(  ///
 
 Status FilesystemCli::Mkfle1(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* stat) {
+    Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
@@ -601,7 +674,7 @@ Status FilesystemCli::Mkfle1(  ///
 
 Status FilesystemCli::Mkdir1(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* stat) {
+    Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
@@ -621,7 +694,7 @@ Status FilesystemCli::Mkdir1(  ///
 }
 
 Status FilesystemCli::Lstat1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* stat) {
+    const User& who, const LookupStat& p, const Slice& name, Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
@@ -643,7 +716,7 @@ Status FilesystemCli::Lstat1(  ///
 // part->mu has been locked.
 Status FilesystemCli::Lokup2(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t hash,
-    LokupMode mode, Partition* part, Lease** stat) {
+    LokupMode mode, Partition* const part, Lease** const stat) {
   part->mu->AssertHeld();
   Lease* lease;
   Status s;
@@ -777,7 +850,7 @@ Status FilesystemCli::Lokup2(  ///
 
 Status FilesystemCli::Mkfls2(  ///
     const User& who, const LookupStat& p, const Slice& namearr, uint32_t n,
-    uint32_t mode, int i) {
+    uint32_t mode, const int i) {
   if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
@@ -802,7 +875,7 @@ Status FilesystemCli::Mkfls2(  ///
 
 Status FilesystemCli::Mkfle2(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    int i, Stat* stat) {
+    const int i, Stat* const stat) {
   if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
@@ -827,7 +900,7 @@ Status FilesystemCli::Mkfle2(  ///
 
 Status FilesystemCli::Mkdir2(  ///
     const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    int i, Stat* stat) {
+    const int i, Stat* const stat) {
   if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
@@ -851,8 +924,8 @@ Status FilesystemCli::Mkdir2(  ///
 }
 
 Status FilesystemCli::Lstat2(  ///
-    const User& who, const LookupStat& p, const Slice& name, int i,
-    Stat* stat) {
+    const User& who, const LookupStat& p, const Slice& name, const int i,
+    Stat* const stat) {
   if (!IsLookupOk(options_, p, who))  // Avoid unnecessary server rpc
     return Status::AccessDenied("No x perm");
   Status s;

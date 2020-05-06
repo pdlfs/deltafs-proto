@@ -46,7 +46,7 @@ namespace pdlfs {
 
 class FilesystemCliTest {
  public:
-  typedef FilesystemCli::BATCH BATCH;
+  typedef FilesystemCli::BAT BATCH;
   typedef FilesystemCli::AT AT;
   FilesystemCliTest()
       : fsdb_(NULL),

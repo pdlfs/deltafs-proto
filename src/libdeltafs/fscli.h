@@ -42,6 +42,7 @@
 
 namespace pdlfs {
 
+struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
 
@@ -72,30 +73,32 @@ class FilesystemCli {
   // Reference to a resolved parent directory serving as a relative root for
   // pathnames
   struct AT;
-
   Status Atdir(const User& who, const AT* at, const char* pathname, AT**);
+  void Destroy(AT* at);
+
   Status Mkfle(const User& who, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
   Status Mkdir(const User& who, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
   Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
 
-  // Reference to a batch of create operations buffered at the client protected
-  // by a server-issued parent dir lease
-  struct BATCH;
-
+  // Reference to a batch of create operations buffered at the client under a
+  // server-issued parent dir lease
+  struct BAT;
   Status BatchStart(const User& who, const AT* at, const char* pathname,
-                    BATCH**);
-  Status BatchInsert(BATCH* bat, const char* name);
-  Status BatchCommit(BATCH* bat);
-  Status BatchEnd(BATCH* bat);
+                    BAT** bat);
+  Status BatchInsert(BAT* bat, const char* name);
+  Status BatchCommit(BAT* bat);
+  Status BatchEnd(BAT* bat);
 
-  void Destroy(AT* at);
-
-  uint32_t TEST_TotalLeasesAtPartition(const DirId& at, int ix);
-  Status TEST_ProbePartition(const DirId& at, int ix);
+  Status TEST_Mkfle(const User& who, const char* pathname, const Stat& stat,
+                    FilesystemDbStats* stats);
+  Status TEST_Lstat(const User& who, const char* pathname, Stat* stat,
+                    FilesystemDbStats* stats);
+  uint32_t TEST_TotalLeasesAtPartition(const DirId& dir_id, int ix);
+  Status TEST_ProbePartition(const DirId& dir_id, int ix);
   uint32_t TEST_TotalPartitionsInMemory();
-  Status TEST_ProbeDir(const DirId& at);
+  Status TEST_ProbeDir(const DirId& dir_id);
   uint32_t TEST_TotalDirsInMemory();
 
  private:
