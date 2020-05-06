@@ -79,6 +79,43 @@ TEST(FilesystemDbTest, OpenAndClose) {  ///
   ASSERT_OK(OpenDb());
 }
 
+namespace {
+// Transform a 64-bit (8-byte) integer into a 12-byte filename.
+const char base64_table[] =
+    "+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+Slice Base64Encoding(char* const dst, uint64_t input) {
+  input = htobe64(input);
+  const unsigned char* in = reinterpret_cast<unsigned char*>(&input);
+  char* p = dst;
+  *p++ = base64_table[in[0] >> 2];
+  *p++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
+  *p++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
+  *p++ = base64_table[in[2] & 0x3f];
+
+  *p++ = base64_table[in[3] >> 2];
+  *p++ = base64_table[((in[3] & 0x03) << 4) | (in[4] >> 4)];
+  *p++ = base64_table[((in[4] & 0x0f) << 2) | (in[5] >> 6)];
+  *p++ = base64_table[in[5] & 0x3f];
+
+  *p++ = base64_table[in[6] >> 2];
+  *p++ = base64_table[((in[6] & 0x03) << 4) | (in[7] >> 4)];
+  *p++ = base64_table[(in[7] & 0x0f) << 2];
+  *p++ = '+';
+  assert(p - dst == 12);
+  return Slice(dst, p - dst);
+}
+}  // namespace
+
+TEST(FilesystemDbTest, Base64) {
+  char tmp[20];
+  std::string prev;
+  for (uint64_t i = 0; i < 1024 * 1024; i += 1024) {
+    Slice r = Base64Encoding(tmp, i);
+    ASSERT_TRUE(r.compare(prev) > 0);
+    prev = r.ToString();
+  }
+}
+
 namespace {  // Db benchmark
 // Comma-separated list of operations to run in the specified order.
 const char* FLAGS_benchmarks =
@@ -137,30 +174,6 @@ bool FLAGS_use_existing_db = false;
 
 // Use the db at the following name.
 const char* FLAGS_db = NULL;
-
-// Transform a 64-bit (8-byte) integer into a 12-byte filename.
-const char base64_table[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=";
-Slice Base64Encoding(char* const dst, uint64_t input) {
-  const unsigned char* in = reinterpret_cast<unsigned char*>(&input);
-  char* p = dst;
-  *p++ = base64_table[in[0] >> 2];
-  *p++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-  *p++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
-  *p++ = base64_table[in[2] & 0x3f];
-
-  *p++ = base64_table[in[3] >> 2];
-  *p++ = base64_table[((in[3] & 0x03) << 4) | (in[4] >> 4)];
-  *p++ = base64_table[((in[4] & 0x0f) << 2) | (in[5] >> 6)];
-  *p++ = base64_table[in[5] & 0x3f];
-
-  *p++ = base64_table[in[6] >> 2];
-  *p++ = base64_table[((in[6] & 0x03) << 4) | (in[7] >> 4)];
-  *p++ = base64_table[(in[7] & 0x0f) << 2];
-  *p++ = '+';
-  assert(p - dst == 12);
-  return Slice(dst, p - dst);
-}
 
 #if defined(PDLFS_OS_LINUX)
 Slice TrimSpace(Slice s) {
@@ -644,12 +657,12 @@ class Benchmark {
       void (Benchmark::*method)(ThreadState*) = NULL;
       bool fresh_db = false;
 
-      if (name == Slice("fillrandom")) {
+      if (name.starts_with("fill")) {
         fresh_db = true;
         method = &Benchmark::Write;
       } else if (name == Slice("compact")) {
         method = &Benchmark::Compact;
-      } else if (name == Slice("readrandom")) {
+      } else if (name.starts_with("read")) {
         method = &Benchmark::Read;
       } else {
         if (!name.empty()) {  // No error message for empty name
