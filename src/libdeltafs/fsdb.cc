@@ -159,4 +159,10 @@ Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
   return mdb_->DELETE<Key>(id, fname, &options, tx);
 }
 
+std::string FilesystemDb::GetDbStats() {
+  std::string tmp;
+  db_->GetProperty("leveldb.stats", &tmp);
+  return tmp;
+}
+
 }  // namespace pdlfs

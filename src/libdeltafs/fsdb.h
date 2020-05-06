@@ -99,6 +99,7 @@ class FilesystemDb {
   explicit FilesystemDb(const FilesystemDbOptions& options);
   ~FilesystemDb();
 
+  std::string GetDbStats();
   FilesystemDbEnvWrapper* GetDbEnv() { return dbenv_; }
   Status Open(const std::string& dbloc);
   Status Get(const DirId& id, const Slice& fname, Stat* stat,

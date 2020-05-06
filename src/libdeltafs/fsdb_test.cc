@@ -514,6 +514,7 @@ class Benchmark {
     fprintf(
         stdout, " - total bytes read: %llu\n",
         static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
+    fprintf(stdout, " - db stats:\n%s\n", db_->GetDbStats().c_str());
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
     }
