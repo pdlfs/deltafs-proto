@@ -553,7 +553,8 @@ class Benchmark {
     fprintf(
         stdout, " - total bytes read: %llu\n",
         static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
-    fprintf(stdout, " - db stats:\n%s\n", db_->GetDbStats().c_str());
+    fprintf(stdout, " - db stats: >>>\n%s\n", db_->GetDbStats().c_str());
+    fprintf(stdout, " - L0 stats: >>>\n%s\n", db_->GetDbLevel0Events().c_str());
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
     }
