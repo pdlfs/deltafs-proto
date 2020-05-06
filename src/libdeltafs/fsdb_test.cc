@@ -35,6 +35,7 @@
 
 #include "env_wrapper.h"
 #include "fs.h"
+#include "fscli.h"
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
@@ -134,7 +135,10 @@ int FLAGS_num = 8;
 int FLAGS_reads = -1;
 
 // Fire ops through the Filesystem interface atop FilesystemDb.
-bool FLAGS_withfs = false;
+bool FLAGS_with_fs = false;
+
+// Fire ops through the Filesystem client interface.
+bool FLAGS_with_fscli = false;
 
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
@@ -340,13 +344,20 @@ struct ThreadState {
   int tid;  // 0..n-1 when running in n threads
   SharedState* shared;
   Stats stats;
+  bool prepare_write;
   std::vector<uint32_t> fids;
-  LookupStat parent_lstat;
   DirId parent_dir;
+  std::string pathname;
+  std::string::size_type prefix_length;
+  LookupStat parent_lstat;
+  Stat parent_stat;
   Stat stat;
 
-  ThreadState(int tid, int base_seed, bool random_order)
-      : tid(tid), shared(NULL), parent_dir(0, 0) {
+  ThreadState(int tid, int base_seed, bool random_order, bool prepare_write)
+      : tid(tid),
+        shared(NULL),
+        prepare_write(prepare_write),
+        parent_dir(0, FLAGS_shared_dir ? 1 : tid + 1) {
     fids.reserve(FLAGS_num);
     for (int i = 0; i < FLAGS_num; i++) {
       fids.push_back(i + 1);
@@ -354,19 +365,8 @@ struct ThreadState {
     if (random_order) {
       std::random_shuffle(fids.begin(), fids.end(), STLRand(base_seed + tid));
     }
-    if (!FLAGS_shared_dir) {
-      parent_dir = DirId(0, tid + 1);
-    }
-    parent_lstat.SetDnodeNo(parent_dir.dno);
-    parent_lstat.SetInodeNo(parent_dir.ino);
-    parent_lstat.SetDirMode(0777);
-    parent_lstat.SetZerothServer(0);
-    parent_lstat.SetUserId(FLAGS_uid);
-    parent_lstat.SetGroupId(FLAGS_gid);
-    parent_lstat.SetLeaseDue(-1);
-    parent_lstat.AssertAllSet();
     stat.SetDnodeNo(0);
-    stat.SetInodeNo(0);  // To be be overridden later
+    stat.SetInodeNo(0);  // To be overridden later
     stat.SetFileMode(0660 | S_IFREG);
     stat.SetFileSize(0);
     stat.SetUserId(FLAGS_uid);
@@ -375,6 +375,25 @@ struct ThreadState {
     stat.SetChangeTime(0);
     stat.SetModifyTime(0);
     stat.AssertAllSet();
+    parent_stat.SetDnodeNo(parent_dir.dno);
+    parent_stat.SetInodeNo(parent_dir.ino);
+    parent_stat.SetFileMode(0770 | S_IFDIR);
+    parent_stat.SetFileSize(0);
+    parent_stat.SetUserId(FLAGS_uid);
+    parent_stat.SetGroupId(FLAGS_gid);
+    parent_stat.SetZerothServer(0);
+    parent_stat.SetChangeTime(0);
+    parent_stat.SetModifyTime(0);
+    parent_stat.AssertAllSet();
+    char tmp[30];
+    pathname.reserve(100);
+    pathname += "/";
+    pathname += Base64Encoding(tmp, parent_dir.ino).ToString();
+    pathname += "/";
+    prefix_length = pathname.size();
+    parent_lstat.CopyFrom(parent_stat);
+    parent_lstat.SetLeaseDue(-1);
+    parent_lstat.AssertAllSet();
   }
 };
 
@@ -383,8 +402,10 @@ struct ThreadState {
 class Benchmark {
  private:
   FilesystemDb* db_;
-  // If FLAGS_withfs is true, all read and write operations will be invoked
-  // through fs_ instead of db_
+  // If FLAGS_with_fscli is true, all read and write operations will be invoked
+  // through fscli_ instead of db_
+  FilesystemCli* fscli_;
+  // If FLAGS_with_fs is true, all operations will be invoked through fs_
   Filesystem* fs_;
   User me_;
 
@@ -399,7 +420,8 @@ class Benchmark {
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
-    fprintf(stdout, "Use fs api:         %d\n", FLAGS_withfs);
+    fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
+    fprintf(stdout, "Use fs api:         %d\n", FLAGS_with_fs);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -466,6 +488,9 @@ class Benchmark {
     ThreadArg* arg = reinterpret_cast<ThreadArg*>(v);
     SharedState* shared = arg->shared;
     ThreadState* thread = arg->thread;
+    if (thread->prepare_write) {
+      arg->bm->PrepareWrite(thread);
+    }
     {
       MutexLock l(&shared->mu);
       shared->num_initialized++;
@@ -500,7 +525,8 @@ class Benchmark {
       arg[i].method = method;
       arg[i].shared = &shared;
       arg[i].thread = new ThreadState(
-          i, m * 1000, name.ToString().find("random") != std::string::npos);
+          i, m * 1000, name.ToString().find("random") != std::string::npos,
+          name.ToString().find("fill") != std::string::npos);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
     }
@@ -534,6 +560,22 @@ class Benchmark {
     delete[] arg;
   }
 
+  void PrepareWrite(ThreadState* thread) {
+    FilesystemDbStats stats;
+    if (FLAGS_with_fscli) {
+      if (!FLAGS_shared_dir || thread->tid == 0) {
+        Slice fname = thread->pathname;
+        fname.remove_prefix(1);
+        fname.remove_suffix(1);
+        Status s = db_->Put(DirId(0, 0), fname, thread->parent_stat, &stats);
+        if (!s.ok()) {
+          fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+          exit(1);
+        }
+      }
+    }
+  }
+
   void Write(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
@@ -543,11 +585,17 @@ class Benchmark {
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
       Status s;
-      if (FLAGS_withfs)
+      if (FLAGS_with_fscli) {
+        std::string* const p = &thread->pathname;
+        p->resize(thread->prefix_length);
+        p->append(fname.data(), fname.size());
+        s = fscli_->TEST_Mkfle(me_, p->c_str(), thread->stat, &stats);
+      } else if (FLAGS_with_fs) {
         s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
                             &stats);
-      else
+      } else {
         s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
+      }
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         exit(1);
@@ -581,7 +629,12 @@ class Benchmark {
       const uint64_t fid = tid | thread->fids[i];
       Slice fname = Base64Encoding(tmp, fid);
       Status s;
-      if (FLAGS_withfs) {
+      if (FLAGS_with_fscli) {
+        std::string* const p = &thread->pathname;
+        p->resize(thread->prefix_length);
+        p->append(fname.data(), fname.size());
+        s = fscli_->TEST_Lstat(me_, p->c_str(), &buf, &stats);
+      } else if (FLAGS_with_fs) {
         s = fs_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
       } else {
         s = db_->Get(thread->parent_dir, fname, &buf, &stats);
@@ -623,10 +676,14 @@ class Benchmark {
     FilesystemOptions opts;
     fs_ = new Filesystem(opts);
     fs_->SetDb(db_);
+
+    FilesystemCliOptions cliopts;
+    fscli_ = new FilesystemCli(cliopts);
+    fscli_->SetLocalFs(fs_);
   }
 
  public:
-  Benchmark() : db_(NULL), fs_(NULL) {
+  Benchmark() : db_(NULL), fscli_(NULL), fs_(NULL) {
     me_.uid = FLAGS_uid;
     me_.gid = FLAGS_gid;
     if (!FLAGS_use_existing_db) {
@@ -635,6 +692,7 @@ class Benchmark {
   }
 
   ~Benchmark() {  ///
+    delete fscli_;
     delete fs_;
     delete db_;
   }
@@ -676,6 +734,8 @@ class Benchmark {
                   name.ToString().c_str());
           method = NULL;
         } else {
+          delete fscli_;
+          fscli_ = NULL;
           delete fs_;
           fs_ = NULL;
           delete db_;
@@ -715,9 +775,12 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_histogram = n;
-    } else if (sscanf((*argv)[i], "--withfs=%d%c", &n, &junk) == 1 &&
+    } else if (sscanf((*argv)[i], "--with_fs=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_withfs = n;
+      pdlfs::FLAGS_with_fs = n;
+    } else if (sscanf((*argv)[i], "--with_fscli=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_with_fscli = n;
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;

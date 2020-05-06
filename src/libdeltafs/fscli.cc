@@ -1263,7 +1263,7 @@ FilesystemCliOptions::FilesystemCliOptions()
       vsrvs(1),
       nsrvs(1) {}
 
-void FilesystemCli::SetLocalFilesystem(Filesystem* fs) {
+void FilesystemCli::SetLocalFs(Filesystem* fs) {
   fs_ = fs;  // This is a weak reference; fs_ is not owned by us
 }
 

@@ -66,7 +66,7 @@ struct FilesystemCliOptions {
 class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
-  void SetLocalFilesystem(Filesystem* fs);
+  void SetLocalFs(Filesystem* fs);
   Status Open(RPC* rpc, const std::string* uri);
   ~FilesystemCli();
 

@@ -63,7 +63,7 @@ class FilesystemCliTest {
     if (s.ok()) {
       fscli_ = new FilesystemCli(fscliopts_);
       fs_ = new Filesystem(fsopts_);
-      fscli_->SetLocalFilesystem(fs_);
+      fscli_->SetLocalFs(fs_);
       fs_->SetDb(fsdb_);
     }
     return s;
