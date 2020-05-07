@@ -818,7 +818,7 @@ static void BM_Main(int* argc, char*** argv) {
     }
   }
 
-  if (pdlfs::FLAGS_reads == -1) {
+  if (pdlfs::FLAGS_reads == -1 || pdlfs::FLAGS_reads > pdlfs::FLAGS_num) {
     pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
