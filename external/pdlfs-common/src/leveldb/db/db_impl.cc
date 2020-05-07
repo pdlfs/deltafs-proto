@@ -1708,7 +1708,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
     return true;
   } else if (in == "l0-events") {
-    char buf[100];
+    char buf[200];
     snprintf(buf, sizeof(buf),
              "L0 Waits      Counts\n"
              "----------------------\n"
