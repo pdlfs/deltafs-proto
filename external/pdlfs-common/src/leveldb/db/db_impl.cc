@@ -503,7 +503,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
     }
 
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
-      status = WriteMemTable(mem, edit, NULL);
+      status = DumpMemTable(mem, edit, NULL);
       if (!status.ok()) {
         // Reflect errors immediately so that conditions like full
         // file-systems cause the DB::Open() to fail.
@@ -515,7 +515,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   }
 
   if (status.ok() && mem != NULL) {
-    status = WriteMemTable(mem, edit, NULL);
+    status = DumpMemTable(mem, edit, NULL);
     // Reflect errors immediately so that conditions like full
     // file-systems cause the DB::Open() to fail.
   }
@@ -526,21 +526,23 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
 }
 
 // REQUIRES: mutex_ has been locked.
-Status DBImpl::WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
+Status DBImpl::DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
   mutex_.AssertHeld();
   SequenceNumber ignored_min_seq;
   SequenceNumber ignored_max_seq;
-  Iterator* iter = mem->NewIterator();
-  Status s = WriteLevel0Table(iter, edit, base, &ignored_min_seq,
-                              &ignored_max_seq, false);
+  Iterator* const iter = mem->NewIterator();
+  Status s = WriteLevel0Table(
+      iter, edit, base, &ignored_min_seq,
+      &ignored_max_seq);  // Will temporarily unlock when writing the table
   delete iter;
   return s;
 }
 
-// REQUIRES: mutex_ has been locked.
+// REQUIRES: mutex_ has been locked. May insert table into deeper levels when
+// *base is given. Otherwise, will directly insert into Level 0.
 Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
-                                SequenceNumber* max_seq, bool force_level0) {
+                                SequenceNumber* max_seq) {
   mutex_.AssertHeld();
   const uint64_t start_micros = CurrentMicros();
   FileMetaData meta;
@@ -574,11 +576,8 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
     const Slice max_user_key = meta.largest.user_key();
 
     if (base != NULL) {
-      if (!force_level0 && !options_.disable_compaction) {
+      if (!options_.disable_compaction) {
         level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
-      } else {
-        // If compaction has been disabled, or force_level0 has been set,
-        // all MemTable dumps will only go to level-0.
       }
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.seq_off,
@@ -600,7 +599,7 @@ void DBImpl::CompactMemTable() {
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
-  Status s = WriteMemTable(imm_, &edit, base);
+  Status s = DumpMemTable(imm_, &edit, base);
   base->Unref();
 
   if (s.ok() && shutting_down_.Acquire_Load()) {
@@ -1428,29 +1427,16 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         }
 
         bulk_insert_in_progress_ = true;
-        MemTable* mem = new MemTable(internal_comparator_);
+        MemTable* const mem = new MemTable(internal_comparator_);
         mem->Ref();
-
         status = WriteBatchInternal::InsertInto(final_batch, mem);
         if (status.ok()) {
           VersionEdit edit;
-          Version* base = versions_->current();
-          base->Ref();
-          Iterator* iter = mem->NewIterator();
-          SequenceNumber ignored_min_seq;
-          SequenceNumber ignored_max_seq;
-          status = WriteLevel0Table(
-              iter, &edit, base, &ignored_min_seq, &ignored_max_seq,
-              true);  // Will temporarily unlock when building the table
-          delete iter;
-          base->Unref();
-
+          status = DumpMemTable(mem, &edit, NULL);
           if (status.ok()) {
             versions_->SetLastSequence(last_sequence);
             status = versions_->LogAndApply(&edit, &mutex_);
-          }
-
-          if (!status.ok()) {
+          } else {
             RecordBackgroundError(status);
           }
         }
@@ -1656,10 +1642,7 @@ Status DBImpl::BulkInsert(Iterator* iter) {
 
   bulk_insert_in_progress_ = true;
   VersionEdit edit;
-  Version* base = versions_->current();
-  base->Ref();
-  s = WriteLevel0Table(iter, &edit, base, &min_seq, &max_seq, true);
-  base->Unref();
+  s = WriteLevel0Table(iter, &edit, NULL, &min_seq, &max_seq);
   if (s.ok()) {
     if (max_seq > versions_->LastSequence()) {
       versions_->SetLastSequence(max_seq);

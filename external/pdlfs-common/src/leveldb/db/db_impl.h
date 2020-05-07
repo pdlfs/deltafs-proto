@@ -131,10 +131,9 @@ class DBImpl : public DB {
   virtual Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
                                 SequenceNumber* max_sequence);
 
-  Status WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base);
+  Status DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base);
   Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,
-                          SequenceNumber* min_seq, SequenceNumber* max_seq,
-                          bool force_level0);
+                          SequenceNumber* min_seq, SequenceNumber* max_seq);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
