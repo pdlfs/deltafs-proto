@@ -1361,11 +1361,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   w.done = false;
   w.batch = my_batch;
 
-  bool flush_or_sync = false;
-  if (my_batch == &flush_memtable_ || my_batch == &sync_wal_) {
-    flush_or_sync = true;
-  }
-
+  // A writer may be blocked by background compaction. While a writer is waiting
+  // for compaction, we allow subsequent writers to register themselves in a
+  // queue such that when the original writer is able to write it can group
+  // commit all writes in the queue making writing more efficient.
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
@@ -1375,100 +1374,115 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     return w.status;
   }
 
-  // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(my_batch == &flush_memtable_);
-  uint64_t last_sequence = versions_->LastSequence();
+  Status status;
   Writer* last_writer = &w;
-  bool sync_error = false;
+  if (my_batch != &sync_wal_) {
+    // Check memtable room for insertion. May temporarily unlock and wait. We
+    // skip this step for sync_wal_ batches because it may switch us to a
+    // new memtable and a new write ahead log file.
+    status = MakeRoomForWrite(my_batch == &flush_memtable_);
+    if (status.ok() && my_batch != &flush_memtable_) {
+      // We skip flush_memtable_ batches because they don't have any real data
+      // for insertion. For regular batches, we try adding more writes into the
+      // current batch. If we do so we will update last_writer accordingly.
+      WriteBatch* const final_batch = BuildBatchGroup(&last_writer);
+      uint64_t last_sequence = versions_->LastSequence();
+      WriteBatchInternal::SetSequence(final_batch, last_sequence + 1);
+      last_sequence += WriteBatchInternal::Count(final_batch);
 
-  if (status.ok() && !flush_or_sync) {
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
-    WriteBatchInternal::SetSequence(updates, last_sequence + 1);
-    last_sequence += WriteBatchInternal::Count(updates);
-
-    // Add to log and apply to memtable.  We can release the lock
-    // during this phase since &w is currently responsible for logging
-    // and protects against concurrent loggers and concurrent writes
-    // into mem_.
-    if (!options_.no_memtable) {
-      mutex_.Unlock();
-      if (!options_.disable_write_ahead_log) {
-        status = log_->AddRecord(WriteBatchInternal::Contents(updates));
-        if (status.ok() && options.sync) {
-          status = logfile_->Sync();
-          if (!status.ok()) {
-            sync_error = true;
+      if (!options_.no_memtable) {
+        bool sync_error = false;
+        // Add to log and apply to memtable. We can release the lock during
+        // this phase since &w is currently responsible for logging and
+        // protects against concurrent loggers and concurrent writes into
+        // mem_.
+        mutex_.Unlock();
+        if (!options_.disable_write_ahead_log) {
+          status = log_->AddRecord(WriteBatchInternal::Contents(final_batch));
+          if (status.ok() && options.sync) {
+            status = logfile_->Sync();
+            if (!status.ok()) {
+              sync_error = true;
+            }
           }
         }
-      }
-      if (status.ok()) {
-        status = WriteBatchInternal::InsertInto(updates, mem_);
-      }
-      mutex_.Lock();
-    } else {
-      // Temporarily disable any background compaction
-      bg_compaction_paused_++;
-      while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
-        bg_cv_.Wait();
-      }
-
-      bulk_insert_in_progress_ = true;
-      MemTable* mem = new MemTable(internal_comparator_);
-      mem->Ref();
-
-      status = WriteBatchInternal::InsertInto(updates, mem);
-      if (status.ok()) {
-        VersionEdit edit;
-        Version* base = versions_->current();
-        base->Ref();
-        Iterator* iter = mem->NewIterator();
-        SequenceNumber ignored_min_seq;
-        SequenceNumber ignored_max_seq;
-        status = WriteLevel0Table(iter, &edit, base, &ignored_min_seq,
-                                  &ignored_max_seq, true);
-        delete iter;
-        base->Unref();
-
         if (status.ok()) {
-          versions_->SetLastSequence(last_sequence);
-          status = versions_->LogAndApply(&edit, &mutex_);
+          status = WriteBatchInternal::InsertInto(final_batch, mem_);
         }
-
-        if (!status.ok()) {
+        mutex_.Lock();
+        if (sync_error) {
+          // The state of the log file is unclear: the log record we just
+          // added may or may not show up when the DB is re-opened. So we
+          // force the db into a mode where all future writes fail.
           RecordBackgroundError(status);
         }
+
+        versions_->SetLastSequence(last_sequence);
+      } else {
+        // There is no memtable. We need to directly generate a L0 table for
+        // the writes. We start by temporarily stopping any background
+        // compaction.
+        bg_compaction_paused_++;
+        while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+          bg_cv_.Wait();
+        }
+
+        bulk_insert_in_progress_ = true;
+        MemTable* mem = new MemTable(internal_comparator_);
+        mem->Ref();
+
+        status = WriteBatchInternal::InsertInto(final_batch, mem);
+        if (status.ok()) {
+          VersionEdit edit;
+          Version* base = versions_->current();
+          base->Ref();
+          Iterator* iter = mem->NewIterator();
+          SequenceNumber ignored_min_seq;
+          SequenceNumber ignored_max_seq;
+          status = WriteLevel0Table(
+              iter, &edit, base, &ignored_min_seq, &ignored_max_seq,
+              true);  // Will temporarily unlock when building the table
+          delete iter;
+          base->Unref();
+
+          if (status.ok()) {
+            versions_->SetLastSequence(last_sequence);
+            status = versions_->LogAndApply(&edit, &mutex_);
+          }
+
+          if (!status.ok()) {
+            RecordBackgroundError(status);
+          }
+        }
+
+        mem->Unref();
+        bulk_insert_in_progress_ = false;
+        // Restart background compaction
+        assert(bg_compaction_paused_ > 0);
+        bg_compaction_paused_--;
+        MaybeScheduleCompaction();
+        bg_cv_.SignalAll();
       }
 
-      mem->Unref();
-      bulk_insert_in_progress_ = false;
-      // Restart background compaction
-      assert(bg_compaction_paused_ > 0);
-      bg_compaction_paused_--;
-      MaybeScheduleCompaction();
-      bg_cv_.SignalAll();
+      if (final_batch == &tmp_batch_) {
+        final_batch->Clear();
+      }
     }
-
-    if (updates == &tmp_batch_) {
-      updates->Clear();
-    }
-
-    versions_->SetLastSequence(last_sequence);
-  } else if (status.ok() && my_batch == &sync_wal_) {
+  } else {
+    // If we are working on a sync_wal request, sync the write ahead log file
+    // here and we are done.
     if (!options_.disable_write_ahead_log) {
+      bool sync_error = false;
       mutex_.Unlock();
       status = logfile_->Sync();
       if (!status.ok()) {
         sync_error = true;
       }
       mutex_.Lock();
+      if (sync_error) {
+        RecordBackgroundError(status);
+      }
     }
-  }
-
-  if (sync_error) {
-    // The state of the log file is indeterminate: the log record we
-    // just added may or may not show up when the DB is re-opened.
-    // So we force the DB into a mode where all future writes fail.
-    RecordBackgroundError(status);
   }
 
   while (true) {
