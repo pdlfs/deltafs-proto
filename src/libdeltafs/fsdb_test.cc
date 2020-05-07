@@ -170,6 +170,9 @@ int FLAGS_db_level_factor = -1;
 // L1 compaction trigger for db.
 int FLAGS_db_l1_compaction_trigger = -1;
 
+// Size per table.
+int FLAGS_table_file_size = -1;
+
 // Enable snappy compression.
 bool FLAGS_snappy = false;
 
@@ -424,6 +427,7 @@ class Benchmark {
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
     fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
+    fprintf(stderr, "Table size:         %d MB\n", FLAGS_table_file_size >> 20);
     fprintf(stdout, "Level factor:       %d\n", FLAGS_db_level_factor);
     fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
@@ -670,6 +674,8 @@ class Benchmark {
     FilesystemDbOptions dbopts;
     dbopts.compression = FLAGS_snappy;
     dbopts.disable_compaction = FLAGS_disable_compaction;
+    dbopts.write_buffer_size = FLAGS_table_file_size << 1;
+    dbopts.table_file_size = FLAGS_table_file_size;
     dbopts.l1_compaction_trigger = FLAGS_db_l1_compaction_trigger;
     dbopts.level_factor = FLAGS_db_level_factor;
     dbopts.table_cache_size = FLAGS_max_open_files;
@@ -776,6 +782,7 @@ static void BM_Main(int* argc, char*** argv) {
   pdlfs::FLAGS_block_restart_interval =
       pdlfs::FilesystemDbOptions().block_restart_interval;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
+  pdlfs::FLAGS_table_file_size = pdlfs::FilesystemDbOptions().table_file_size;
   pdlfs::FLAGS_db_l1_compaction_trigger =
       pdlfs::FilesystemDbOptions().l1_compaction_trigger;
   pdlfs::FLAGS_db_level_factor = pdlfs::FilesystemDbOptions().level_factor;
@@ -815,6 +822,8 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_max_open_files = n;
+    } else if (sscanf((*argv)[i], "--table_file_size=%dM%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_table_file_size = n << 20;
     } else if (sscanf((*argv)[i], "--l1_compaction_trigger=%d%c", &n, &junk) ==
                1) {
       pdlfs::FLAGS_db_l1_compaction_trigger = n;
