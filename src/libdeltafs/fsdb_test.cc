@@ -164,6 +164,12 @@ int FLAGS_uid = 1;
 // Group id.
 int FLAGS_gid = 1;
 
+// Level factor for db.
+int FLAGS_db_level_factor = -1;
+
+// L1 compaction trigger for db.
+int FLAGS_db_l1_compaction_trigger = -1;
+
 // Enable snappy compression.
 bool FLAGS_snappy = false;
 
@@ -418,6 +424,8 @@ class Benchmark {
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
     fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
+    fprintf(stdout, "Level factor:       %d\n", FLAGS_db_level_factor);
+    fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
@@ -662,6 +670,8 @@ class Benchmark {
     FilesystemDbOptions dbopts;
     dbopts.compression = FLAGS_snappy;
     dbopts.disable_compaction = FLAGS_disable_compaction;
+    dbopts.l1_compaction_trigger = FLAGS_db_l1_compaction_trigger;
+    dbopts.level_factor = FLAGS_db_level_factor;
     dbopts.table_cache_size = FLAGS_max_open_files;
     dbopts.block_restart_interval = FLAGS_block_restart_interval;
     dbopts.block_cache_size = FLAGS_cache_size;
@@ -766,6 +776,9 @@ static void BM_Main(int* argc, char*** argv) {
   pdlfs::FLAGS_block_restart_interval =
       pdlfs::FilesystemDbOptions().block_restart_interval;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
+  pdlfs::FLAGS_db_l1_compaction_trigger =
+      pdlfs::FilesystemDbOptions().l1_compaction_trigger;
+  pdlfs::FLAGS_db_level_factor = pdlfs::FilesystemDbOptions().level_factor;
   std::string default_db_path;
 
   for (int i = 2; i < *argc; i++) {
@@ -785,7 +798,7 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;
-    } else if (sscanf((*argv)[i], "--no_compact=%d%c", &n, &junk) == 1 &&
+    } else if (sscanf((*argv)[i], "--disable_compact=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_disable_compaction = n;
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
@@ -802,6 +815,11 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_max_open_files = n;
+    } else if (sscanf((*argv)[i], "--l1_compaction_trigger=%d%c", &n, &junk) ==
+               1) {
+      pdlfs::FLAGS_db_l1_compaction_trigger = n;
+    } else if (sscanf((*argv)[i], "--level_factor=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_db_level_factor = n;
     } else if (sscanf((*argv)[i], "--block_restart_interval=%d%c", &n, &junk) ==
                1) {
       pdlfs::FLAGS_block_restart_interval = n;
