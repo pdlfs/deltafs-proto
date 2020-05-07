@@ -1418,8 +1418,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
         versions_->SetLastSequence(last_sequence);
       } else {
-        // There is no memtable. We need to directly generate a L0 table for
-        // the writes. We start by temporarily stopping any background
+        // If there are no memtables, we directly generate an L0 table for the
+        // batch of writes. We start by temporarily pausing background
         // compaction.
         bg_compaction_paused_++;
         while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
