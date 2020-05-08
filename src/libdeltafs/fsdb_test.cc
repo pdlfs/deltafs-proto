@@ -177,6 +177,9 @@ int FLAGS_db_l1_compaction_trigger = -1;
 // Size per table.
 int FLAGS_table_file_size = -1;
 
+// Explicitly set Env to use unbuffered io.
+bool FLAGS_use_unbuffered_io = false;
+
 // Enable snappy compression.
 bool FLAGS_snappy = false;
 
@@ -741,7 +744,9 @@ class Benchmark {
     dbopts.block_restart_interval = FLAGS_block_restart_interval;
     dbopts.block_cache_size = FLAGS_cache_size;
     dbopts.filter_bits_per_key = FLAGS_bloom_bits;
-    db_ = new FilesystemDb(dbopts, Env::GetUnBufferedIoEnv());
+    Env* env =
+        FLAGS_use_unbuffered_io ? Env::GetUnBufferedIoEnv() : Env::Default();
+    db_ = new FilesystemDb(dbopts, env);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
