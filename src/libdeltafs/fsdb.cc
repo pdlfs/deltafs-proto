@@ -49,7 +49,7 @@ FilesystemDbOptions::FilesystemDbOptions()
     : write_buffer_size(4u << 20u),
       table_file_size(2u << 20u),
       block_size(64u << 10u),
-      table_cache_size(1024),
+      table_cache_size(1000),
       filter_bits_per_key(14),
       block_cache_size(32u << 20u),
       block_restart_interval(16),
