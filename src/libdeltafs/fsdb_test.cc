@@ -765,10 +765,10 @@ class Benchmark {
     }
 
     FilesystemOptions opts;
-    fs_ = new Filesystem(opts);
     opts.skip_partition_checks = opts.skip_perm_checks =
         opts.skip_lease_due_checks = opts.skip_name_collision_checks =
             FLAGS_fs_skip_checks;
+    fs_ = new Filesystem(opts);
     fs_->SetDb(db_);
 
     FilesystemCliOptions cliopts;
