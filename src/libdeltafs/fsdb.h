@@ -109,7 +109,7 @@ class FilesystemDb {
              FilesystemDbStats* stats);
   Status Delete(const DirId& id, const Slice& fname);
   Status DrainCompaction();
-  Status Flush();
+  Status Flush(bool force_flush_l0);
 
  private:
   struct Tx;

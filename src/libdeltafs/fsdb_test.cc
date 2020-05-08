@@ -620,7 +620,7 @@ class Benchmark {
   }
 
   void Compact(ThreadState* thread) {
-    Status s = db_->Flush();
+    Status s = db_->Flush(true);
     if (!s.ok()) {
       fprintf(stderr, "flush error: %s\n", s.ToString().c_str());
       exit(1);
@@ -692,6 +692,7 @@ class Benchmark {
 
     FilesystemOptions opts;
     fs_ = new Filesystem(opts);
+    opts.skip_name_collision_checks = true;
     fs_->SetDb(db_);
 
     FilesystemCliOptions cliopts;

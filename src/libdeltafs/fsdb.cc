@@ -135,7 +135,11 @@ FilesystemDb::~FilesystemDb() {
 
 Status FilesystemDb::DrainCompaction() { return db_->DrainCompactions(); }
 
-Status FilesystemDb::Flush() { return db_->FlushMemTable(FlushOptions()); }
+Status FilesystemDb::Flush(bool force_flush_l0) {
+  FlushOptions opts;
+  opts.force_flush_l0 = force_flush_l0;
+  return db_->FlushMemTable(opts);
+}
 
 Status FilesystemDb::Put(  ///
     const DirId& id, const Slice& fname, const Stat& stat,
