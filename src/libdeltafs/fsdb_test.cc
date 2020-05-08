@@ -496,6 +496,7 @@ class Benchmark {
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_with_fs);
+    fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_use_unbuffered_io);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -890,6 +891,9 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_shared_dir = n;
+    } else if (sscanf((*argv)[i], "--use_unbuffered_io=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_use_unbuffered_io = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
