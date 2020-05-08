@@ -193,7 +193,7 @@ bool FLAGS_use_existing_db = false;
 const char* FLAGS_db = NULL;
 
 #if defined(PDLFS_OS_LINUX)
-void Merge(struct timeval* tv, const struct timeval* other) {
+void MergeTv(struct timeval* tv, const struct timeval* other) {
   tv->tv_sec += other->tv_sec;
   tv->tv_usec += other->tv_usec;
 }
@@ -266,8 +266,8 @@ class Stats {
 
 #if defined(PDLFS_OS_LINUX)
   static void MergeUsage(struct rusage* ru, const struct rusage* other) {
-    Merge(&ru->ru_utime, &other->ru_utime);
-    Merge(&ru->ru_stime, &other->ru_stime);
+    MergeTv(&ru->ru_utime, &other->ru_utime);
+    MergeTv(&ru->ru_stime, &other->ru_stime);
   }
 #endif
 
