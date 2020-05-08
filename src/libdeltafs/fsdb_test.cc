@@ -478,6 +478,9 @@ class Benchmark {
     fprintf(stdout, "Block cache size:   %d MB\n", FLAGS_cache_size >> 20);
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
     fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
+    fprintf(stdout, "Io monitoring:      %d\n", FLAGS_enable_io_monitoring);
+    fprintf(stdout, "WAL off:            %d\n",
+            FLAGS_disable_write_ahead_logging);
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
     fprintf(stderr, "Table size:         %d MB\n", FLAGS_table_file_size >> 20);
     fprintf(stdout, "Level factor:       %d\n", FLAGS_db_level_factor);
