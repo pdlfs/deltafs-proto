@@ -485,7 +485,7 @@ class Benchmark {
     fprintf(stdout, "WAL off:            %d\n",
             FLAGS_disable_write_ahead_logging);
     fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
-    fprintf(stderr, "Table size:         %d MB\n", FLAGS_table_file_size >> 20);
+    fprintf(stdout, "Table size:         %d MB\n", FLAGS_table_file_size >> 20);
     fprintf(stdout, "Level factor:       %d\n", FLAGS_db_level_factor);
     fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
