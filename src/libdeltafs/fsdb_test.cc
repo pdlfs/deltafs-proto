@@ -67,7 +67,7 @@ class FilesystemDbTest {
   }
 
   Status OpenDb() {
-    db_ = new FilesystemDb(options_);
+    db_ = new FilesystemDb(options_, Env::GetUnBufferedIoEnv());
     return db_->Open(dbloc_);
   }
 
@@ -741,7 +741,7 @@ class Benchmark {
     dbopts.block_restart_interval = FLAGS_block_restart_interval;
     dbopts.block_cache_size = FLAGS_cache_size;
     dbopts.filter_bits_per_key = FLAGS_bloom_bits;
-    db_ = new FilesystemDb(dbopts);
+    db_ = new FilesystemDb(dbopts, Env::GetUnBufferedIoEnv());
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());

@@ -117,10 +117,10 @@ struct FilesystemDb::Tx {
   WriteBatch bat;
 };
 
-FilesystemDb::FilesystemDb(const FilesystemDbOptions& options)
+FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* base)
     : mdb_(NULL),
       options_(options),
-      dbenv_(new FilesystemDbEnvWrapper(options)),
+      dbenv_(new FilesystemDbEnvWrapper(options, base)),
       filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
       table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),

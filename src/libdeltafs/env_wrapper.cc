@@ -42,8 +42,8 @@
 namespace pdlfs {
 
 FilesystemDbEnvWrapper::FilesystemDbEnvWrapper(
-    const FilesystemDbOptions& options)
-    : EnvWrapper(Env::GetUnBufferedIoEnv()), options_(options) {}
+    const FilesystemDbOptions& options, Env* const base)
+    : EnvWrapper(base), options_(options) {}
 
 namespace {
 template <typename T>

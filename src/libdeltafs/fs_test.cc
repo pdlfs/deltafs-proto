@@ -53,7 +53,7 @@ class FilesystemTest {
   }
 
   Status OpenFilesystem() {
-    fsdb_ = new FilesystemDb(fsdbopts_);
+    fsdb_ = new FilesystemDb(fsdbopts_, Env::GetUnBufferedIoEnv());
     Status s = fsdb_->Open(fsloc_);
     if (s.ok()) {
       fs_ = new Filesystem(fsopts_);

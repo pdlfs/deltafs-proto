@@ -98,7 +98,7 @@ struct FilesystemDbStats {
 
 class FilesystemDb {
  public:
-  explicit FilesystemDb(const FilesystemDbOptions& options);
+  FilesystemDb(const FilesystemDbOptions& options, Env* base);
   ~FilesystemDb();
 
   std::string GetDbLevel0Events();

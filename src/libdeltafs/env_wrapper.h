@@ -51,7 +51,7 @@ namespace pdlfs {
 // for files created through it.
 class FilesystemDbEnvWrapper : public EnvWrapper {
  public:
-  explicit FilesystemDbEnvWrapper(const FilesystemDbOptions& options);
+  FilesystemDbEnvWrapper(const FilesystemDbOptions& options, Env* base);
   virtual ~FilesystemDbEnvWrapper();
 
   virtual Status NewSequentialFile(const char* f, SequentialFile** r) OVERRIDE;

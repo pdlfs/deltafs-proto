@@ -58,7 +58,7 @@ class FilesystemCliTest {
   }
 
   Status OpenFilesystemCli() {
-    fsdb_ = new FilesystemDb(fsdbopts_);
+    fsdb_ = new FilesystemDb(fsdbopts_, Env::GetUnBufferedIoEnv());
     Status s = fsdb_->Open(fsloc_);
     if (s.ok()) {
       fscli_ = new FilesystemCli(fscliopts_);
