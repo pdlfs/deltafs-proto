@@ -162,6 +162,9 @@ int FLAGS_bloom_bits = -1;
 // Number of keys between restart points for delta encoding of keys.
 int FLAGS_block_restart_interval = -1;
 
+// Table block size.
+int FLAGS_block_size = -1;
+
 // User id for the bench.
 int FLAGS_uid = 1;
 
@@ -479,6 +482,7 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
     fprintf(stdout, "Block cache size:   %d MB\n", FLAGS_cache_size >> 20);
+    fprintf(stdout, "Block size:         %d KB\n", FLAGS_block_size >> 10);
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
     fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
     fprintf(stdout, "Io monitoring:      %d\n", FLAGS_enable_io_monitoring);
@@ -738,6 +742,7 @@ class Benchmark {
     dbopts.disable_compaction = FLAGS_disable_compaction;
     dbopts.write_buffer_size = FLAGS_table_file_size << 1;
     dbopts.table_file_size = FLAGS_table_file_size;
+    dbopts.block_size = FLAGS_block_size;
     dbopts.l1_compaction_trigger = FLAGS_db_l1_compaction_trigger;
     dbopts.level_factor = FLAGS_db_level_factor;
     dbopts.table_cache_size = FLAGS_max_open_files;
@@ -846,6 +851,7 @@ static void BM_Main(int* argc, char*** argv) {
   pdlfs::FLAGS_block_restart_interval =
       pdlfs::FilesystemDbOptions().block_restart_interval;
   pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
+  pdlfs::FLAGS_block_size = pdlfs::FilesystemDbOptions().block_size;
   pdlfs::FLAGS_table_file_size = pdlfs::FilesystemDbOptions().table_file_size;
   pdlfs::FLAGS_db_l1_compaction_trigger =
       pdlfs::FilesystemDbOptions().l1_compaction_trigger;
@@ -897,6 +903,8 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_max_open_files = n;
     } else if (sscanf((*argv)[i], "--table_file_size=%dM%c", &n, &junk) == 1) {
       pdlfs::FLAGS_table_file_size = n << 20;
+    } else if (sscanf((*argv)[i], "--block_size=%dK%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_block_size = n << 10;
     } else if (sscanf((*argv)[i], "--l1_compaction_trigger=%d%c", &n, &junk) ==
                1) {
       pdlfs::FLAGS_db_l1_compaction_trigger = n;
