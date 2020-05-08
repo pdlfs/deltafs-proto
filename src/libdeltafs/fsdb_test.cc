@@ -350,7 +350,7 @@ class Stats {
     }
     AppendWithSpace(&extra, message_);
 
-    fprintf(stdout, "%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
+    fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
 #if defined(PDLFS_OS_LINUX)
@@ -605,13 +605,13 @@ class Benchmark {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
     }
     arg[0].thread->stats.Report(name);
-    fprintf(stdout, " - total bytes written: %llu\n",
+    fprintf(stdout, "Total bytes written: %llu\n",
             static_cast<unsigned long long>(
                 db_->GetDbEnv()->TotalDbBytesWritten()));
     fprintf(
-        stdout, " - total bytes read: %llu\n",
+        stdout, "Total bytes read: %llu\n",
         static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
-    fprintf(stdout, " - db stats: >>>\n%s\n", db_->GetDbStats().c_str());
+    fprintf(stdout, " - Db stats: >>>\n%s\n", db_->GetDbStats().c_str());
     fprintf(stdout, " - L0 stats: >>>\n%s\n", db_->GetDbLevel0Events().c_str());
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
