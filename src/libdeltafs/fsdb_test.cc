@@ -53,7 +53,6 @@
 #include <time.h>
 #include <vector>
 #if defined(PDLFS_OS_LINUX)
-#define _GNU_SOURCE  // RUSAGE_THREAD
 #include <sys/resource.h>
 #include <sys/time.h>
 #endif
@@ -194,7 +193,17 @@ bool FLAGS_use_existing_db = false;
 const char* FLAGS_db = NULL;
 
 #if defined(PDLFS_OS_LINUX)
-uint64_t timeval_to_micros(const struct timeval* const tv) {
+void Merge(struct timeval* tv, const struct timeval* other) {
+  tv->tv_sec += other->tv_sec;
+  tv->tv_usec += other->tv_usec;
+}
+
+inline void MergeUsage(struct rusage* ru, const struct rusage* other) {
+  Merge(&ru->ru_utime, &other->ru_utime);
+  Merge(&ru->ru_stime, &other->ru_stime);
+}
+
+uint64_t ToMicros(const struct timeval* tv) {
   uint64_t t;
   t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
   t += tv->tv_usec;
@@ -261,6 +270,10 @@ class Stats {
   }
 
   void Merge(const Stats& other) {
+#if defined(PDLFS_OS_LINUX)
+    MergeUsage(&start_rusage_, &other.start_rusage_);
+    MergeUsage(&rusage_, &other.rusage_);
+#endif
     hist_.Merge(other.hist_);
     done_ += other.done_;
     bytes_ += other.bytes_;
