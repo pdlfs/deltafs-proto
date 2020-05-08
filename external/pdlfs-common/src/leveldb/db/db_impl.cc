@@ -568,6 +568,9 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
 #endif
 
   pending_outputs_.erase(meta.number);
+  CompactionStats stats;
+  stats.n = 1;
+
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
   int level = 0;
@@ -582,11 +585,12 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
     }
     edit->AddFile(level, meta.number, meta.file_size, meta.seq_off,
                   meta.smallest, meta.largest);
+
+    stats.bytes_written = meta.file_size;
+    stats.files = 1;
   }
 
-  CompactionStats stats;
   stats.micros = CurrentMicros() - start_micros;
-  stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
   return s;
 }
@@ -1111,14 +1115,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
   CompactionStats stats;
   stats.micros = CurrentMicros() - start_micros - imm_micros;
+  stats.in0 = compact->compaction->num_input_files(0);
+  stats.in1 = compact->compaction->num_input_files(1);
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
     }
   }
+  stats.files = compact->outputs.size();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     stats.bytes_written += compact->outputs[i].file_size;
   }
+  stats.n = 1;
 
   mutex_.Lock();
   stats_[compact->compaction->level() + 1].Add(stats);
@@ -1687,16 +1695,30 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
   } else if (in == "stats") {
     char buf[200];
-    snprintf(buf, sizeof(buf),
-             "                               Compactions\n"
-             "Level  Files Size(MB) Time(sec) Read(MB) Write(MB)\n"
-             "--------------------------------------------------\n");
+    snprintf(
+        buf, sizeof(buf),
+        "                              Files                  Compactions\n");
+    value->append(buf);
+    snprintf(
+        buf, sizeof(buf),
+        "Level  Files Size(MB) Input0 Input1 Output Counts Time(sec) Read(MB) "
+        "Write(MB)\n");
+    value->append(buf);
+    snprintf(
+        buf, sizeof(buf),
+        "----------------------------------------------------------------------"
+        "--------\n");
     value->append(buf);
     for (int level = 0; level < config::kNumLevels; level++) {
       int files = versions_->NumLevelFiles(level);
       if (stats_[level].micros > 0 || files > 0) {
-        snprintf(buf, sizeof(buf), "%3d %8d %8.0f %9.0f %8.0f %9.0f\n", level,
-                 files, versions_->NumLevelBytes(level) / 1048576.0,
+        snprintf(buf, sizeof(buf),
+                 "%3d %8d %8.0f %6lld %6lld %6lld %6lld %9.0f %8.0f %9.0f\n",
+                 level, files, versions_->NumLevelBytes(level) / 1048576.0,
+                 static_cast<long long>(stats_[level].in0),
+                 static_cast<long long>(stats_[level].in1),
+                 static_cast<long long>(stats_[level].files),
+                 static_cast<long long>(stats_[level].n),
                  stats_[level].micros / 1e6,
                  stats_[level].bytes_read / 1048576.0,
                  stats_[level].bytes_written / 1048576.0);
@@ -1707,11 +1729,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   } else if (in == "l0-events") {
     char buf[200];
     snprintf(buf, sizeof(buf),
-             "L0 Waits      Counts\n"
-             "----------------------\n"
-             "Soft            %llu\n"
-             "Hard            %llu\n"
-             "MemTable        %llu\n",
+             "Soft-Limit Hard-Limit MemTable\n%-10llu %-10lld %-8lld\n",
              static_cast<unsigned long long>(l0_soft_limits_),
              static_cast<unsigned long long>(l0_hard_limits_),
              static_cast<unsigned long long>(l0_waits_));
