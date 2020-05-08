@@ -60,6 +60,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       l0_hard_limit(12),
       enable_io_monitoring(false),
       use_default_logger(false),
+      disable_write_ahead_logging(false),
       disable_compaction(false),
       compression(false) {}
 
@@ -82,7 +83,8 @@ FilesystemDbStats::FilesystemDbStats()
 
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions dbopts;
-  dbopts.error_if_exists = dbopts.create_if_missing = true;
+  dbopts.create_if_missing = true;
+  dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
   dbopts.disable_compaction = options_.disable_compaction;
   dbopts.disable_seek_compaction = true;
   dbopts.skip_lock_file = true;

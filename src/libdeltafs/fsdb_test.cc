@@ -183,6 +183,12 @@ bool FLAGS_snappy = false;
 // All files are inserted into a single parent directory.
 bool FLAGS_shared_dir = false;
 
+// Enable Io monitoring
+bool FLAGS_enable_io_monitoring = false;
+
+// Disable write ahead logging.
+bool FLAGS_disable_write_ahead_logging = false;
+
 // Disable all background compaction.
 bool FLAGS_disable_compaction = false;
 
@@ -605,12 +611,14 @@ class Benchmark {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
     }
     arg[0].thread->stats.Report(name);
-    fprintf(stdout, "Total bytes written: %llu\n",
-            static_cast<unsigned long long>(
-                db_->GetDbEnv()->TotalDbBytesWritten()));
-    fprintf(
-        stdout, "Total bytes read: %llu\n",
-        static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
+    if (FLAGS_enable_io_monitoring) {
+      fprintf(stdout, "Total bytes written: %llu\n",
+              static_cast<unsigned long long>(
+                  db_->GetDbEnv()->TotalDbBytesWritten()));
+      fprintf(
+          stdout, "Total bytes read: %llu\n",
+          static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
+    }
     fprintf(stdout, " - Db stats: >>>\n%s\n", db_->GetDbStats().c_str());
     fprintf(stdout, " - L0 stats: >>>\n%s\n", db_->GetDbLevel0Events().c_str());
     for (int i = 0; i < n; i++) {
@@ -719,6 +727,8 @@ class Benchmark {
   void Open() {
     FilesystemDbOptions dbopts;
     dbopts.compression = FLAGS_snappy;
+    dbopts.enable_io_monitoring = FLAGS_enable_io_monitoring;
+    dbopts.disable_write_ahead_logging = FLAGS_disable_write_ahead_logging;
     dbopts.disable_compaction = FLAGS_disable_compaction;
     dbopts.write_buffer_size = FLAGS_table_file_size << 1;
     dbopts.table_file_size = FLAGS_table_file_size;
@@ -728,7 +738,6 @@ class Benchmark {
     dbopts.block_restart_interval = FLAGS_block_restart_interval;
     dbopts.block_cache_size = FLAGS_cache_size;
     dbopts.filter_bits_per_key = FLAGS_bloom_bits;
-    dbopts.enable_io_monitoring = true;
     db_ = new FilesystemDb(dbopts);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
@@ -852,7 +861,16 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;
-    } else if (sscanf((*argv)[i], "--disable_compact=%d%c", &n, &junk) == 1 &&
+    } else if (sscanf((*argv)[i], "--enable_io_monitoring=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_enable_io_monitoring = n;
+    } else if (sscanf((*argv)[i], "--disable_write_ahead_logging=%d%c", &n,
+                      &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_disable_write_ahead_logging = n;
+    } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
+                   1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_disable_compaction = n;
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&

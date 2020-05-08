@@ -71,6 +71,8 @@ struct FilesystemDbOptions {
   bool enable_io_monitoring;
   // Log to stderr.
   bool use_default_logger;
+  // Disable write ahead logging.
+  bool disable_write_ahead_logging;
   // Disable background table compaction.
   bool disable_compaction;
   // Enable snappy compression.
