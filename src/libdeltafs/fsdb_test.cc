@@ -186,6 +186,9 @@ bool FLAGS_use_unbuffered_io = false;
 // Enable snappy compression.
 bool FLAGS_snappy = false;
 
+// Skip various fs checks.
+bool FLAGS_fs_skip_checks = false;
+
 // All files are inserted into a single parent directory.
 bool FLAGS_shared_dir = false;
 
@@ -481,6 +484,7 @@ class Benchmark {
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
+    fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Block cache size:   %d MB\n", FLAGS_cache_size >> 20);
     fprintf(stdout, "Block size:         %d KB\n", FLAGS_block_size >> 10);
     fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
@@ -761,7 +765,9 @@ class Benchmark {
 
     FilesystemOptions opts;
     fs_ = new Filesystem(opts);
-    opts.skip_name_collision_checks = true;
+    opts.skip_partition_checks = opts.skip_perm_checks =
+        opts.skip_lease_due_checks = opts.skip_name_collision_checks =
+            FLAGS_fs_skip_checks;
     fs_->SetDb(db_);
 
     FilesystemCliOptions cliopts;
@@ -867,6 +873,9 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_histogram = n;
+    } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_fs_skip_checks = n;
     } else if (sscanf((*argv)[i], "--with_fs=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_with_fs = n;
