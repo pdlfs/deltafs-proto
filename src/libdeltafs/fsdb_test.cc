@@ -208,12 +208,12 @@ bool FLAGS_use_existing_db = false;
 const char* FLAGS_db = NULL;
 
 #if defined(PDLFS_OS_LINUX)
-void MergeTv(struct timeval* tv, const struct timeval* other) {
+void MergeTimeval(struct timeval* tv, const struct timeval* other) {
   tv->tv_sec += other->tv_sec;
   tv->tv_usec += other->tv_usec;
 }
 
-uint64_t TvToMicros(const struct timeval* tv) {
+uint64_t TimevalToMicros(const struct timeval* tv) {
   uint64_t t;
   t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
   t += tv->tv_usec;
@@ -281,8 +281,8 @@ class Stats {
 
 #if defined(PDLFS_OS_LINUX)
   static void MergeUsage(struct rusage* ru, const struct rusage* other) {
-    MergeTv(&ru->ru_utime, &other->ru_utime);
-    MergeTv(&ru->ru_stime, &other->ru_stime);
+    MergeTimeval(&ru->ru_utime, &other->ru_utime);
+    MergeTimeval(&ru->ru_stime, &other->ru_stime);
   }
 #endif
 
@@ -369,13 +369,14 @@ class Stats {
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
 #if defined(PDLFS_OS_LINUX)
-    fprintf(
-        stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
-        (TvToMicros(&rusage_.ru_utime) - TvToMicros(&start_rusage_.ru_utime)) *
-            1e-6,
-        (TvToMicros(&rusage_.ru_stime) - TvToMicros(&start_rusage_.ru_stime)) *
-            1e-6,
-        (finish_ - start_) * 1e-6);
+    fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
+            (TimevalToMicros(&rusage_.ru_utime) -
+             TimevalToMicros(&start_rusage_.ru_utime)) *
+                1e-6,
+            (TimevalToMicros(&rusage_.ru_stime) -
+             TimevalToMicros(&start_rusage_.ru_stime)) *
+                1e-6,
+            (finish_ - start_) * 1e-6);
 #endif
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
