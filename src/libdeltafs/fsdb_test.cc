@@ -52,6 +52,11 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <vector>
+#if defined(PDLFS_OS_LINUX)
+#define _GNU_SOURCE  // RUSAGE_THREAD
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
 
 namespace pdlfs {
 
@@ -189,6 +194,13 @@ bool FLAGS_use_existing_db = false;
 const char* FLAGS_db = NULL;
 
 #if defined(PDLFS_OS_LINUX)
+uint64_t timeval_to_micros(const struct timeval* const tv) {
+  uint64_t t;
+  t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
+  t += tv->tv_usec;
+  return t;
+}
+
 Slice TrimSpace(Slice s) {
   size_t start = 0;
   while (start < s.size() && isspace(s[start])) {
@@ -216,6 +228,10 @@ void AppendWithSpace(std::string* str, Slice msg) {
 // Performance stats.
 class Stats {
  private:
+#if defined(PDLFS_OS_LINUX)
+  struct rusage start_rusage_;
+  struct rusage rusage_;
+#endif
   double start_;
   double finish_;
   double seconds_;
@@ -239,6 +255,9 @@ class Stats {
     start_ = CurrentMicros();
     finish_ = start_;
     message_.clear();
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &start_rusage_);
+#endif
   }
 
   void Merge(const Stats& other) {
@@ -254,6 +273,9 @@ class Stats {
   }
 
   void Stop() {
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &rusage_);
+#endif
     finish_ = CurrentMicros();
     seconds_ = (finish_ - start_) * 1e-6;
   }
@@ -316,6 +338,16 @@ class Stats {
     fprintf(stdout, "%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
+#if defined(PDLFS_OS_LINUX)
+    fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
+            (timeval_to_micros(&rusage_.ru_utime) -
+             timeval_to_micros(&start_rusage_.ru_utime)) *
+                1e-6,
+            (timeval_to_micros(&rusage_.ru_stime) -
+             timeval_to_micros(&start_rusage_.ru_stime)) *
+                1e-6,
+            (finish_ - start_) * 1e-6);
+#endif
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
     }
