@@ -122,6 +122,10 @@ TEST(FilesystemDbTest, Base64) {
 }
 
 namespace {  // Db benchmark
+// Testing mode.
+enum TestMode { kFsFullCliApi, kFsCliApi, kFsApi, kDb };
+TestMode FLAGS_mode = kDb;
+
 // Comma-separated list of operations to run in the specified order.
 const char* FLAGS_benchmarks =
     "fillrandom,"
@@ -137,15 +141,6 @@ int FLAGS_num = 8;
 
 // Number of KV pairs to read from db.
 int FLAGS_reads = -1;
-
-// Fire ops through the fs interface atop fs db.
-bool FLAGS_with_fs = false;
-
-// Fire ops through the fs client interface.
-bool FLAGS_with_fscli = false;
-
-// Fire ops through the full fs client interface.
-bool FLAGS_with_fscli_full = false;
 
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
@@ -502,10 +497,10 @@ class Benchmark {
     fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
-    fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_with_fscli_full);
-    fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
-    fprintf(stdout, "Use fs api:         %d\n", FLAGS_with_fs);
-    fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_use_unbuffered_io);
+    fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_mode == kFsFullCliApi);
+    fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_mode == kFsCliApi);
+    fprintf(stdout, "Use fs api:         %d\n", FLAGS_mode == kFsApi);
+    fprintf(stdout, "Unbuffered Io:      %d\n", FLAGS_use_unbuffered_io);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -649,7 +644,7 @@ class Benchmark {
 
   void PrepareWrite(ThreadState* thread) {
     FilesystemDbStats stats;
-    if (FLAGS_with_fscli_full) {
+    if (FLAGS_mode == kFsFullCliApi) {
       if (!FLAGS_shared_dir || thread->tid == 0) {
         Slice fname = thread->pathname;
         fname.remove_prefix(1);
@@ -663,7 +658,8 @@ class Benchmark {
     }
   }
 
-  void Write(ThreadState* thread) {
+  template <TestMode m>
+  void DoWrite(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
     char tmp[20];
@@ -672,19 +668,25 @@ class Benchmark {
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
       Status s;
-      if (FLAGS_with_fscli_full) {
-        std::string* const p = &thread->pathname;
-        p->resize(thread->prefix_length);
-        p->append(fname.data(), fname.size());
-        s = fscli_->TEST_Mkfle(me_, p->c_str(), thread->stat, &stats);
-      } else if (FLAGS_with_fscli) {
-        s = fscli_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
-                               &stats);
-      } else if (FLAGS_with_fs) {
-        s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
-                            &stats);
-      } else {
-        s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
+      switch (m) {
+        case kFsFullCliApi: {
+          std::string* const p = &thread->pathname;
+          p->resize(thread->prefix_length);
+          p->append(fname.data(), fname.size());
+          s = fscli_->TEST_Mkfle(me_, p->c_str(), thread->stat, &stats);
+          break;
+        }
+        case kFsCliApi:
+          s = fscli_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
+                                 &stats);
+          break;
+        case kFsApi:
+          s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
+                              &stats);
+          break;
+        default:
+          s = db_->Put(thread->parent_dir, fname, thread->stat, &stats);
+          break;
       }
       if (!s.ok()) {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
@@ -694,6 +696,23 @@ class Benchmark {
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
+  }
+
+  void Write(ThreadState* const thread) {
+    switch (FLAGS_mode) {
+      case kFsFullCliApi:
+        DoWrite<kFsFullCliApi>(thread);
+        break;
+      case kFsCliApi:
+        DoWrite<kFsCliApi>(thread);
+        break;
+      case kFsApi:
+        DoWrite<kFsApi>(thread);
+        break;
+      default:
+        DoWrite<kDb>(thread);
+        break;
+    }
   }
 
   void Compact(ThreadState* thread) {
@@ -709,7 +728,8 @@ class Benchmark {
     }
   }
 
-  void Read(ThreadState* thread) {
+  template <TestMode m>
+  void DoRead(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
     char tmp[20];
@@ -719,17 +739,24 @@ class Benchmark {
       const uint64_t fid = tid | thread->fids[i];
       Slice fname = Base64Encoding(tmp, fid);
       Status s;
-      if (FLAGS_with_fscli_full) {
-        std::string* const p = &thread->pathname;
-        p->resize(thread->prefix_length);
-        p->append(fname.data(), fname.size());
-        s = fscli_->TEST_Lstat(me_, p->c_str(), &buf, &stats);
-      } else if (FLAGS_with_fscli) {
-        s = fscli_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
-      } else if (FLAGS_with_fs) {
-        s = fs_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
-      } else {
-        s = db_->Get(thread->parent_dir, fname, &buf, &stats);
+      switch (m) {
+        case kFsFullCliApi: {
+          std::string* const p = &thread->pathname;
+          p->resize(thread->prefix_length);
+          p->append(fname.data(), fname.size());
+          s = fscli_->TEST_Lstat(me_, p->c_str(), &buf, &stats);
+          break;
+        }
+        case kFsCliApi:
+          s = fscli_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf,
+                                 &stats);
+          break;
+        case kFsApi:
+          s = fs_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
+          break;
+        default:
+          s = db_->Get(thread->parent_dir, fname, &buf, &stats);
+          break;
       }
       if (s.ok()) {
         found++;
@@ -746,6 +773,23 @@ class Benchmark {
       snprintf(msg, sizeof(msg), "(thread 0: %d of %d found)", found,
                FLAGS_reads);
       thread->stats.AddMessage(msg);
+    }
+  }
+
+  void Read(ThreadState* const thread) {
+    switch (FLAGS_mode) {
+      case kFsFullCliApi:
+        DoRead<kFsFullCliApi>(thread);
+        break;
+      case kFsCliApi:
+        DoRead<kFsCliApi>(thread);
+        break;
+      case kFsApi:
+        DoRead<kFsApi>(thread);
+        break;
+      default:
+        DoRead<kDb>(thread);
+        break;
     }
   }
 
@@ -888,13 +932,19 @@ static void BM_Main(int* argc, char*** argv) {
       pdlfs::FLAGS_fs_skip_checks = n;
     } else if (sscanf((*argv)[i], "--with_fscli_full=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_with_fscli_full = n;
+      if (n == 1) {
+        pdlfs::FLAGS_mode = pdlfs::kFsFullCliApi;
+      }
     } else if (sscanf((*argv)[i], "--with_fscli=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_with_fscli = n;
+      if (n == 1) {
+        pdlfs::FLAGS_mode = pdlfs::kFsCliApi;
+      }
     } else if (sscanf((*argv)[i], "--with_fs=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_with_fs = n;
+      if (n == 1) {
+        pdlfs::FLAGS_mode = pdlfs::kFsApi;
+      }
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;
