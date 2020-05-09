@@ -49,6 +49,32 @@ Status Nofs() {  ///
 }  // namespace
 
 Status FilesystemCli::TEST_Mkfle(  ///
+    const User& who, const LookupStat& parent, const Slice& fname,
+    const Stat& stat, FilesystemDbStats* const stats) {
+  Status status;
+  if (fname.empty()) {
+    status = Status::AssertionFailed("tgt is empty");
+  } else {
+    MutexLock lock(&mutex_);
+    Partition* part;
+    Dir* dir;
+    int i;
+    status = AcquireAndFetch(who, parent, fname, &dir, &i);
+    if (status.ok()) {
+      status = AcquirePartition(dir, i, &part);
+      if (status.ok()) {
+        mutex_.Unlock();
+        status = fs_->TEST_Mkfle(who, parent, fname, stat, stats);
+        mutex_.Lock();
+        Release(part);
+      }
+      Release(dir);
+    }
+  }
+  return status;
+}
+
+Status FilesystemCli::TEST_Mkfle(  ///
     const User& who, const char* const pathname, const Stat& stat,
     FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
@@ -80,6 +106,32 @@ Status FilesystemCli::TEST_Mkfle(  ///
   }
   if (parent_dir) {
     Release(parent_dir);
+  }
+  return status;
+}
+
+Status FilesystemCli::TEST_Lstat(  ///
+    const User& who, const LookupStat& parent, const Slice& fname,
+    Stat* const stat, FilesystemDbStats* const stats) {
+  Status status;
+  if (fname.empty()) {
+    status = Status::AssertionFailed("tgt is empty");
+  } else {
+    MutexLock lock(&mutex_);
+    Partition* part;
+    Dir* dir;
+    int i;
+    status = AcquireAndFetch(who, parent, fname, &dir, &i);
+    if (status.ok()) {
+      status = AcquirePartition(dir, i, &part);
+      if (status.ok()) {
+        mutex_.Unlock();
+        status = fs_->TEST_Lstat(who, parent, fname, stat, stats);
+        mutex_.Lock();
+        Release(part);
+      }
+      Release(dir);
+    }
   }
   return status;
 }

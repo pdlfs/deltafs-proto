@@ -91,8 +91,13 @@ class FilesystemCli {
   Status BatchCommit(BAT* bat);
   Status BatchEnd(BAT* bat);
 
+  Status TEST_Mkfle(const User& who, const LookupStat& parent,
+                    const Slice& fname, const Stat& stat,
+                    FilesystemDbStats* stats);
   Status TEST_Mkfle(const User& who, const char* pathname, const Stat& stat,
                     FilesystemDbStats* stats);
+  Status TEST_Lstat(const User& who, const LookupStat& parent,
+                    const Slice& fname, Stat* stat, FilesystemDbStats* stats);
   Status TEST_Lstat(const User& who, const char* pathname, Stat* stat,
                     FilesystemDbStats* stats);
   uint32_t TEST_TotalLeasesAtPartition(const DirId& dir_id, int ix);
