@@ -502,7 +502,7 @@ class Benchmark {
     fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
-    fprintf(stdout, "Use fs cli full     %d\n", FLAGS_with_fscli_full);
+    fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_with_fscli_full);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_with_fs);
     fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_use_unbuffered_io);
