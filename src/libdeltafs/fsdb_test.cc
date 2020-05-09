@@ -138,11 +138,14 @@ int FLAGS_num = 8;
 // Number of KV pairs to read from db.
 int FLAGS_reads = -1;
 
-// Fire ops through the Filesystem interface atop FilesystemDb.
+// Fire ops through the fs interface atop fs db.
 bool FLAGS_with_fs = false;
 
-// Fire ops through the Filesystem client interface.
+// Fire ops through the fs client interface.
 bool FLAGS_with_fscli = false;
+
+// Fire ops through the full fs client interface.
+bool FLAGS_with_fscli_full = false;
 
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
@@ -499,6 +502,7 @@ class Benchmark {
     fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
+    fprintf(stdout, "Use fs cli full     %d\n", FLAGS_with_fscli_full);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_with_fscli);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_with_fs);
     fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_use_unbuffered_io);
@@ -645,7 +649,7 @@ class Benchmark {
 
   void PrepareWrite(ThreadState* thread) {
     FilesystemDbStats stats;
-    if (FLAGS_with_fscli) {
+    if (FLAGS_with_fscli_full) {
       if (!FLAGS_shared_dir || thread->tid == 0) {
         Slice fname = thread->pathname;
         fname.remove_prefix(1);
@@ -668,11 +672,14 @@ class Benchmark {
       Slice fname = Base64Encoding(tmp, fid);
       thread->stat.SetInodeNo(fid);
       Status s;
-      if (FLAGS_with_fscli) {
+      if (FLAGS_with_fscli_full) {
         std::string* const p = &thread->pathname;
         p->resize(thread->prefix_length);
         p->append(fname.data(), fname.size());
         s = fscli_->TEST_Mkfle(me_, p->c_str(), thread->stat, &stats);
+      } else if (FLAGS_with_fscli) {
+        s = fscli_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
+                               &stats);
       } else if (FLAGS_with_fs) {
         s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
                             &stats);
@@ -712,11 +719,13 @@ class Benchmark {
       const uint64_t fid = tid | thread->fids[i];
       Slice fname = Base64Encoding(tmp, fid);
       Status s;
-      if (FLAGS_with_fscli) {
+      if (FLAGS_with_fscli_full) {
         std::string* const p = &thread->pathname;
         p->resize(thread->prefix_length);
         p->append(fname.data(), fname.size());
         s = fscli_->TEST_Lstat(me_, p->c_str(), &buf, &stats);
+      } else if (FLAGS_with_fscli) {
+        s = fscli_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
       } else if (FLAGS_with_fs) {
         s = fs_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf, &stats);
       } else {
@@ -877,12 +886,15 @@ static void BM_Main(int* argc, char*** argv) {
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_fs_skip_checks = n;
-    } else if (sscanf((*argv)[i], "--with_fs=%d%c", &n, &junk) == 1 &&
+    } else if (sscanf((*argv)[i], "--with_fscli_full=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_with_fs = n;
+      pdlfs::FLAGS_with_fscli_full = n;
     } else if (sscanf((*argv)[i], "--with_fscli=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_with_fscli = n;
+    } else if (sscanf((*argv)[i], "--with_fs=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_with_fs = n;
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_snappy = n;
