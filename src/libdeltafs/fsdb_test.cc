@@ -466,8 +466,6 @@ struct ThreadState {
   }
 };
 
-}  // namespace
-
 class Benchmark {
  private:
   FilesystemDb* db_;
@@ -478,7 +476,7 @@ class Benchmark {
   Filesystem* fs_;
   User me_;
 
-  void PrintHeader() {
+  static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
@@ -506,7 +504,7 @@ class Benchmark {
     fprintf(stdout, "------------------------------------------------\n");
   }
 
-  void PrintWarnings() {
+  static void PrintWarnings() {
 #if defined(__GNUC__) && !defined(__OPTIMIZE__)
     fprintf(stdout, "WARNING: C++ optimization disabled\n");
 #endif
@@ -524,7 +522,7 @@ class Benchmark {
     }
   }
 
-  void PrintEnvironment() {
+  static void PrintEnvironment() {
 #if defined(PDLFS_OS_LINUX)
     time_t now = time(NULL);
     fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
@@ -900,13 +898,15 @@ class Benchmark {
     }
   }
 };
+
+}  // namespace
 }  // namespace pdlfs
 
 static void BM_Usage() {
   fprintf(stderr, "Use --bench to run db benchmark.\n");
 }
 
-static void BM_Main(int* argc, char*** argv) {
+static void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
   pdlfs::FLAGS_max_open_files = pdlfs::FilesystemDbOptions().table_cache_size;
   pdlfs::FLAGS_block_restart_interval =
