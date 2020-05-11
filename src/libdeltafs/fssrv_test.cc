@@ -98,6 +98,9 @@ bool FLAGS_use_existing_db = false;
 // Use the db at the following name.
 const char* FLAGS_db = NULL;
 
+// Start the server at the following address.
+const char* FLAGS_srv_uri = NULL;
+
 class Benchmark {
  private:
   port::Mutex mu_;
@@ -183,8 +186,8 @@ class Benchmark {
     fs_->SetDb(db_);
 
     FilesystemServerOptions srvopts;
-    srvopts.uri = ":10086";
     srvopts.num_rpc_threads = FLAGS_threads;
+    srvopts.uri = FLAGS_srv_uri;
     fsrpcsrv_ = new FilesystemServer(srvopts);
     fsrpcsrv_->SetFs(fs_);
 
@@ -227,14 +230,13 @@ class Benchmark {
     while (!shutting_down_) {
       cv_.Wait();
     }
-    fprintf(stdout, "Bye\n");
   }
 };
 }  // namespace
 }  // namespace pdlfs
 
 namespace {
-pdlfs::Benchmark* g_bench;
+pdlfs::Benchmark* g_bench = NULL;
 
 void HandleSig(const int sig) {
   fprintf(stdout, "\n");
@@ -247,6 +249,7 @@ void HandleSig(const int sig) {
 
 void BM_Main(int* const argc, char*** const argv) {
   std::string default_db_path;
+  std::string default_uri;
 
   for (int i = 2; i < *argc; i++) {
     int n;
@@ -256,6 +259,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_use_existing_db = n;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
+    } else if (strncmp((*argv)[i], "--uri=", 6) == 0) {
+      pdlfs::FLAGS_srv_uri = (*argv)[i] + 6;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
@@ -265,9 +270,13 @@ void BM_Main(int* const argc, char*** const argv) {
   }
 
   // Choose a location for the test database if none given with --db=<path>
-  if (pdlfs::FLAGS_db == NULL) {
+  if (!pdlfs::FLAGS_db) {
     default_db_path = pdlfs::test::TmpDir() + "/fsrpcsrv_bench";
     pdlfs::FLAGS_db = default_db_path.c_str();
+  }
+  if (!pdlfs::FLAGS_srv_uri) {
+    default_uri = ":10086";
+    pdlfs::FLAGS_srv_uri = default_uri.c_str();
   }
 
   pdlfs::Benchmark benchmark;
