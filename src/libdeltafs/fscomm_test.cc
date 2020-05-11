@@ -33,7 +33,15 @@
  */
 #include "fscomm.h"
 
+#include "pdlfs-common/port.h"
+#include "pdlfs-common/rpc.h"
 #include "pdlfs-common/testharness.h"
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #if __cplusplus >= 201103L
 #define OVERRIDE override
@@ -168,9 +176,184 @@ TEST(MkflsTest, MkflsCall) {
   ASSERT_OK(rpc::MkflsCli(this)(opts, &ret));
   ASSERT_EQ(ret.n, n_);
 }
+
+namespace {  // RPC Bench (the client component of it)...
+// Number of rpc operations to perform.
+int FLAGS_num = 8;
+
+// User id for the bench.
+int FLAGS_uid = 1;
+
+// Group id.
+int FLAGS_gid = 1;
+
+// Connect to the server at the following address.
+const char* FLAGS_srv_uri = NULL;
+
+class Benchmark {
+ private:
+  rpc::If* rpccli_;
+  RPC* rpc_;
+  LookupStat parent_lstat_;
+  User me_;
+
+  static void PrintHeader() {
+    PrintEnvironment();
+    PrintWarnings();
+    fprintf(stdout, "Number requests:    %d\n", FLAGS_num);
+    fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
+    fprintf(stdout, "------------------------------------------------\n");
+  }
+
+  static void PrintWarnings() {
+#if defined(__GNUC__) && !defined(__OPTIMIZE__)
+    fprintf(stdout, "WARNING: C++ optimization disabled\n");
+#endif
+#ifndef NDEBUG
+    fprintf(stdout, "WARNING: C++ assertions are on\n");
+#endif
+
+    // See if snappy is working by attempting to compress a compressible string
+    const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+    std::string compressed;
+    if (!port::Snappy_Compress(text, sizeof(text), &compressed)) {
+      fprintf(stdout, "WARNING: Snappy compression is not enabled\n");
+    } else if (compressed.size() >= sizeof(text)) {
+      fprintf(stdout, "WARNING: Snappy compression is not effective\n");
+    }
+  }
+
+  static void PrintEnvironment() {
+#if defined(PDLFS_OS_LINUX)
+    time_t now = time(NULL);
+    fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
+
+    FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
+    if (cpuinfo != nullptr) {
+      char line[1000];
+      int num_cpus = 0;
+      std::string cpu_type;
+      std::string cache_size;
+      while (fgets(line, sizeof(line), cpuinfo) != nullptr) {
+        const char* sep = strchr(line, ':');
+        if (sep == nullptr) {
+          continue;
+        }
+        Slice key = TrimSpace(Slice(line, sep - 1 - line));
+        Slice val = TrimSpace(Slice(sep + 1));
+        if (key == "model name") {
+          ++num_cpus;
+          cpu_type = val.ToString();
+        } else if (key == "cache size") {
+          cache_size = val.ToString();
+        }
+      }
+      fclose(cpuinfo);
+      fprintf(stderr, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
+      fprintf(stderr, "CPUCache:   %s\n", cache_size.c_str());
+    }
+#endif
+  }
+
+  void InitParent() {
+    parent_lstat_.SetDnodeNo(0);
+    parent_lstat_.SetInodeNo(0);
+    parent_lstat_.SetDirMode(0770 | S_IFDIR);
+    parent_lstat_.SetUserId(FLAGS_uid);
+    parent_lstat_.SetGroupId(FLAGS_gid);
+    parent_lstat_.SetZerothServer(0);
+    parent_lstat_.SetLeaseDue(-1);
+    parent_lstat_.AssertAllSet();
+  }
+
+  void Open() {
+    RPCOptions opts;
+    opts.uri = ":";  // Any non-empty string works
+    opts.mode = rpc::kClientOnly;
+    rpc_ = RPC::Open(opts);
+    rpccli_ = rpc_->OpenStubFor(FLAGS_srv_uri);
+  }
+
+ public:
+  Benchmark() : rpccli_(NULL), rpc_(NULL) {
+    me_.uid = FLAGS_uid;
+    me_.gid = FLAGS_gid;
+    InitParent();
+  }
+
+  ~Benchmark() {
+    delete rpccli_;
+    delete rpc_;
+  }
+
+  void Run() {
+    PrintHeader();
+    Open();
+    uint64_t start = CurrentMicros();
+    MkfleOptions options;
+    options.parent = &parent_lstat_;
+    options.mode = 0660;
+    options.me = me_;
+    Stat stat;
+    MkfleRet ret;
+    ret.stat = &stat;
+    rpc::MkfleCli cli(rpccli_);
+    char tmp[20];
+    for (int i = 0; i < FLAGS_num; i++) {
+      snprintf(tmp, sizeof(tmp), "%012d", i);
+      options.name = Slice(tmp, 12);
+      Status s = cli(options, &ret);
+      if (!s.ok()) {
+        fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
+        exit(1);
+      }
+    }
+    double dura = CurrentMicros() - start;
+    if (FLAGS_num) {
+      fprintf(stdout, "RPC: %.3f micros/op", dura / FLAGS_num);
+    }
+  }
+};
+}  // namespace
 }  // namespace pdlfs
 #undef OVERRIDE
 
+namespace {
+void BM_Main(const int* const argc, char*** const argv) {
+  std::string default_uri;
+
+  for (int i = 2; i < *argc; i++) {
+    int n;
+    char junk;
+    if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_num = n;
+    } else if (strncmp((*argv)[i], "--uri=", 6) == 0) {
+      pdlfs::FLAGS_srv_uri = (*argv)[i] + 6;
+    } else {
+      fprintf(stderr, "Invalid flag: \"%s\"\n", (*argv)[i]);
+      exit(1);
+    }
+  }
+
+  if (!pdlfs::FLAGS_srv_uri) {
+    default_uri = ":10086";
+    pdlfs::FLAGS_srv_uri = default_uri.c_str();
+  }
+
+  pdlfs::Benchmark benchmark;
+  benchmark.Run();
+}
+}  // namespace
+
 int main(int argc, char* argv[]) {
-  return pdlfs::test::RunAllTests(&argc, &argv);
+  pdlfs::Slice token;
+  if (argc > 1) {
+    token = pdlfs::Slice(argv[1]);
+  }
+  if (!token.starts_with("--bench")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_Main(&argc, &argv);
+    return 0;
+  }
 }
