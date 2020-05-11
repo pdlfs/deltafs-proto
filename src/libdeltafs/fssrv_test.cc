@@ -49,6 +49,11 @@
 #include <stdlib.h>
 #include <time.h>
 
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 namespace pdlfs {
 class FilesystemServerTest {
  public:
@@ -88,9 +93,12 @@ TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->Close());
 }
 
-namespace {  // RPC Server bench...
+namespace {  // RPC performance bench (the srvr part of it)...
 // Number of rpc processing threads to launch.
 int FLAGS_threads = 1;
+
+// Use a real fs server backed by a db.
+bool FLAGS_with_db = false;
 
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
@@ -101,7 +109,7 @@ const char* FLAGS_db = NULL;
 // Start the server at the following address.
 const char* FLAGS_srv_uri = NULL;
 
-class Benchmark {
+class Benchmark : public FilesystemWrapper {
  private:
   port::Mutex mu_;
   bool shutting_down_;
@@ -114,6 +122,8 @@ class Benchmark {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
+    fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
+    fprintf(stdout, "Real fs with db:    %d\n", FLAGS_with_db);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -169,7 +179,13 @@ class Benchmark {
 #endif
   }
 
-  void Open() {
+  virtual Status Mkfle(  ///
+      const User& who, const LookupStat& parent, const Slice& name,
+      uint32_t mode, Stat* stat) OVERRIDE {
+    return Status::OK();
+  }
+
+  FilesystemIf* OpenFilesystem() {
     FilesystemDbOptions dbopts;
     dbopts.enable_io_monitoring = false;
     db_ = new FilesystemDb(dbopts, Env::Default());
@@ -184,16 +200,19 @@ class Benchmark {
         opts.skip_lease_due_checks = opts.skip_name_collision_checks = false;
     fs_ = new Filesystem(opts);
     fs_->SetDb(db_);
+    return fs_;
+  }
 
+  void Open() {
     FilesystemServerOptions srvopts;
     srvopts.num_rpc_threads = FLAGS_threads;
     srvopts.uri = FLAGS_srv_uri;
     fsrpcsrv_ = new FilesystemServer(srvopts);
-    fsrpcsrv_->SetFs(fs_);
-
-    s = fsrpcsrv_->OpenServer();
+    FilesystemIf* const fs = !FLAGS_with_db ? this : OpenFilesystem();
+    fsrpcsrv_->SetFs(fs);
+    Status s = fsrpcsrv_->OpenServer();
     if (!s.ok()) {
-      fprintf(stderr, "server error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
       exit(1);
     }
   }
@@ -205,7 +224,7 @@ class Benchmark {
         fsrpcsrv_(NULL),
         fs_(NULL),
         db_(NULL) {
-    if (!FLAGS_use_existing_db) {
+    if (FLAGS_with_db && !FLAGS_use_existing_db) {
       DestroyDB(FLAGS_db, DBOptions());
     }
   }
@@ -234,6 +253,7 @@ class Benchmark {
 };
 }  // namespace
 }  // namespace pdlfs
+#undef OVERRIDE
 
 namespace {
 pdlfs::Benchmark* g_bench = NULL;
@@ -254,8 +274,11 @@ void BM_Main(int* const argc, char*** const argv) {
   for (int i = 2; i < *argc; i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
+    if (sscanf((*argv)[i], "--with_db=%d%c", &n, &junk) == 1 &&
         (n == 0 || n == 1)) {
+      pdlfs::FLAGS_with_db = n;
+    } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
@@ -283,6 +306,7 @@ void BM_Main(int* const argc, char*** const argv) {
   g_bench = &benchmark;
   signal(SIGINT, &HandleSig);
   benchmark.Run();
+  fprintf(stdout, "Bye!\n");
 }
 }  // namespace
 
