@@ -39,8 +39,8 @@ FilesystemServerOptions::FilesystemServerOptions()
     : num_rpc_threads(1), uri(":10086") {}
 
 FilesystemServer::FilesystemServer(  ///
-    const FilesystemServerOptions& options, FilesystemIf* fs)
-    : options_(options), fs_(fs), hmap_(NULL), rpc_(NULL) {
+    const FilesystemServerOptions& options)
+    : options_(options), fs_(NULL), hmap_(NULL), rpc_(NULL) {
   hmap_ = new RequestHandler[kNumOps];
   memset(hmap_, 0, kNumOps * sizeof(void*));
   hmap_[kLokup] = Lokup;
@@ -48,6 +48,10 @@ FilesystemServer::FilesystemServer(  ///
   hmap_[kMkfle] = Mkfle;
   hmap_[kMkfls] = Mkfls;
   hmap_[kLstat] = Lstat;
+}
+
+void FilesystemServer::SetFs(FilesystemIf* const fs) {
+  fs_ = fs;  ///
 }
 
 Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {

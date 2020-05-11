@@ -33,13 +33,27 @@
  */
 #include "fssrv.h"
 
+#include "fs.h"
+#include "fsdb.h"
+
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/options.h"
+
+#include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
+
+#include <ctype.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 namespace pdlfs {
 class FilesystemServerTest {
  public:
   FilesystemServerTest()  ///
-      : srv_(new FilesystemServer(options_, NULL)) {}
+      : srv_(new FilesystemServer(options_)) {}
   virtual ~FilesystemServerTest() {  ///
     delete srv_;
   }
@@ -74,8 +88,204 @@ TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->Close());
 }
 
+namespace {  // RPC Server bench...
+// Number of rpc processing threads to launch.
+int FLAGS_threads = 1;
+
+// If true, do not destroy the existing database.
+bool FLAGS_use_existing_db = false;
+
+// Use the db at the following name.
+const char* FLAGS_db = NULL;
+
+class Benchmark {
+ private:
+  port::Mutex mu_;
+  bool shutting_down_;
+  port::CondVar cv_;
+  FilesystemServer* fsrpcsrv_;
+  Filesystem* fs_;
+  FilesystemDb* db_;
+
+  static void PrintHeader() {
+    PrintEnvironment();
+    PrintWarnings();
+    fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
+    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
+    fprintf(stdout, "Db: %s\n", FLAGS_db);
+    fprintf(stdout, "------------------------------------------------\n");
+  }
+
+  static void PrintWarnings() {
+#if defined(__GNUC__) && !defined(__OPTIMIZE__)
+    fprintf(stdout, "WARNING: C++ optimization disabled\n");
+#endif
+#ifndef NDEBUG
+    fprintf(stdout, "WARNING: C++ assertions are on\n");
+#endif
+
+    // See if snappy is working by attempting to compress a compressible string
+    const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+    std::string compressed;
+    if (!port::Snappy_Compress(text, sizeof(text), &compressed)) {
+      fprintf(stdout, "WARNING: Snappy compression is not enabled\n");
+    } else if (compressed.size() >= sizeof(text)) {
+      fprintf(stdout, "WARNING: Snappy compression is not effective\n");
+    }
+  }
+
+  static void PrintEnvironment() {
+#if defined(PDLFS_OS_LINUX)
+    time_t now = time(NULL);
+    fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
+
+    FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
+    if (cpuinfo != nullptr) {
+      char line[1000];
+      int num_cpus = 0;
+      std::string cpu_type;
+      std::string cache_size;
+      while (fgets(line, sizeof(line), cpuinfo) != nullptr) {
+        const char* sep = strchr(line, ':');
+        if (sep == nullptr) {
+          continue;
+        }
+        Slice key = TrimSpace(Slice(line, sep - 1 - line));
+        Slice val = TrimSpace(Slice(sep + 1));
+        if (key == "model name") {
+          ++num_cpus;
+          cpu_type = val.ToString();
+        } else if (key == "cache size") {
+          cache_size = val.ToString();
+        }
+      }
+      fclose(cpuinfo);
+      fprintf(stderr, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
+      fprintf(stderr, "CPUCache:   %s\n", cache_size.c_str());
+    }
+#endif
+  }
+
+  void Open() {
+    FilesystemDbOptions dbopts;
+    dbopts.enable_io_monitoring = false;
+    db_ = new FilesystemDb(dbopts, Env::Default());
+    Status s = db_->Open(FLAGS_db);
+    if (!s.ok()) {
+      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
+      exit(1);
+    }
+
+    FilesystemOptions opts;
+    opts.skip_partition_checks = opts.skip_perm_checks =
+        opts.skip_lease_due_checks = opts.skip_name_collision_checks = false;
+    fs_ = new Filesystem(opts);
+    fs_->SetDb(db_);
+
+    FilesystemServerOptions srvopts;
+    srvopts.uri = ":10086";
+    srvopts.num_rpc_threads = FLAGS_threads;
+    fsrpcsrv_ = new FilesystemServer(srvopts);
+    fsrpcsrv_->SetFs(fs_);
+
+    s = fsrpcsrv_->OpenServer();
+    if (!s.ok()) {
+      fprintf(stderr, "server error: %s\n", s.ToString().c_str());
+      exit(1);
+    }
+  }
+
+ public:
+  Benchmark()
+      : shutting_down_(false),
+        cv_(&mu_),
+        fsrpcsrv_(NULL),
+        fs_(NULL),
+        db_(NULL) {
+    if (!FLAGS_use_existing_db) {
+      DestroyDB(FLAGS_db, DBOptions());
+    }
+  }
+
+  ~Benchmark() {
+    delete fsrpcsrv_;
+    delete fs_;
+    delete db_;
+  }
+
+  void Interrupt() {
+    MutexLock ml(&mu_);
+    shutting_down_ = true;
+    cv_.Signal();
+  }
+
+  void Run() {
+    PrintHeader();
+    Open();
+    fprintf(stdout, "Running...\n");
+    MutexLock ml(&mu_);
+    while (!shutting_down_) {
+      cv_.Wait();
+    }
+    fprintf(stdout, "Bye\n");
+  }
+};
+}  // namespace
 }  // namespace pdlfs
 
+namespace {
+pdlfs::Benchmark* g_bench;
+
+void HandleSig(const int sig) {
+  fprintf(stdout, "\n");
+  if (sig == SIGINT || sig == SIGTERM) {
+    if (g_bench) {
+      g_bench->Interrupt();
+    }
+  }
+}
+
+void BM_Main(int* const argc, char*** const argv) {
+  std::string default_db_path;
+
+  for (int i = 2; i < *argc; i++) {
+    int n;
+    char junk;
+    if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
+        (n == 0 || n == 1)) {
+      pdlfs::FLAGS_use_existing_db = n;
+    } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_threads = n;
+    } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
+      pdlfs::FLAGS_db = (*argv)[i] + 5;
+    } else {
+      fprintf(stderr, "Invalid flag: \"%s\"\n", (*argv)[i]);
+      exit(1);
+    }
+  }
+
+  // Choose a location for the test database if none given with --db=<path>
+  if (pdlfs::FLAGS_db == NULL) {
+    default_db_path = pdlfs::test::TmpDir() + "/fsrpcsrv_bench";
+    pdlfs::FLAGS_db = default_db_path.c_str();
+  }
+
+  pdlfs::Benchmark benchmark;
+  g_bench = &benchmark;
+  signal(SIGINT, &HandleSig);
+  benchmark.Run();
+}
+}  // namespace
+
 int main(int argc, char* argv[]) {
-  return pdlfs::test::RunAllTests(&argc, &argv);
+  pdlfs::Slice token;
+  if (argc > 1) {
+    token = pdlfs::Slice(argv[1]);
+  }
+  if (!token.starts_with("--bench")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_Main(&argc, &argv);
+    return 0;
+  }
 }

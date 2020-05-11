@@ -54,9 +54,11 @@ struct FilesystemServerOptions {
 // initialization.
 class FilesystemServer : public rpc::If {
  public:
-  FilesystemServer(const FilesystemServerOptions& o, FilesystemIf* fs);
+  explicit FilesystemServer(const FilesystemServerOptions& options);
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
   virtual ~FilesystemServer();
+
+  void SetFs(FilesystemIf* fs);
   Status OpenServer();
   Status Close();
 
@@ -70,7 +72,7 @@ class FilesystemServer : public rpc::If {
   void operator=(const FilesystemServer& server);
   FilesystemServer(const FilesystemServer&);
   FilesystemServerOptions options_;
-  FilesystemIf* fs_;
+  FilesystemIf* fs_;  // fs_ not owned by us
   RequestHandler* hmap_;
   RPC* rpc_;
 };
