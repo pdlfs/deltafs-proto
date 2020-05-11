@@ -177,7 +177,7 @@ TEST(MkflsTest, MkflsCall) {
   ASSERT_EQ(ret.n, n_);
 }
 
-namespace {  // RPC Bench (the client component of it)...
+namespace {  // RPC performance bench (the client part of it)...
 // Number of rpc operations to perform.
 int FLAGS_num = 8;
 
@@ -310,7 +310,7 @@ class Benchmark {
     }
     double dura = CurrentMicros() - start;
     if (FLAGS_num) {
-      fprintf(stdout, "RPC: %.3f micros/op", dura / FLAGS_num);
+      fprintf(stdout, "RPC: %.3f micros/op\n", dura / FLAGS_num);
     }
   }
 };
