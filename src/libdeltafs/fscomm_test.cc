@@ -619,7 +619,7 @@ class Benchmark {
         p = NULL;
       } else {
         uri = Slice(p, sep - p);
-        uri = sep + 1;
+        p = sep + 1;
       }
       srvs_.push_back(uri.ToString());
     }
