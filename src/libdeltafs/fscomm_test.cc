@@ -570,7 +570,7 @@ class Benchmark {
       options.name = Slice(tmp, 12);
       Status s = rpc::MkfleCli(clis[rnd.Next() % n])(options, &ret);
       if (!s.ok()) {
-        fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
+        fprintf(stderr, "Cannot send/recv: %s\n", s.ToString().c_str());
         exit(1);
       }
       stats->FinishedSingleOp(FLAGS_num, thread->tid);
@@ -607,7 +607,7 @@ class Benchmark {
     rpc_ = RPC::Open(opts);
     Status s = rpc_->status();
     if (!s.ok()) {
-      fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Cannot open rpc: %s\n", s.ToString().c_str());
       exit(1);
     }
     const char* p = FLAGS_srv_uris;
@@ -622,7 +622,9 @@ class Benchmark {
         p = sep + 1;
       }
       srvs_.push_back(uri.ToString());
+      fprintf(stdout, "Add srv: '%s'\n", srvs_.back().c_str());
     }
+    fflush(stdout);
 
     RunBenchmark(FLAGS_threads);
   }
@@ -638,8 +640,8 @@ void BM_Main(const int* const argc, char*** const argv) {
   for (int i = 2; i < *argc; i++) {
     int n;
     char junk;
-    if (strncmp((*argv)[i], "--uris=", 6) == 0) {
-      pdlfs::FLAGS_srv_uris = (*argv)[i] + 6;
+    if (strncmp((*argv)[i], "--uris=", 7) == 0) {
+      pdlfs::FLAGS_srv_uris = (*argv)[i] + 7;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
