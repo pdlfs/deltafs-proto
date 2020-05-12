@@ -118,24 +118,6 @@ class Benchmark : public FilesystemWrapper {
   Filesystem* fs_;
   FilesystemDb* db_;
 
-#if defined(PDLFS_OS_LINUX)
-  static Slice TrimSpace(Slice s) {
-    size_t start = 0;
-    while (start < s.size() && isspace(s[start])) {
-      start++;
-    }
-    size_t limit = s.size();
-    while (limit > start && isspace(s[limit - 1])) {
-      limit--;
-    }
-
-    Slice r = s;
-    r.remove_suffix(s.size() - limit);
-    r.remove_prefix(start);
-    return r;
-  }
-#endif
-
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
@@ -164,6 +146,24 @@ class Benchmark : public FilesystemWrapper {
       fprintf(stdout, "WARNING: Snappy compression is not effective\n");
     }
   }
+
+#if defined(PDLFS_OS_LINUX)
+  static Slice TrimSpace(Slice s) {
+    size_t start = 0;
+    while (start < s.size() && isspace(s[start])) {
+      start++;
+    }
+    size_t limit = s.size();
+    while (limit > start && isspace(s[limit - 1])) {
+      limit--;
+    }
+
+    Slice r = s;
+    r.remove_suffix(s.size() - limit);
+    r.remove_prefix(start);
+    return r;
+  }
+#endif
 
   static void PrintEnvironment() {
 #if defined(PDLFS_OS_LINUX)

@@ -205,43 +205,6 @@ bool FLAGS_use_existing_db = false;
 // Use the db at the following name.
 const char* FLAGS_db = NULL;
 
-#if defined(PDLFS_OS_LINUX)
-void MergeTimeval(struct timeval* tv, const struct timeval* other) {
-  tv->tv_sec += other->tv_sec;
-  tv->tv_usec += other->tv_usec;
-}
-
-uint64_t TimevalToMicros(const struct timeval* tv) {
-  uint64_t t;
-  t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
-  t += tv->tv_usec;
-  return t;
-}
-
-Slice TrimSpace(Slice s) {
-  size_t start = 0;
-  while (start < s.size() && isspace(s[start])) {
-    start++;
-  }
-  size_t limit = s.size();
-  while (limit > start && isspace(s[limit - 1])) {
-    limit--;
-  }
-
-  Slice r = s;
-  r.remove_suffix(s.size() - limit);
-  r.remove_prefix(start);
-  return r;
-}
-#endif
-void AppendWithSpace(std::string* str, Slice msg) {
-  if (msg.empty()) return;
-  if (!str->empty()) {
-    str->push_back(' ');
-  }
-  str->append(msg.data(), msg.size());
-}
-
 // Performance stats.
 class Stats {
  private:
@@ -258,6 +221,33 @@ class Stats {
   double last_op_finish_;
   Histogram hist_;
   std::string message_;
+
+#if defined(PDLFS_OS_LINUX)
+  static void MergeTimeval(struct timeval* tv, const struct timeval* other) {
+    tv->tv_sec += other->tv_sec;
+    tv->tv_usec += other->tv_usec;
+  }
+
+  static void MergeU(struct rusage* ru, const struct rusage* other) {
+    MergeTimeval(&ru->ru_utime, &other->ru_utime);
+    MergeTimeval(&ru->ru_stime, &other->ru_stime);
+  }
+
+  static uint64_t TimevalToMicros(const struct timeval* tv) {
+    uint64_t t;
+    t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
+    t += tv->tv_usec;
+    return t;
+  }
+#endif
+
+  static void AppendWithSpace(std::string* str, Slice msg) {
+    if (msg.empty()) return;
+    if (!str->empty()) {
+      str->push_back(' ');
+    }
+    str->append(msg.data(), msg.size());
+  }
 
  public:
   Stats() { Start(); }
@@ -277,17 +267,10 @@ class Stats {
 #endif
   }
 
-#if defined(PDLFS_OS_LINUX)
-  static void MergeUsage(struct rusage* ru, const struct rusage* other) {
-    MergeTimeval(&ru->ru_utime, &other->ru_utime);
-    MergeTimeval(&ru->ru_stime, &other->ru_stime);
-  }
-#endif
-
   void Merge(const Stats& other) {
 #if defined(PDLFS_OS_LINUX)
-    MergeUsage(&start_rusage_, &other.start_rusage_);
-    MergeUsage(&rusage_, &other.rusage_);
+    MergeU(&start_rusage_, &other.start_rusage_);
+    MergeU(&rusage_, &other.rusage_);
 #endif
     hist_.Merge(other.hist_);
     done_ += other.done_;
@@ -310,7 +293,7 @@ class Stats {
 
   void AddMessage(Slice msg) { AppendWithSpace(&message_, msg); }
 
-  void FinishedSingleOp(int total) {
+  void FinishedSingleOp(int total, int tid) {
     if (FLAGS_histogram) {
       double now = CurrentMicros();
       double micros = now - last_op_finish_;
@@ -323,7 +306,7 @@ class Stats {
     }
 
     done_++;
-    if (done_ >= next_report_) {
+    if (tid == 0 && done_ >= next_report_) {
       if (next_report_ < 1000)
         next_report_ += 100;
       else if (next_report_ < 5000)
@@ -363,6 +346,8 @@ class Stats {
     }
     AppendWithSpace(&extra, message_);
 
+    // Per-op latency is computed on the sum of per-thread elapsed times, not
+    // the actual elapsed time.
     fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
@@ -522,6 +507,24 @@ class Benchmark {
     }
   }
 
+#if defined(PDLFS_OS_LINUX)
+  static Slice TrimSpace(Slice s) {
+    size_t start = 0;
+    while (start < s.size() && isspace(s[start])) {
+      start++;
+    }
+    size_t limit = s.size();
+    while (limit > start && isspace(s[limit - 1])) {
+      limit--;
+    }
+
+    Slice r = s;
+    r.remove_suffix(s.size() - limit);
+    r.remove_prefix(start);
+    return r;
+  }
+#endif
+
   static void PrintEnvironment() {
 #if defined(PDLFS_OS_LINUX)
     time_t now = time(NULL);
@@ -562,7 +565,7 @@ class Benchmark {
   };
 
   static void ThreadBody(void* v) {
-    ThreadArg* arg = reinterpret_cast<ThreadArg*>(v);
+    ThreadArg* const arg = reinterpret_cast<ThreadArg*>(v);
     SharedState* shared = arg->shared;
     ThreadState* thread = arg->thread;
     if (thread->prepare_write) {
@@ -596,7 +599,7 @@ class Benchmark {
                     void (Benchmark::*method)(ThreadState*)) {
     SharedState shared(n);
 
-    ThreadArg* arg = new ThreadArg[n];
+    ThreadArg* const arg = new ThreadArg[n];
     for (int i = 0; i < n; i++) {
       arg[i].bm = this;
       arg[i].method = method;
@@ -690,7 +693,7 @@ class Benchmark {
         fprintf(stderr, "put error: %s\n", s.ToString().c_str());
         exit(1);
       }
-      thread->stats.FinishedSingleOp(FLAGS_num);
+      thread->stats.FinishedSingleOp(FLAGS_num, thread->tid);
     }
     int64_t bytes = stats.putkeybytes + stats.putbytes;
     thread->stats.AddBytes(bytes);
@@ -762,7 +765,7 @@ class Benchmark {
         fprintf(stderr, "get error: %s\n", s.ToString().c_str());
         exit(1);
       }
-      thread->stats.FinishedSingleOp(FLAGS_reads);
+      thread->stats.FinishedSingleOp(FLAGS_reads, thread->tid);
     }
     int64_t bytes = stats.getkeybytes + stats.getbytes;
     thread->stats.AddBytes(bytes);
