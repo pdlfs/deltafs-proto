@@ -199,8 +199,8 @@ int FLAGS_uid = 1;
 // Group id.
 int FLAGS_gid = 1;
 
-// Connect to the server at the following address.
-const char* FLAGS_srv_uri = NULL;
+// Comma-separated server locations.
+const char* FLAGS_srv_uris = NULL;
 
 // Performance stats.
 class Stats {
@@ -395,6 +395,7 @@ struct ThreadState {
 class Benchmark {
  private:
   RPC* rpc_;
+  std::vector<std::string> srvs_;
   LookupStat parent_lstat_;
   User me_;
 
@@ -404,7 +405,7 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Number requests:    %d per thread\n", FLAGS_num);
     fprintf(stdout, "Histogram:          %d\n", FLAGS_histogram);
-    fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
+    fprintf(stdout, "URIs:               %s\n", FLAGS_srv_uris);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -553,21 +554,31 @@ class Benchmark {
     Stat stat;
     MkfleRet ret;
     ret.stat = &stat;
-    rpc::If* rpccli = rpc_->OpenStubFor(FLAGS_srv_uri);
-    rpc::MkfleCli cli(rpccli);
+    const int n = srvs_.size();
+    if (n == 0) {
+      return;
+    }
+    rpc::If** const clis = new rpc::If*[n];
+    for (int i = 0; i < n; i++) {
+      clis[i] = rpc_->OpenStubFor(srvs_[i]);
+    }
     Stats* const stats = &thread->stats;
+    Random rnd(1000 + thread->tid);
     char tmp[20];
     for (int i = 0; i < FLAGS_num; i++) {
       snprintf(tmp, sizeof(tmp), "%012d", i);
       options.name = Slice(tmp, 12);
-      Status s = cli(options, &ret);
+      Status s = rpc::MkfleCli(clis[rnd.Next() % n])(options, &ret);
       if (!s.ok()) {
         fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
         exit(1);
       }
       stats->FinishedSingleOp(FLAGS_num, thread->tid);
     }
-    delete rpccli;
+    for (int i = 0; i < n; i++) {
+      delete clis[i];
+    }
+    delete[] clis;
   }
 
  public:
@@ -599,6 +610,19 @@ class Benchmark {
       fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
       exit(1);
     }
+    const char* p = FLAGS_srv_uris;
+    while (p != NULL) {
+      const char* sep = strchr(p, ',');
+      Slice uri;
+      if (sep == NULL) {
+        uri = p;
+        p = NULL;
+      } else {
+        uri = Slice(p, sep - p);
+        uri = sep + 1;
+      }
+      srvs_.push_back(uri.ToString());
+    }
 
     RunBenchmark(FLAGS_threads);
   }
@@ -614,8 +638,8 @@ void BM_Main(const int* const argc, char*** const argv) {
   for (int i = 2; i < *argc; i++) {
     int n;
     char junk;
-    if (strncmp((*argv)[i], "--uri=", 6) == 0) {
-      pdlfs::FLAGS_srv_uri = (*argv)[i] + 6;
+    if (strncmp((*argv)[i], "--uris=", 6) == 0) {
+      pdlfs::FLAGS_srv_uris = (*argv)[i] + 6;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
@@ -629,9 +653,9 @@ void BM_Main(const int* const argc, char*** const argv) {
     }
   }
 
-  if (!pdlfs::FLAGS_srv_uri) {
+  if (!pdlfs::FLAGS_srv_uris) {
     default_uri = ":10086";
-    pdlfs::FLAGS_srv_uri = default_uri.c_str();
+    pdlfs::FLAGS_srv_uris = default_uri.c_str();
   }
 
   pdlfs::Benchmark benchmark;
