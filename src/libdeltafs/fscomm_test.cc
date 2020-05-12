@@ -296,7 +296,7 @@ class Stats {
       double micros = now - last_op_finish_;
       hist_.Add(micros);
       if (micros > 20000) {
-        fprintf(stderr, "long op: %.1f micros%30s\r", micros, "");
+        fprintf(stderr, "Long op: %.1f micros%30s\r", micros, "");
         fflush(stderr);
       }
       last_op_finish_ = now;
@@ -343,6 +343,8 @@ class Stats {
     }
     AppendWithSpace(&extra, message_);
 
+    // Per-op latency is computed on the sum of per-thread elapsed times, not
+    // the actual elapsed time.
     fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
             name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
             (extra.empty() ? "" : " "), extra.c_str());
