@@ -315,11 +315,11 @@ class Stats {
     // Rate is computed on actual elapsed time, not the sum of per-thread
     // elapsed times.
     double elapsed = (finish_ - start_) * 1e-6;
-    snprintf(rate, sizeof(rate), "%6.1f op/s, %d ops", done_ / elapsed, done_);
-
+    snprintf(rate, sizeof(rate), "%9.3f Kop/s, %9d ops",
+             done_ / 1000.0 / elapsed, done_);
     // Per-op latency is computed on the sum of per-thread elapsed times, not
     // the actual elapsed time.
-    fprintf(stdout, "==%-12s : %16.3f micros/op, %s\n", name.ToString().c_str(),
+    fprintf(stdout, "==%-12s : %9.3f micros/op, %s\n", name.ToString().c_str(),
             seconds_ * 1e6 / done_, rate);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
