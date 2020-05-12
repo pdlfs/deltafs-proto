@@ -214,10 +214,8 @@ class Stats {
   double seconds_;
   int done_;
   int next_report_;
-  int64_t bytes_;
   double last_op_finish_;
   Histogram hist_;
-  std::string message_;
 
 #if defined(PDLFS_OS_LINUX)
   static void MergeTimeval(struct timeval* tv, const struct timeval* other) {
@@ -238,14 +236,6 @@ class Stats {
   }
 #endif
 
-  static void AppendWithSpace(std::string* str, Slice msg) {
-    if (msg.empty()) return;
-    if (!str->empty()) {
-      str->push_back(' ');
-    }
-    str->append(msg.data(), msg.size());
-  }
-
  public:
   Stats() { Start(); }
 
@@ -254,11 +244,9 @@ class Stats {
     last_op_finish_ = start_;
     hist_.Clear();
     done_ = 0;
-    bytes_ = 0;
     seconds_ = 0;
     start_ = CurrentMicros();
     finish_ = start_;
-    message_.clear();
 #if defined(PDLFS_OS_LINUX)
     getrusage(RUSAGE_THREAD, &start_rusage_);
 #endif
@@ -271,13 +259,9 @@ class Stats {
 #endif
     hist_.Merge(other.hist_);
     done_ += other.done_;
-    bytes_ += other.bytes_;
     seconds_ += other.seconds_;
     if (other.start_ < start_) start_ = other.start_;
     if (other.finish_ > finish_) finish_ = other.finish_;
-
-    // Just keep the messages from one thread
-    if (message_.empty()) message_ = other.message_;
   }
 
   void Stop() {
@@ -287,8 +271,6 @@ class Stats {
     finish_ = CurrentMicros();
     seconds_ = (finish_ - start_) * 1e-6;
   }
-
-  void AddMessage(Slice msg) { AppendWithSpace(&message_, msg); }
 
   void FinishedSingleOp(int total, int tid) {
     if (FLAGS_histogram) {
@@ -324,30 +306,21 @@ class Stats {
     }
   }
 
-  void AddBytes(int64_t n) { bytes_ += n; }
-
   void Report(const Slice& name) {
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
 
-    std::string extra;
-    if (bytes_ > 0) {
-      // Rate is computed on actual elapsed time, not the sum of per-thread
-      // elapsed times.
-      double elapsed = (finish_ - start_) * 1e-6;
-      char rate[100];
-      snprintf(rate, sizeof(rate), "%6.1f MB/s, %.0f bytes",
-               (bytes_ / 1048576.0) / elapsed, double(bytes_));
-      extra = rate;
-    }
-    AppendWithSpace(&extra, message_);
+    char rate[100];
+    // Rate is computed on actual elapsed time, not the sum of per-thread
+    // elapsed times.
+    double elapsed = (finish_ - start_) * 1e-6;
+    snprintf(rate, sizeof(rate), "%6.1f op/s, %d ops", done_ / elapsed, done_);
 
     // Per-op latency is computed on the sum of per-thread elapsed times, not
     // the actual elapsed time.
-    fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
-            name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
-            (extra.empty() ? "" : " "), extra.c_str());
+    fprintf(stdout, "==%-12s : %16.3f micros/op, %s\n", name.ToString().c_str(),
+            seconds_ * 1e6 / done_, rate);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
             (TimevalToMicros(&rusage_.ru_utime) -
@@ -405,7 +378,6 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Number requests:    %d per thread\n", FLAGS_num);
     fprintf(stdout, "Histogram:          %d\n", FLAGS_histogram);
-    fprintf(stdout, "URIs:               %s\n", FLAGS_srv_uris);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
