@@ -33,6 +33,8 @@
  */
 #include "fscomm.h"
 
+#include "pdlfs-common/histogram.h"
+#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/testharness.h"
@@ -42,6 +44,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>
+#if defined(PDLFS_OS_LINUX)
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
 
 #if __cplusplus >= 201103L
 #define OVERRIDE override
@@ -178,8 +184,14 @@ TEST(MkflsTest, MkflsCall) {
 }
 
 namespace {  // RPC performance bench (the client part of it)...
-// Number of rpc operations to perform.
+// Number of concurrent threads to run.
+int FLAGS_threads = 1;
+
+// Number of rpc operations to perform per thread.
 int FLAGS_num = 8;
+
+// Print histogram of timings.
+bool FLAGS_histogram = false;
 
 // User id for the bench.
 int FLAGS_uid = 1;
@@ -190,35 +202,206 @@ int FLAGS_gid = 1;
 // Connect to the server at the following address.
 const char* FLAGS_srv_uri = NULL;
 
+// Performance stats.
+class Stats {
+ private:
+#if defined(PDLFS_OS_LINUX)
+  struct rusage start_rusage_;
+  struct rusage rusage_;
+#endif
+  double start_;
+  double finish_;
+  double seconds_;
+  int done_;
+  int next_report_;
+  int64_t bytes_;
+  double last_op_finish_;
+  Histogram hist_;
+  std::string message_;
+
+#if defined(PDLFS_OS_LINUX)
+  static void MergeTimeval(struct timeval* tv, const struct timeval* other) {
+    tv->tv_sec += other->tv_sec;
+    tv->tv_usec += other->tv_usec;
+  }
+
+  static void MergeU(struct rusage* ru, const struct rusage* other) {
+    MergeTimeval(&ru->ru_utime, &other->ru_utime);
+    MergeTimeval(&ru->ru_stime, &other->ru_stime);
+  }
+
+  static uint64_t TimevalToMicros(const struct timeval* tv) {
+    uint64_t t;
+    t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
+    t += tv->tv_usec;
+    return t;
+  }
+#endif
+
+  static void AppendWithSpace(std::string* str, Slice msg) {
+    if (msg.empty()) return;
+    if (!str->empty()) {
+      str->push_back(' ');
+    }
+    str->append(msg.data(), msg.size());
+  }
+
+ public:
+  Stats() { Start(); }
+
+  void Start() {
+    next_report_ = 100;
+    last_op_finish_ = start_;
+    hist_.Clear();
+    done_ = 0;
+    bytes_ = 0;
+    seconds_ = 0;
+    start_ = CurrentMicros();
+    finish_ = start_;
+    message_.clear();
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &start_rusage_);
+#endif
+  }
+
+  void Merge(const Stats& other) {
+#if defined(PDLFS_OS_LINUX)
+    MergeU(&start_rusage_, &other.start_rusage_);
+    MergeU(&rusage_, &other.rusage_);
+#endif
+    hist_.Merge(other.hist_);
+    done_ += other.done_;
+    bytes_ += other.bytes_;
+    seconds_ += other.seconds_;
+    if (other.start_ < start_) start_ = other.start_;
+    if (other.finish_ > finish_) finish_ = other.finish_;
+
+    // Just keep the messages from one thread
+    if (message_.empty()) message_ = other.message_;
+  }
+
+  void Stop() {
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &rusage_);
+#endif
+    finish_ = CurrentMicros();
+    seconds_ = (finish_ - start_) * 1e-6;
+  }
+
+  void AddMessage(Slice msg) { AppendWithSpace(&message_, msg); }
+
+  void FinishedSingleOp(int total, int tid) {
+    if (FLAGS_histogram) {
+      double now = CurrentMicros();
+      double micros = now - last_op_finish_;
+      hist_.Add(micros);
+      if (micros > 20000) {
+        fprintf(stderr, "long op: %.1f micros%30s\r", micros, "");
+        fflush(stderr);
+      }
+      last_op_finish_ = now;
+    }
+
+    done_++;
+    if (tid == 0 && done_ >= next_report_) {
+      if (next_report_ < 1000)
+        next_report_ += 100;
+      else if (next_report_ < 5000)
+        next_report_ += 500;
+      else if (next_report_ < 10000)
+        next_report_ += 1000;
+      else if (next_report_ < 50000)
+        next_report_ += 5000;
+      else if (next_report_ < 100000)
+        next_report_ += 10000;
+      else if (next_report_ < 500000)
+        next_report_ += 50000;
+      else
+        next_report_ += 100000;
+      fprintf(stderr, "... finished %d ops (%.0f%%)%30s\r", done_,
+              100.0 * done_ / total, "");
+      fflush(stderr);
+    }
+  }
+
+  void AddBytes(int64_t n) { bytes_ += n; }
+
+  void Report(const Slice& name) {
+    // Pretend at least one op was done in case we are running a benchmark
+    // that does not call FinishedSingleOp().
+    if (done_ < 1) done_ = 1;
+
+    std::string extra;
+    if (bytes_ > 0) {
+      // Rate is computed on actual elapsed time, not the sum of per-thread
+      // elapsed times.
+      double elapsed = (finish_ - start_) * 1e-6;
+      char rate[100];
+      snprintf(rate, sizeof(rate), "%6.1f MB/s, %.0f bytes",
+               (bytes_ / 1048576.0) / elapsed, double(bytes_));
+      extra = rate;
+    }
+    AppendWithSpace(&extra, message_);
+
+    fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops;%s%s\n",
+            name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_),
+            (extra.empty() ? "" : " "), extra.c_str());
+#if defined(PDLFS_OS_LINUX)
+    fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
+            (TimevalToMicros(&rusage_.ru_utime) -
+             TimevalToMicros(&start_rusage_.ru_utime)) *
+                1e-6,
+            (TimevalToMicros(&rusage_.ru_stime) -
+             TimevalToMicros(&start_rusage_.ru_stime)) *
+                1e-6,
+            (finish_ - start_) * 1e-6);
+#endif
+    if (FLAGS_histogram) {
+      fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
+    }
+    fflush(stdout);
+  }
+};
+
+// State shared by all concurrent executions of the same benchmark.
+struct SharedState {
+  port::Mutex mu;
+  port::CondVar cv;
+  int total;  // Total number of threads
+  // Each thread goes through the following states:
+  //    (1) initializing
+  //    (2) waiting for others to be initialized
+  //    (3) running
+  //    (4) done
+  int num_initialized;
+  int num_done;
+  bool start;
+
+  explicit SharedState(int total)
+      : cv(&mu), total(total), num_initialized(0), num_done(0), start(false) {}
+};
+
+// Per-thread state for concurrent executions of the same benchmark.
+struct ThreadState {
+  int tid;  // 0..n-1 when running in n threads
+  SharedState* shared;
+  Stats stats;
+
+  explicit ThreadState(int tid) : tid(tid), shared(NULL) {}
+};
+
 class Benchmark {
  private:
-  rpc::If* rpccli_;
   RPC* rpc_;
   LookupStat parent_lstat_;
   User me_;
 
-#if defined(PDLFS_OS_LINUX)
-  static Slice TrimSpace(Slice s) {
-    size_t start = 0;
-    while (start < s.size() && isspace(s[start])) {
-      start++;
-    }
-    size_t limit = s.size();
-    while (limit > start && isspace(s[limit - 1])) {
-      limit--;
-    }
-
-    Slice r = s;
-    r.remove_suffix(s.size() - limit);
-    r.remove_prefix(start);
-    return r;
-  }
-#endif
-
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "Number requests:    %d\n", FLAGS_num);
+    fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
+    fprintf(stdout, "Number requests:    %d per thread\n", FLAGS_num);
+    fprintf(stdout, "Histogram:          %d\n", FLAGS_histogram);
     fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
     fprintf(stdout, "------------------------------------------------\n");
   }
@@ -240,6 +423,24 @@ class Benchmark {
       fprintf(stdout, "WARNING: Snappy compression is not effective\n");
     }
   }
+
+#if defined(PDLFS_OS_LINUX)
+  static Slice TrimSpace(Slice s) {
+    size_t start = 0;
+    while (start < s.size() && isspace(s[start])) {
+      start++;
+    }
+    size_t limit = s.size();
+    while (limit > start && isspace(s[limit - 1])) {
+      limit--;
+    }
+
+    Slice r = s;
+    r.remove_suffix(s.size() - limit);
+    r.remove_prefix(start);
+    return r;
+  }
+#endif
 
   static void PrintEnvironment() {
 #if defined(PDLFS_OS_LINUX)
@@ -273,41 +474,76 @@ class Benchmark {
 #endif
   }
 
-  void InitParent() {
-    parent_lstat_.SetDnodeNo(0);
-    parent_lstat_.SetInodeNo(0);
-    parent_lstat_.SetDirMode(0770 | S_IFDIR);
-    parent_lstat_.SetUserId(FLAGS_uid);
-    parent_lstat_.SetGroupId(FLAGS_gid);
-    parent_lstat_.SetZerothServer(0);
-    parent_lstat_.SetLeaseDue(-1);
-    parent_lstat_.AssertAllSet();
+  struct ThreadArg {
+    Benchmark* bm;
+    SharedState* shared;
+    ThreadState* thread;
+  };
+
+  static void ThreadBody(void* v) {
+    ThreadArg* const arg = reinterpret_cast<ThreadArg*>(v);
+    SharedState* shared = arg->shared;
+    ThreadState* thread = arg->thread;
+    {
+      MutexLock l(&shared->mu);
+      shared->num_initialized++;
+      if (shared->num_initialized >= shared->total) {
+        shared->cv.SignalAll();
+      }
+      while (!shared->start) {
+        shared->cv.Wait();
+      }
+    }
+
+    thread->stats.Start();
+    arg->bm->SendAndReceive(thread);
+    thread->stats.Stop();
+
+    {
+      MutexLock l(&shared->mu);
+      shared->num_done++;
+      if (shared->num_done >= shared->total) {
+        shared->cv.SignalAll();
+      }
+    }
   }
 
-  void Open() {
-    RPCOptions opts;
-    opts.uri = ":";  // Any non-empty string works
-    opts.mode = rpc::kClientOnly;
-    rpc_ = RPC::Open(opts);
-    rpccli_ = rpc_->OpenStubFor(FLAGS_srv_uri);
+  void RunBenchmark(int n) {
+    SharedState shared(n);
+
+    ThreadArg* const arg = new ThreadArg[n];
+    for (int i = 0; i < n; i++) {
+      arg[i].bm = this;
+      arg[i].shared = &shared;
+      arg[i].thread = new ThreadState(i);
+      arg[i].thread->shared = &shared;
+      Env::Default()->StartThread(ThreadBody, &arg[i]);
+    }
+
+    {
+      MutexLock ml(&shared.mu);
+      while (shared.num_initialized < n) {
+        shared.cv.Wait();
+      }
+
+      shared.start = true;
+      shared.cv.SignalAll();
+      while (shared.num_done < n) {
+        shared.cv.Wait();
+      }
+    }
+
+    for (int i = 1; i < n; i++) {
+      arg[0].thread->stats.Merge(arg[i].thread->stats);
+    }
+    arg[0].thread->stats.Report("send&recieve");
+    for (int i = 0; i < n; i++) {
+      delete arg[i].thread;
+    }
+    delete[] arg;
   }
 
- public:
-  Benchmark() : rpccli_(NULL), rpc_(NULL) {
-    me_.uid = FLAGS_uid;
-    me_.gid = FLAGS_gid;
-    InitParent();
-  }
-
-  ~Benchmark() {
-    delete rpccli_;
-    delete rpc_;
-  }
-
-  void Run() {
-    PrintHeader();
-    Open();
-    uint64_t start = CurrentMicros();
+  void SendAndReceive(ThreadState* const thread) {
     MkfleOptions options;
     options.parent = &parent_lstat_;
     options.mode = 0660;
@@ -315,7 +551,9 @@ class Benchmark {
     Stat stat;
     MkfleRet ret;
     ret.stat = &stat;
-    rpc::MkfleCli cli(rpccli_);
+    rpc::If* rpccli = rpc_->OpenStubFor(FLAGS_srv_uri);
+    rpc::MkfleCli cli(rpccli);
+    Stats* const stats = &thread->stats;
     char tmp[20];
     for (int i = 0; i < FLAGS_num; i++) {
       snprintf(tmp, sizeof(tmp), "%012d", i);
@@ -325,11 +563,42 @@ class Benchmark {
         fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
         exit(1);
       }
+      stats->FinishedSingleOp(FLAGS_num, thread->tid);
     }
-    double dura = CurrentMicros() - start;
-    if (FLAGS_num) {
-      fprintf(stdout, "RPC: %.3f micros/op\n", dura / FLAGS_num);
+    delete rpccli;
+  }
+
+ public:
+  Benchmark() : rpc_(NULL) {
+    parent_lstat_.SetDnodeNo(0);
+    parent_lstat_.SetInodeNo(0);
+    parent_lstat_.SetDirMode(0770 | S_IFDIR);
+    parent_lstat_.SetUserId(FLAGS_uid);
+    parent_lstat_.SetGroupId(FLAGS_gid);
+    parent_lstat_.SetZerothServer(0);
+    parent_lstat_.SetLeaseDue(-1);
+    parent_lstat_.AssertAllSet();
+    me_.uid = FLAGS_uid;
+    me_.gid = FLAGS_gid;
+  }
+
+  ~Benchmark() {  ///
+    delete rpc_;
+  }
+
+  void Run() {
+    PrintHeader();
+    RPCOptions opts;
+    opts.uri = ":";  // Any non-empty string works
+    opts.mode = rpc::kClientOnly;
+    rpc_ = RPC::Open(opts);
+    Status s = rpc_->status();
+    if (!s.ok()) {
+      fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
+      exit(1);
     }
+
+    RunBenchmark(FLAGS_threads);
   }
 };
 }  // namespace
@@ -343,12 +612,17 @@ void BM_Main(const int* const argc, char*** const argv) {
   for (int i = 2; i < *argc; i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_num = n;
-    } else if (strncmp((*argv)[i], "--uri=", 6) == 0) {
+    if (strncmp((*argv)[i], "--uri=", 6) == 0) {
       pdlfs::FLAGS_srv_uri = (*argv)[i] + 6;
+    } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_threads = n;
+    } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_histogram = n;
+    } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_num = n;
     } else {
-      fprintf(stderr, "Invalid flag: \"%s\"\n", (*argv)[i]);
+      fprintf(stderr, "Invalid flag: '%s'\n", (*argv)[i]);
       exit(1);
     }
   }
