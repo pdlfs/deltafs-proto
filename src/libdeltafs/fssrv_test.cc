@@ -209,7 +209,7 @@ class Benchmark : public FilesystemWrapper {
     db_ = new FilesystemDb(dbopts, Env::Default());
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
-      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Cannot open db: %s\n", s.ToString().c_str());
       exit(1);
     }
 
@@ -230,7 +230,7 @@ class Benchmark : public FilesystemWrapper {
     fsrpcsrv_->SetFs(fs);
     Status s = fsrpcsrv_->OpenServer();
     if (!s.ok()) {
-      fprintf(stderr, "rpc error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Cannot open rpc: %s\n", s.ToString().c_str());
       exit(1);
     }
   }
@@ -262,11 +262,12 @@ class Benchmark : public FilesystemWrapper {
   void Run() {
     PrintHeader();
     Open();
-    fprintf(stdout, "Running...\n");
+    puts("Running...");
     MutexLock ml(&mu_);
     while (!shutting_down_) {
       cv_.Wait();
     }
+    puts("Bye!");
   }
 };
 }  // namespace
@@ -324,7 +325,6 @@ void BM_Main(int* const argc, char*** const argv) {
   g_bench = &benchmark;
   signal(SIGINT, &HandleSig);
   benchmark.Run();
-  fprintf(stdout, "Bye!\n");
 }
 }  // namespace
 
