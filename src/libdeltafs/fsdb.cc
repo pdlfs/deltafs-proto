@@ -42,6 +42,9 @@
 #include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/cache.h"
+#include "pdlfs-common/strutil.h"
+
+#include <stdlib.h>
 
 namespace pdlfs {
 
@@ -63,6 +66,53 @@ FilesystemDbOptions::FilesystemDbOptions()
       disable_write_ahead_logging(false),
       disable_compaction(false),
       compression(false) {}
+
+namespace {
+template <typename T>
+void ReadIntegerOptionFromEnv(const char* key, T* const dst) {
+  const char* env = getenv(key);
+  if (!env || !env[0]) return;
+  uint64_t tmp;
+  if (ParsePrettyNumber(env, &tmp)) {
+    *dst = static_cast<T>(tmp);
+  }
+}
+
+void ReadBoolFromEnv(const char* key, bool* dst) {
+  const char* env = getenv(key);
+  if (!env || !env[0]) return;
+  bool tmp;
+  if (ParsePrettyBool(env, &tmp)) {
+    *dst = tmp;
+  }
+}
+}  // namespace
+
+// Read options from system env. All env keys start with "DELTAFS_Db_".
+void FilesystemDbOptions::ReadFromEnv() {
+  ReadIntegerOptionFromEnv("DELTAFS_Db_write_buffer_size", &write_buffer_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_table_file_size", &table_file_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_block_size", &block_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_filter_bits_per_key",
+                           &filter_bits_per_key);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_table_cache_size", &table_cache_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_block_cache_size", &block_cache_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_block_restart_interval",
+                           &block_restart_interval);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_level_factor", &level_factor);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_l1_compaction_trigger",
+                           &l1_compaction_trigger);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_l0_compaction_trigger",
+                           &l0_compaction_trigger);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_l0_soft_limit", &l0_soft_limit);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_l0_hard_limit", &l0_hard_limit);
+  ReadBoolFromEnv("DELTAFS_Db_use_default_logger", &use_default_logger);
+  ReadBoolFromEnv("DELTAFS_Db_disable_write_ahead_logging",
+                  &disable_write_ahead_logging);
+  ReadBoolFromEnv("DELTAFS_Db_disable_compaction", &disable_compaction);
+  ReadBoolFromEnv("DELTAFS_Db_enable_io_monitoring", &enable_io_monitoring);
+  ReadBoolFromEnv("DELTAFS_Db_compression", &compression);
+}
 
 void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
   putkeybytes += other.putkeybytes;
@@ -121,7 +171,9 @@ FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* base)
     : mdb_(NULL),
       options_(options),
       dbenv_(new FilesystemDbEnvWrapper(options, base)),
-      filter_(NewBloomFilterPolicy(options_.filter_bits_per_key)),
+      filter_(options_.filter_bits_per_key != 0
+                  ? NewBloomFilterPolicy(options_.filter_bits_per_key)
+                  : NULL),
       table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),
       db_(NULL) {}

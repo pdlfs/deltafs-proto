@@ -43,6 +43,8 @@ class Cache;
 
 struct FilesystemDbOptions {
   FilesystemDbOptions();
+  // Read options from env.
+  void ReadFromEnv();
   // Max size for a memory table.
   size_t write_buffer_size;
   // Planned size for each on-disk table file.
@@ -50,10 +52,12 @@ struct FilesystemDbOptions {
   // Size for a table block.
   size_t block_size;
   // Max number of table files we open.
+  // Use 0 will disable caching effectively.
   size_t table_cache_size;
-  // Bloom filter bits per key.
+  // Bloom filter bits per key. Use 0 to disable filters altogether.
   size_t filter_bits_per_key;
   // Block cache size.
+  // Use 0 will disable caching effectively.
   size_t block_cache_size;
   // Number of keys between restart points for delta encoding of keys.
   int block_restart_interval;
