@@ -122,11 +122,13 @@ TEST(FilesystemDbTest, Base64) {
 }
 
 namespace {  // Db benchmark
+FilesystemDbOptions FLAGS_dboptions;
+
 // Testing mode.
 enum TestMode { kFsFullCliApi, kFsCliApi, kFsApi, kDb };
 TestMode FLAGS_mode = kDb;
 
-// Comma-separated list of operations to run in the specified order.
+// Comma-separated list of benchmarks to run in the specified order.
 const char* FLAGS_benchmarks =
     "fillrandom,"
     "compact,"
@@ -145,59 +147,20 @@ int FLAGS_reads = -1;
 // Print histogram of op timings.
 bool FLAGS_histogram = false;
 
-// Number of bytes to use as a cache of uncompressed data.
-// Initialized to default by main().
-int FLAGS_cache_size = -1;
-
-// Maximum number of files to keep open at the same time.
-// Initialized to default by main().
-int FLAGS_max_open_files = -1;
-
-// Bloom filter bits per key. Negative means use default settings.
-// Initialized to default by main().
-int FLAGS_bloom_bits = -1;
-
-// Number of keys between restart points for delta encoding of keys.
-int FLAGS_block_restart_interval = -1;
-
-// Table block size.
-int FLAGS_block_size = -1;
-
 // User id for the bench.
 int FLAGS_uid = 1;
 
 // Group id.
 int FLAGS_gid = 1;
 
-// Level factor for db.
-int FLAGS_db_level_factor = -1;
-
-// L1 compaction trigger for db.
-int FLAGS_db_l1_compaction_trigger = -1;
-
-// Size per table.
-int FLAGS_table_file_size = -1;
-
-// Explicitly set Env to use unbuffered io.
+// Force using unbuffered io. Performance may degrade due to increased os calls.
 bool FLAGS_use_unbuffered_io = false;
-
-// Enable snappy compression.
-bool FLAGS_snappy = false;
 
 // Skip various fs checks.
 bool FLAGS_fs_skip_checks = false;
 
 // All files are inserted into a single parent directory.
 bool FLAGS_shared_dir = false;
-
-// Enable Io monitoring
-bool FLAGS_enable_io_monitoring = false;
-
-// Disable write ahead logging.
-bool FLAGS_disable_write_ahead_logging = false;
-
-// Disable all background compaction.
-bool FLAGS_disable_compaction = false;
 
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
@@ -467,19 +430,29 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
-    fprintf(stdout, "Block cache size:   %d MB\n", FLAGS_cache_size >> 20);
-    fprintf(stdout, "Block size:         %d KB\n", FLAGS_block_size >> 10);
-    fprintf(stdout, "Bloom bits:         %d\n", FLAGS_bloom_bits);
-    fprintf(stdout, "Max open tables:    %d\n", FLAGS_max_open_files);
-    fprintf(stdout, "Io monitoring:      %d\n", FLAGS_enable_io_monitoring);
-    fprintf(stdout, "WAL off:            %d\n",
-            FLAGS_disable_write_ahead_logging);
-    fprintf(stdout, "Lsm compaction off: %d\n", FLAGS_disable_compaction);
-    fprintf(stdout, "Table size:         %d MB\n", FLAGS_table_file_size >> 20);
-    fprintf(stdout, "Level factor:       %d\n", FLAGS_db_level_factor);
-    fprintf(stdout, "L1 trigger:         %d\n", FLAGS_db_l1_compaction_trigger);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
-    fprintf(stdout, "Snappy:             %d\n", FLAGS_snappy);
+    fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
+    fprintf(stdout, "Block cache size:   %d MB\n",
+            int(FLAGS_dboptions.block_cache_size >> 20));
+    fprintf(stdout, "Block size:         %d KB\n",
+            int(FLAGS_dboptions.block_size >> 10));
+    fprintf(stdout, "Bloom bits:         %d\n",
+            int(FLAGS_dboptions.filter_bits_per_key));
+    fprintf(stdout, "Max open tables:    %d\n",
+            int(FLAGS_dboptions.table_cache_size));
+    fprintf(stdout, "Io monitoring:      %d\n",
+            FLAGS_dboptions.enable_io_monitoring);
+    fprintf(stdout, "WAL off:            %d\n",
+            FLAGS_dboptions.disable_write_ahead_logging);
+    fprintf(stdout, "Lsm compaction off: %d\n",
+            FLAGS_dboptions.disable_compaction);
+    fprintf(stdout, "Mem table size:     %d MB\n",
+            int(FLAGS_dboptions.write_buffer_size >> 20));
+    fprintf(stdout, "Table size:         %d MB\n",
+            int(FLAGS_dboptions.table_file_size >> 20));
+    fprintf(stdout, "Level factor:       %d\n", FLAGS_dboptions.level_factor);
+    fprintf(stdout, "L1 trigger:         %d\n",
+            FLAGS_dboptions.l1_compaction_trigger);
     fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_mode == kFsFullCliApi);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_mode == kFsCliApi);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_mode == kFsApi);
@@ -627,7 +600,7 @@ class Benchmark {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
     }
     arg[0].thread->stats.Report(name);
-    if (FLAGS_enable_io_monitoring) {
+    if (FLAGS_dboptions.enable_io_monitoring) {
       fprintf(stdout, "Total bytes written: %llu\n",
               static_cast<unsigned long long>(
                   db_->GetDbEnv()->TotalDbBytesWritten()));
@@ -795,21 +768,8 @@ class Benchmark {
   }
 
   void Open() {
-    FilesystemDbOptions dbopts;
-    dbopts.compression = FLAGS_snappy;
-    dbopts.enable_io_monitoring = FLAGS_enable_io_monitoring;
-    dbopts.disable_write_ahead_logging = FLAGS_disable_write_ahead_logging;
-    dbopts.disable_compaction = FLAGS_disable_compaction;
-    dbopts.write_buffer_size = FLAGS_table_file_size << 1;
-    dbopts.table_file_size = FLAGS_table_file_size;
-    dbopts.block_size = FLAGS_block_size;
-    dbopts.l1_compaction_trigger = FLAGS_db_l1_compaction_trigger;
-    dbopts.level_factor = FLAGS_db_level_factor;
-    dbopts.table_cache_size = FLAGS_max_open_files;
-    dbopts.block_restart_interval = FLAGS_block_restart_interval;
-    dbopts.block_cache_size = FLAGS_cache_size;
-    dbopts.filter_bits_per_key = FLAGS_bloom_bits;
-    Env* env =
+    FilesystemDbOptions dbopts = FLAGS_dboptions;
+    Env* const env =
         FLAGS_use_unbuffered_io ? Env::GetUnBufferedIoEnv() : Env::Default();
     db_ = new FilesystemDb(dbopts, env);
     Status s = db_->Open(FLAGS_db);
@@ -905,22 +865,9 @@ class Benchmark {
 }  // namespace
 }  // namespace pdlfs
 
-static void BM_Usage() {
-  fprintf(stderr, "Use --bench to run db benchmark.\n");
-}
-
-static void BM_Main(int* const argc, char*** const argv) {
-  pdlfs::FLAGS_bloom_bits = pdlfs::FilesystemDbOptions().filter_bits_per_key;
-  pdlfs::FLAGS_max_open_files = pdlfs::FilesystemDbOptions().table_cache_size;
-  pdlfs::FLAGS_block_restart_interval =
-      pdlfs::FilesystemDbOptions().block_restart_interval;
-  pdlfs::FLAGS_cache_size = pdlfs::FilesystemDbOptions().block_cache_size;
-  pdlfs::FLAGS_block_size = pdlfs::FilesystemDbOptions().block_size;
-  pdlfs::FLAGS_table_file_size = pdlfs::FilesystemDbOptions().table_file_size;
-  pdlfs::FLAGS_db_l1_compaction_trigger =
-      pdlfs::FilesystemDbOptions().l1_compaction_trigger;
-  pdlfs::FLAGS_db_level_factor = pdlfs::FilesystemDbOptions().level_factor;
-  std::string default_db_path;
+namespace {
+void BM_Main(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_dboptions.ReadFromEnv();
 
   for (int i = 2; i < *argc; i++) {
     int n;
@@ -950,19 +897,19 @@ static void BM_Main(int* const argc, char*** const argv) {
       }
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_snappy = n;
+      pdlfs::FLAGS_dboptions.compression = n;
     } else if (sscanf((*argv)[i], "--enable_io_monitoring=%d%c", &n, &junk) ==
                    1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_enable_io_monitoring = n;
+      pdlfs::FLAGS_dboptions.enable_io_monitoring = n;
     } else if (sscanf((*argv)[i], "--disable_write_ahead_logging=%d%c", &n,
                       &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_disable_write_ahead_logging = n;
+      pdlfs::FLAGS_dboptions.disable_write_ahead_logging = n;
     } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
                    1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_disable_compaction = n;
+      pdlfs::FLAGS_dboptions.disable_compaction = n;
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_shared_dir = n;
@@ -979,28 +926,28 @@ static void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_max_open_files = n;
+      pdlfs::FLAGS_dboptions.table_cache_size = n;
     } else if (sscanf((*argv)[i], "--table_file_size=%dM%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_table_file_size = n << 20;
+      pdlfs::FLAGS_dboptions.table_file_size = n << 20;
+      pdlfs::FLAGS_dboptions.write_buffer_size = (n << 20) << 1;
     } else if (sscanf((*argv)[i], "--block_size=%dK%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_block_size = n << 10;
+      pdlfs::FLAGS_dboptions.block_size = n << 10;
     } else if (sscanf((*argv)[i], "--l1_compaction_trigger=%d%c", &n, &junk) ==
                1) {
-      pdlfs::FLAGS_db_l1_compaction_trigger = n;
+      pdlfs::FLAGS_dboptions.l1_compaction_trigger = n;
     } else if (sscanf((*argv)[i], "--level_factor=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_db_level_factor = n;
+      pdlfs::FLAGS_dboptions.level_factor = n;
     } else if (sscanf((*argv)[i], "--block_restart_interval=%d%c", &n, &junk) ==
                1) {
-      pdlfs::FLAGS_block_restart_interval = n;
+      pdlfs::FLAGS_dboptions.block_restart_interval = n;
     } else if (sscanf((*argv)[i], "--block_cache_size=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_cache_size = n;
+      pdlfs::FLAGS_dboptions.block_cache_size = n;
     } else if (sscanf((*argv)[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_bloom_bits = n;
+      pdlfs::FLAGS_dboptions.filter_bits_per_key = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
       fprintf(stderr, "Invalid flag: \"%s\"\n", (*argv)[i]);
-      BM_Usage();
       exit(1);
     }
   }
@@ -1009,6 +956,7 @@ static void BM_Main(int* const argc, char*** const argv) {
     pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
+  std::string default_db_path;
   // Choose a location for the test database if none given with --db=<path>
   if (pdlfs::FLAGS_db == NULL) {
     default_db_path = pdlfs::test::TmpDir() + "/fsdb_bench";
@@ -1018,6 +966,7 @@ static void BM_Main(int* const argc, char*** const argv) {
   pdlfs::Benchmark benchmark;
   benchmark.Run();
 }
+}  // namespace
 
 int main(int argc, char* argv[]) {
   pdlfs::Slice token;
