@@ -48,6 +48,23 @@
 
 namespace pdlfs {
 
+FilesystemDbStats::FilesystemDbStats()
+    : putkeybytes(0),
+      putbytes(0),
+      puts(0),
+      getkeybytes(0),
+      getbytes(0),
+      gets(0) {}
+
+void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
+  putkeybytes += other.putkeybytes;
+  putbytes += other.putbytes;
+  puts += other.puts;
+  getkeybytes += other.getkeybytes;
+  getbytes += other.getbytes;
+  gets += other.gets;
+}
+
 FilesystemDbOptions::FilesystemDbOptions()
     : write_buffer_size(4u << 20u),
       table_file_size(2u << 20u),
@@ -113,23 +130,6 @@ void FilesystemDbOptions::ReadFromEnv() {
   ReadBoolFromEnv("DELTAFS_Db_enable_io_monitoring", &enable_io_monitoring);
   ReadBoolFromEnv("DELTAFS_Db_compression", &compression);
 }
-
-void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
-  putkeybytes += other.putkeybytes;
-  putbytes += other.putbytes;
-  puts += other.puts;
-  getkeybytes += other.getkeybytes;
-  getbytes += other.getbytes;
-  gets += other.gets;
-}
-
-FilesystemDbStats::FilesystemDbStats()
-    : putkeybytes(0),
-      putbytes(0),
-      puts(0),
-      getkeybytes(0),
-      getbytes(0),
-      gets(0) {}
 
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions dbopts;
