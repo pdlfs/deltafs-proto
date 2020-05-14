@@ -428,7 +428,8 @@ class Benchmark {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
-    fprintf(stdout, "Entries:            %d per thread\n", FLAGS_num);
+    fprintf(stdout, "Num (rd/wr):        %d/%d per thread\n", FLAGS_reads,
+            FLAGS_num);
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
@@ -663,7 +664,7 @@ class Benchmark {
           break;
       }
       if (!s.ok()) {
-        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+        fprintf(stderr, "Db put error: %s\n", s.ToString().c_str());
         exit(1);
       }
       thread->stats.FinishedSingleOp(FLAGS_num, thread->tid);
@@ -692,12 +693,12 @@ class Benchmark {
   void Compact(ThreadState* thread) {
     Status s = db_->Flush(true);
     if (!s.ok()) {
-      fprintf(stderr, "flush error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Db flush error: %s\n", s.ToString().c_str());
       exit(1);
     }
     s = db_->DrainCompaction();
     if (!s.ok()) {
-      fprintf(stderr, "drain compaction error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Db drain compaction error: %s\n", s.ToString().c_str());
       exit(1);
     }
   }
@@ -735,7 +736,7 @@ class Benchmark {
       if (s.ok()) {
         found++;
       } else if (!s.IsNotFound()) {
-        fprintf(stderr, "get error: %s\n", s.ToString().c_str());
+        fprintf(stderr, "Db get error: %s\n", s.ToString().c_str());
         exit(1);
       }
       thread->stats.FinishedSingleOp(FLAGS_reads, thread->tid);
@@ -774,7 +775,7 @@ class Benchmark {
     db_ = new FilesystemDb(dbopts, env);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
-      fprintf(stderr, "open error: %s\n", s.ToString().c_str());
+      fprintf(stderr, "Cannot open db: %s\n", s.ToString().c_str());
       exit(1);
     }
 

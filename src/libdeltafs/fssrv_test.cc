@@ -123,7 +123,7 @@ class Benchmark : public FilesystemWrapper {
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
-    fprintf(stdout, "Real fs with db:    %d\n", FLAGS_with_db);
+    fprintf(stdout, "Real fs w/ db:      %d\n", FLAGS_with_db);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
