@@ -33,7 +33,7 @@
  */
 #pragma once
 
-#include "fscomm.h"
+#include "fscom.h"
 
 #include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lru.h"

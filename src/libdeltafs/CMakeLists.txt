@@ -45,11 +45,11 @@
 #
 
 # main directory sources and tests
-set (deltafs-srcs fsdb.cc fsapi.cc fscomm.cc env_wrapper.cc
-        fssrv.cc fscli.cc fs.cc
+set (deltafs-srcs fsdb.cc fsapi.cc fscom.cc env_wrapper.cc
+        fssvr.cc fscli.cc fs.cc
         deltafs.cc)
-set (deltafs-tests deltafs_test.cc fssrv_test.cc fscli_test.cc
-        fscomm_test.cc fs_test.cc fsdb_test.cc)
+set (deltafs-tests fssvr_test.cc fscli_test.cc fscom_test.cc fs_test.cc
+        fsdb_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
@@ -133,6 +133,28 @@ endif ()
 # end of the compiler/machine/os dependent stuff!
 #
 
+find_package (MPI MODULE REQUIRED)
+string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
+
+add_executable (deltafs-srvr deltafs_srvr.cc)
+target_link_libraries (deltafs-srvr deltafs)
+
+foreach (tgt deltafs-srvr)
+    foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
+        if (NOT ${lcv} STREQUAL "")
+            target_compile_options (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
+        endif ()
+    endforeach ()
+    foreach (lcv ${MPI_CXX_INCLUDE_PATH})
+        target_include_directories (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
+    endforeach ()
+    foreach (lcv ${MPI_CXX_LIBRARIES})
+        target_link_libraries(${tgt} $<BUILD_INTERFACE:${lcv}>)
+    endforeach ()
+    set_property (TARGET ${tgt} APPEND PROPERTY LINK_FLAGS
+            ${MPI_CXX_LINK_FLAGS})
+endforeach ()
+
 #
 # installation stuff (packaging and install commands)
 #
@@ -145,6 +167,7 @@ write_basic_package_version_file(
 configure_file (deltafs-config.cmake.in deltafs-config.cmake @ONLY)
 
 # "make install" rules...
+install (TARGETS deltafs-srvr RUNTIME DESTINATION bin)
 install (TARGETS deltafs EXPORT deltafs-targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib)

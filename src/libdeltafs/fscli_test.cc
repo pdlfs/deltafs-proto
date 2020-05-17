@@ -34,7 +34,7 @@
 #include "fscli.h"
 
 #include "fs.h"
-#include "fscomm.h"
+#include "fscom.h"
 #include "fsdb.h"
 
 #include "pdlfs-common/leveldb/db.h"

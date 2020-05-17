@@ -33,7 +33,7 @@
  */
 #pragma once
 
-#include "fscomm.h"
+#include "fscom.h"
 
 #include "pdlfs-common/rpc.h"
 

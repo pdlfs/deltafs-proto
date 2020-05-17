@@ -31,64 +31,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "fssrv.h"
+#include <mpi.h>
 
-namespace pdlfs {
-
-FilesystemServerOptions::FilesystemServerOptions()
-    : num_rpc_threads(1), uri(":10086") {}
-
-FilesystemServer::FilesystemServer(  ///
-    const FilesystemServerOptions& options)
-    : options_(options), fs_(NULL), hmap_(NULL), rpc_(NULL) {
-  hmap_ = new RequestHandler[kNumOps];
-  memset(hmap_, 0, kNumOps * sizeof(void*));
-  hmap_[kLokup] = Lokup;
-  hmap_[kMkdir] = Mkdir;
-  hmap_[kMkfle] = Mkfle;
-  hmap_[kMkfls] = Mkfls;
-  hmap_[kLstat] = Lstat;
+int main() {
+  return 0;
 }
-
-void FilesystemServer::SetFs(FilesystemIf* const fs) {
-  fs_ = fs;  ///
-}
-
-Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
-  if (in.contents.size() >= 4) {
-    return hmap_[DecodeFixed32(&in.contents[0])](fs_, in, out);
-  } else {
-    return Status::InvalidArgument("Bad rpc req");
-  }
-}
-
-rpc::If* FilesystemServer::TEST_CreateCli(const std::string& uri) {
-  return rpc_->OpenStubFor(uri);
-}
-
-void FilesystemServer::TEST_Remap(int i, RequestHandler h) {
-  hmap_[i] = h;  ///
-}
-
-FilesystemServer::~FilesystemServer() {
-  delete rpc_;
-  delete[] hmap_;
-}
-
-Status FilesystemServer::Close() {
-  if (rpc_) return rpc_->Stop();
-  return Status::OK();
-}
-
-Status FilesystemServer::OpenServer() {
-  RPCOptions options;
-  options.fs = this;
-  options.impl = rpc::kSocketRPC;
-  options.mode = rpc::kServerClient;
-  options.num_rpc_threads = options_.num_rpc_threads;
-  options.uri = options_.uri;
-  rpc_ = RPC::Open(options);
-  return rpc_->Start();
-}
-
-}  // namespace pdlfs
