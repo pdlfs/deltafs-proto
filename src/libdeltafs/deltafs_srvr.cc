@@ -50,6 +50,8 @@
 
 namespace pdlfs {
 namespace {
+FilesystemDbOptions FLAGS_dbopts;
+
 // Total number of ranks.
 int FLAGS_comm_size = 1;
 
@@ -160,10 +162,12 @@ class Server {
   }
 
   FilesystemIf* OpenFilesystem() {
-    FilesystemDbOptions dbopts;
-    dbopts.enable_io_monitoring = false;
-    fsdb_ = new FilesystemDb(dbopts, Env::Default());
-    Status s = fsdb_->Open(FLAGS_db);
+    fsdb_ = new FilesystemDb(FLAGS_dbopts, Env::Default());
+    char dbsuffix[100];
+    snprintf(dbsuffix, sizeof(dbsuffix), "/%d", FLAGS_rank);
+    std::string dbpath = FLAGS_db;
+    dbpath += dbsuffix;
+    Status s = fsdb_->Open(dbpath);
     if (!s.ok()) {
       fprintf(stderr, "%d: cannot open db: %s\n", FLAGS_rank,
               s.ToString().c_str());
@@ -267,7 +271,7 @@ void HandleSig(const int sig) {
 }
 
 void Doit(int* const argc, char*** const argv) {
-  std::string default_db_prefix;
+  pdlfs::FLAGS_dbopts.ReadFromEnv();
 
   for (int i = 2; i < *argc; i++) {
     int n;
@@ -293,6 +297,7 @@ void Doit(int* const argc, char*** const argv) {
     }
   }
 
+  std::string default_db_prefix;
   // Choose a location for the test database if none given with --db=<path>
   if (!pdlfs::FLAGS_db) {
     default_db_prefix = "/tmp/deltafs_srvr";
