@@ -86,8 +86,9 @@ class Server {
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
+    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
-    fprintf(stdout, "Port:               %d, starting from\n", FLAGS_port);
+    fprintf(stdout, "Listening port:     %d, starting from\n", FLAGS_port);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/<rank>\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
