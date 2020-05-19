@@ -200,7 +200,7 @@ class Server {
     rpcsrv->SetFs(fs);
     Status s = rpcsrv->OpenServer();
     if (!s.ok()) {
-      fprintf(stderr, "%d: cannot open rpc: %s\n", FLAGS_rank,
+      fprintf(stderr, "%d: Cannot open rpc: %s\n", FLAGS_rank,
               s.ToString().c_str());
       MPI_Finalize();
       exit(1);
@@ -208,17 +208,20 @@ class Server {
     return rpcsrv;
   }
 
+  void Close(FilesystemServer* const rpcsrv) {
+    Status s = rpcsrv->Close();
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Fail to close rpc: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+    }
+  }
+
  public:
   Server()
-      : shutting_down_(NULL),
-        cv_(&mu_),
-        fsdb_(NULL),
-        fs_(NULL),
-        svrs_(NULL),
-        n_(0) {}
+      : shutting_down_(NULL), cv_(&mu_), fsdb_(NULL), fs_(NULL), svrs_(NULL) {}
 
   ~Server() {
-    for (int i = 0; i < n_; i++) {
+    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
       delete svrs_[i];
     }
     delete[] svrs_;
@@ -249,6 +252,9 @@ class Server {
     MutexLock ml(&mu_);
     while (!shutting_down_.Acquire_Load()) {
       cv_.Wait();
+    }
+    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
+      Close(svrs_[i]);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
