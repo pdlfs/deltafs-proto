@@ -50,6 +50,7 @@
 
 namespace pdlfs {
 namespace {
+// Db options.
 FilesystemDbOptions FLAGS_dbopts;
 
 // Total number of ranks.
@@ -270,8 +271,10 @@ namespace {
 pdlfs::Server* g_srvr = NULL;
 
 void HandleSig(const int sig) {
-  fprintf(stdout, "\n");
   if (sig == SIGINT || sig == SIGTERM) {
+    if (pdlfs::FLAGS_rank == 0) {
+      fprintf(stdout, "\n");  // Start a newline
+    }
     if (g_srvr) {
       g_srvr->Interrupt();
     }
@@ -281,7 +284,7 @@ void HandleSig(const int sig) {
 void Doit(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dbopts.ReadFromEnv();
 
-  for (int i = 2; i < *argc; i++) {
+  for (int i = 1; i < (*argc); i++) {
     int n;
     char junk;
     if (sscanf((*argv)[i], "--port=%d%c", &n, &junk) == 1) {
@@ -298,7 +301,7 @@ void Doit(int* const argc, char*** const argv) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
-        fprintf(stderr, "Invalid flag: '%s'\n", (*argv)[i]);
+        fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
       }
       MPI_Finalize();
       exit(1);
