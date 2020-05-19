@@ -162,11 +162,16 @@ class Server {
   }
 
   FilesystemIf* OpenFilesystem() {
-    fsdb_ = new FilesystemDb(FLAGS_dbopts, Env::Default());
+    Env* const env = Env::Default();
+    env->CreateDir(FLAGS_db);
+    fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
     char dbsuffix[100];
     snprintf(dbsuffix, sizeof(dbsuffix), "/%d", FLAGS_rank);
     std::string dbpath = FLAGS_db;
     dbpath += dbsuffix;
+    if (!FLAGS_use_existing_db) {
+      DestroyDB(dbpath, DBOptions());
+    }
     Status s = fsdb_->Open(dbpath);
     if (!s.ok()) {
       fprintf(stderr, "%d: cannot open db: %s\n", FLAGS_rank,
@@ -209,11 +214,7 @@ class Server {
         fsdb_(NULL),
         fs_(NULL),
         svrs_(NULL),
-        n_(0) {
-    if (!FLAGS_use_existing_db) {
-      DestroyDB(FLAGS_db, DBOptions());
-    }
-  }
+        n_(0) {}
 
   ~Server() {
     for (int i = 0; i < n_; i++) {
