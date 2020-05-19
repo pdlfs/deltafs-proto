@@ -136,10 +136,10 @@ endif ()
 find_package (MPI MODULE REQUIRED)
 string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
 
-add_executable (deltafs-srvr deltafs_srvr.cc)
-target_link_libraries (deltafs-srvr deltafs)
+add_executable (deltafs_srvr deltafs_srvr.cc)
+target_link_libraries (deltafs_srvr deltafs)
 
-foreach (tgt deltafs-srvr)
+foreach (tgt deltafs_srvr)
     foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
         if (NOT ${lcv} STREQUAL "")
             target_compile_options (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
@@ -167,7 +167,7 @@ write_basic_package_version_file(
 configure_file (deltafs-config.cmake.in deltafs-config.cmake @ONLY)
 
 # "make install" rules...
-install (TARGETS deltafs-srvr RUNTIME DESTINATION bin)
+install (TARGETS deltafs_srvr RUNTIME DESTINATION bin)
 install (TARGETS deltafs EXPORT deltafs-targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib)
