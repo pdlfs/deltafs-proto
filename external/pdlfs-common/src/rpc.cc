@@ -105,13 +105,17 @@ void SocketRPC::HandleIncomingCall(CallState* const call) {
   }
 }
 
+// A simple wrapper class atop struct sockaddr_in.
 class SocketRPC::Addr {
  public:
-  explicit Addr(const RPCOptions& options) {
-    memset(&addr, 0, sizeof(struct sockaddr_in));
-    addr.sin_family = AF_INET;
+  Addr();
+  Status ResolvUri(const std::string& uri);
+  const struct sockaddr_in* rep() const { return &addr; }
+  struct sockaddr_in* rep() {
+    return &addr;
   }
 
+ private:
   void SetPort(const char* p) {
     int port = -1;
     if (p && p[0]) port = atoi(p);
@@ -125,17 +129,15 @@ class SocketRPC::Addr {
   // which we can bind or connect. Return OK on success, or a non-OK status
   // on errors.
   Status Resolv(const char* host, bool is_numeric);
-  Status ResolvUri(const std::string& uri);
-  const struct sockaddr_in* rep() const { return &addr; }
-  struct sockaddr_in* rep() {
-    return &addr;
-  }
-
- private:
   struct sockaddr_in addr;
 
   // Copyable
 };
+
+SocketRPC::Addr::Addr() {
+  memset(&addr, 0, sizeof(struct sockaddr_in));
+  addr.sin_family = AF_INET;
+}
 
 Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
   std::string host, port;
@@ -152,7 +154,11 @@ Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
   } else {
     host = uri.substr(b);
   }
-  Status status = Resolv(host.c_str(), false);
+
+  int h1, h2, h3, h4;
+  const bool is_numeric =
+      sscanf(host.c_str(), "%d.%d.%d.%d", &h1, &h2, &h3, &h4) == 4;
+  Status status = Resolv(host.c_str(), is_numeric);
   if (status.ok()) {
     SetPort(port.c_str());
   }
@@ -385,7 +391,7 @@ Status SocketRPC::Client::OpenAndConnect(const Addr& addr) {
 }
 
 SocketRPC::SocketRPC(const RPCOptions& options)
-    : if_(options.fs), env_(options.env), addr_(new Addr(options)), fd_(-1) {
+    : if_(options.fs), env_(options.env), addr_(new Addr), fd_(-1) {
   looper_ = new ThreadedLooper(this, options);
   status_ = addr_->ResolvUri(options.uri);
 }
@@ -448,10 +454,10 @@ class RPCImpl : public RPC {
   }
 
   virtual rpc::If* OpenStubFor(const std::string& uri) {
-    SocketRPC::Addr addr(options_);
+    SocketRPC::Addr addr;
     Status status = addr.ResolvUri(uri);
     if (status.ok()) {
-      SocketRPC::Client* cli = new SocketRPC::Client(options_);
+      SocketRPC::Client* const cli = new SocketRPC::Client(options_);
       cli->OpenAndConnect(addr);
       return cli;
     } else {
