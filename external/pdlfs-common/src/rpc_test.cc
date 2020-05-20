@@ -8,8 +8,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "pdlfs-common/rpc.h"
+
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
@@ -20,10 +20,7 @@ namespace pdlfs {
 
 class RPCTest : public rpc::If {
  public:
-  RPCTest() {
-    options_.uri = "ignored://127.0.0.1:22222";
-    options_.fs = this;
-  }
+  RPCTest() {}
 
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
     out.extra_buf.assign(in.contents.data(), in.contents.size());
@@ -31,18 +28,29 @@ class RPCTest : public rpc::If {
     return Status::OK();
   }
 
-  RPCOptions options_;
+  RPC* Open(const std::string& uri) {
+    RPCOptions options;
+    options.uri = uri;
+    options.fs = this;
+    return RPC::Open(options);
+  }
 };
 
+TEST(RPCTest, Addr) {
+  RPC* rpc = Open("127.0.0.1:22222");
+  ASSERT_EQ(rpc->GetUri(), "127.0.0.1:22222");
+  delete rpc;
+}
+
 TEST(RPCTest, Open) {
-  RPC* rpc = RPC::Open(options_);
+  RPC* rpc = Open("127.0.0.1:22222");
   ASSERT_TRUE(rpc != NULL);
   ASSERT_OK(rpc->Start());
   delete rpc;
 }
 
 TEST(RPCTest, SendAndRecv) {
-  RPC* rpc = RPC::Open(options_);
+  RPC* rpc = Open("127.0.0.1:22222");
   ASSERT_TRUE(rpc != NULL);
   ASSERT_OK(rpc->Start());
   SleepForMicroseconds(1 * 1000 * 1000);

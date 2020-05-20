@@ -63,6 +63,8 @@ class SocketRPC {
   class Addr;
 
   friend class RPCImpl;
+  // Return uri of the server.
+  std::string GetUri();
   // Open a new socket in fd_, try binding it to addr_, and start background
   // progressing. Return OK on success, or a non-OK status on errors. The
   // returned status is also remembered in status_, preventing future
@@ -108,7 +110,12 @@ void SocketRPC::HandleIncomingCall(CallState* const call) {
 // A simple wrapper class atop struct sockaddr_in.
 class SocketRPC::Addr {
  public:
-  Addr();
+  Addr() { Reset(); }
+  void Reset();
+  // The returned uri may not be used for clients to connect back to
+  // us. While both the address and the port will be numeric, the address may be
+  // "0.0.0.0" and the port may be "0".
+  std::string GetUri() const;
   Status ResolvUri(const std::string& uri);
   const struct sockaddr_in* rep() const { return &addr; }
   struct sockaddr_in* rep() {
@@ -134,7 +141,27 @@ class SocketRPC::Addr {
   // Copyable
 };
 
-SocketRPC::Addr::Addr() {
+std::string SocketRPC::Addr::GetUri() const {
+  char host[INET_ADDRSTRLEN];
+  char port[6];
+
+  int rv = getnameinfo(reinterpret_cast<const struct sockaddr*>(&addr),
+                       sizeof(struct sockaddr_in), host, sizeof(host), port,
+                       sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+  // Is this really going to happen given  we have asked for
+  // numeric results?
+  if (rv != 0) {
+    return "-1:-1";
+  }
+
+  std::string result = host;
+  result += ":";
+  result += port;
+
+  return result;
+}
+
+void SocketRPC::Addr::Reset() {
   memset(&addr, 0, sizeof(struct sockaddr_in));
   addr.sin_family = AF_INET;
 }
@@ -155,10 +182,16 @@ Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
     host = uri.substr(b);
   }
 
-  int h1, h2, h3, h4;
-  const bool is_numeric =
-      sscanf(host.c_str(), "%d.%d.%d.%d", &h1, &h2, &h3, &h4) == 4;
-  Status status = Resolv(host.c_str(), is_numeric);
+  Status status;
+  if (host.empty()) {
+    addr.sin_addr.s_addr = INADDR_ANY;
+  } else {
+    int h1, h2, h3, h4;
+    char junk;
+    const bool is_numeric =
+        sscanf(host.c_str(), "%d.%d.%d.%d%c", &h1, &h2, &h3, &h4, &junk) == 4;
+    status = Resolv(host.c_str(), is_numeric);
+  }
   if (status.ok()) {
     SetPort(port.c_str());
   }
@@ -166,33 +199,20 @@ Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
 }
 
 Status SocketRPC::Addr::Resolv(const char* host, bool is_numeric) {
-  // First, quickly handle empty strings and strings that are known to be
-  // numeric like "127.0.0.1"
-  if (!host || !host[0]) {
-    addr.sin_addr.s_addr = INADDR_ANY;
-  } else if (is_numeric) {
-    in_addr_t in_addr = inet_addr(host);
-    if (in_addr == INADDR_NONE) {
-      return Status::InvalidArgument("ip addr", host);
-    } else {
-      addr.sin_addr.s_addr = in_addr;
-    }
-  } else {  // Likely lengthy name resolution inevitable...
-    struct addrinfo *ai, hints;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = PF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = 0;
-    int ret = getaddrinfo(host, NULL, &hints, &ai);
-    if (ret != 0) {
-      return Status::IOError("getaddrinfo", gai_strerror(ret));
-    } else {
-      const struct sockaddr_in* const in =
-          reinterpret_cast<struct sockaddr_in*>(ai->ai_addr);
-      addr.sin_addr = in->sin_addr;
-    }
+  struct addrinfo *ai, hints;
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_family = AF_INET;
+  if (is_numeric) {
+    hints.ai_flags = AI_NUMERICHOST;
   }
-
+  int rv = getaddrinfo(host, NULL, &hints, &ai);
+  if (rv != 0) {
+    return Status::IOError("getaddrinfo", gai_strerror(rv));
+  }
+  const struct sockaddr_in* const in =
+      reinterpret_cast<struct sockaddr_in*>(ai->ai_addr);
+  addr.sin_addr = in->sin_addr;
+  freeaddrinfo(ai);
   return Status::OK();
 }
 
@@ -260,6 +280,8 @@ void SocketRPC::ThreadedLooper::BGLoop() {
       malloc(sizeof(struct CallState) - 1 + max_msgsz_));
   int err = 0;
 
+  (void)myid;
+
   while (true) {
     if (shutting_down_.Acquire_Load() || err) {
       MutexLock ml(&r->mutex_);
@@ -274,6 +296,8 @@ void SocketRPC::ThreadedLooper::BGLoop() {
       break;
     }
 
+    // Try performing a quick non-blocking receive from peers before sinking
+    // into poll.
     call->addrlen = sizeof(struct sockaddr_in);
     int nret = recvfrom(po.fd, call->msg, max_msgsz_, MSG_DONTWAIT,
                         reinterpret_cast<struct sockaddr*>(&call->addr),
@@ -432,6 +456,11 @@ Status SocketRPC::Stop() {
   return status_;
 }
 
+std::string SocketRPC::GetUri() {
+  MutexLock ml(&mutex_);
+  return addr_->GetUri();
+}
+
 // A dummy structure for error propagation.
 class Err : public rpc::If {
  public:
@@ -463,6 +492,11 @@ class RPCImpl : public RPC {
     } else {
       return new Err(status);
     }
+  }
+
+  virtual std::string GetUri() {
+    if (rpc_) return rpc_->GetUri();
+    return "0.0.0.0:0";
   }
 
   virtual Status status() const {
