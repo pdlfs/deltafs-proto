@@ -89,7 +89,7 @@ class Server {
     PrintWarnings();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
-    fprintf(stdout, "Listening port:     %d, starting from\n", FLAGS_port);
+    fprintf(stdout, "0th port:           %d\n", FLAGS_port);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/<rank>\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -176,7 +176,7 @@ class Server {
     }
     Status s = fsdb_->Open(dbpath);
     if (!s.ok()) {
-      fprintf(stderr, "%d: cannot open db: %s\n", FLAGS_rank,
+      fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
               s.ToString().c_str());
       MPI_Finalize();
       exit(1);
