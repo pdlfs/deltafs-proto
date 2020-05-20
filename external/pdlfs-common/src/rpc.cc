@@ -438,8 +438,8 @@ SocketRPC::~SocketRPC() {
 
 Status SocketRPC::Start() {
   MutexLock ml(&mutex_);
-  // If we failed to resolve the user supplied uri, we will yield the error
-  // here.
+  // If we failed to resolve the uri that was given to us, we will yield the
+  // error here.
   if (status_.ok()) {
     if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
       status_ = Status::IOError(strerror(errno));
@@ -451,6 +451,7 @@ Status SocketRPC::Start() {
       }
     }
     if (status_.ok()) {
+      // Fetch the actual address that we have just bound to
       socklen_t tmp = sizeof(struct sockaddr_in);
       getsockname(fd_, reinterpret_cast<struct sockaddr*>(actual_addr_->rep()),
                   &tmp);  // Not expecting any errors
