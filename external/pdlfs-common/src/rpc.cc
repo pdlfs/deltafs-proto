@@ -118,9 +118,9 @@ class SocketRPC::Addr {
   // "0.0.0.0" and the port may be "0".
   std::string GetUri() const;
   Status ResolvUri(const std::string& uri);
-  const struct sockaddr_in* rep() const { return &addr; }
+  const struct sockaddr_in* rep() const { return &addr_; }
   struct sockaddr_in* rep() {
-    return &addr;
+    return &addr_;
   }
 
  private:
@@ -131,40 +131,29 @@ class SocketRPC::Addr {
       // Have the OS pick up a port for us
       port = 0;
     }
-    addr.sin_port = htons(port);
+    addr_.sin_port = htons(port);
   }
   // Translate a human-readable address string into a binary socket address to
   // which we can bind or connect. Return OK on success, or a non-OK status
   // on errors.
   Status Resolv(const char* host, bool is_numeric);
-  struct sockaddr_in addr;
+  struct sockaddr_in addr_;
 
   // Copyable
 };
 
 std::string SocketRPC::Addr::GetUri() const {
   char host[INET_ADDRSTRLEN];
-  char port[6];
-
-  int rv = getnameinfo(reinterpret_cast<const struct sockaddr*>(&addr),
-                       sizeof(struct sockaddr_in), host, sizeof(host), port,
-                       sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-  // Is this really going to happen given  we have asked for
-  // numeric results?
-  if (rv != 0) {
-    return "-1:-1";
-  }
-
-  std::string result = host;
-  result += ":";
-  result += port;
-
-  return result;
+  char tmp[50];
+  snprintf(tmp, sizeof(tmp), "%s:%d",
+           inet_ntop(AF_INET, &addr_.sin_addr, host, sizeof(host)),
+           ntohs(addr_.sin_port));
+  return tmp;
 }
 
 void SocketRPC::Addr::Reset() {
-  memset(&addr, 0, sizeof(struct sockaddr_in));
-  addr.sin_family = AF_INET;
+  memset(&addr_, 0, sizeof(struct sockaddr_in));
+  addr_.sin_family = AF_INET;
 }
 
 Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
@@ -185,7 +174,7 @@ Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
 
   Status status;
   if (host.empty()) {
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr_.sin_addr.s_addr = INADDR_ANY;
   } else {
     int h1, h2, h3, h4;
     char junk;
@@ -212,7 +201,7 @@ Status SocketRPC::Addr::Resolv(const char* host, bool is_numeric) {
   }
   const struct sockaddr_in* const in =
       reinterpret_cast<struct sockaddr_in*>(ai->ai_addr);
-  addr.sin_addr = in->sin_addr;
+  addr_.sin_addr = in->sin_addr;
   freeaddrinfo(ai);
   return Status::OK();
 }
