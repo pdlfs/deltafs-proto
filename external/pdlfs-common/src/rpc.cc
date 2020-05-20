@@ -88,6 +88,7 @@ class SocketRPC {
 
   rpc::If* const if_;
   Env* const env_;
+  Addr* actual_addr_;
   Addr* addr_;
   port::Mutex mutex_;
   ThreadedLooper* looper_;
@@ -415,7 +416,11 @@ Status SocketRPC::Client::OpenAndConnect(const Addr& addr) {
 }
 
 SocketRPC::SocketRPC(const RPCOptions& options)
-    : if_(options.fs), env_(options.env), addr_(new Addr), fd_(-1) {
+    : if_(options.fs),
+      env_(options.env),
+      actual_addr_(new Addr),
+      addr_(new Addr),
+      fd_(-1) {
   looper_ = new ThreadedLooper(this, options);
   status_ = addr_->ResolvUri(options.uri);
 }
@@ -424,6 +429,7 @@ SocketRPC::~SocketRPC() {
   mutex_.Lock();  // Lock required for stopping bg progressing
   delete looper_;
   mutex_.Unlock();
+  delete actual_addr_;
   delete addr_;
   if (fd_ != -1) {
     close(fd_);
@@ -432,18 +438,22 @@ SocketRPC::~SocketRPC() {
 
 Status SocketRPC::Start() {
   MutexLock ml(&mutex_);
-  if (status_.ok() && fd_ == -1) {
+  // If we failed to resolve the user supplied uri, we will yield the error
+  // here.
+  if (status_.ok()) {
     if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
       status_ = Status::IOError(strerror(errno));
     } else {
-      int ret =
-          bind(fd_, reinterpret_cast<const struct sockaddr*>(addr_->rep()),
-               sizeof(struct sockaddr_in));
-      if (ret == -1) {
+      int rv = bind(fd_, reinterpret_cast<const struct sockaddr*>(addr_->rep()),
+                    sizeof(struct sockaddr_in));
+      if (rv == -1) {
         status_ = Status::IOError(strerror(errno));
       }
     }
     if (status_.ok()) {
+      socklen_t tmp = sizeof(struct sockaddr_in);
+      getsockname(fd_, reinterpret_cast<struct sockaddr*>(actual_addr_->rep()),
+                  &tmp);  // Not expecting any errors
       looper_->Start();
     }
   }
@@ -458,6 +468,7 @@ Status SocketRPC::Stop() {
 
 std::string SocketRPC::GetUri() {
   MutexLock ml(&mutex_);
+  if (fd_ != -1) return actual_addr_->GetUri();
   return addr_->GetUri();
 }
 

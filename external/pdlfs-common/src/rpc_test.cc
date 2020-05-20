@@ -37,8 +37,10 @@ class RPCTest : public rpc::If {
 };
 
 TEST(RPCTest, Addr) {
-  RPC* rpc = Open("127.0.0.1:22222");
-  ASSERT_EQ(rpc->GetUri(), "127.0.0.1:22222");
+  RPC* rpc = Open("0.0.0.0:0");
+  ASSERT_EQ(rpc->GetUri(), "0.0.0.0:0");
+  ASSERT_OK(rpc->Start());
+  fprintf(stderr, "Actual Uri: %s\n", rpc->GetUri().c_str());
   delete rpc;
 }
 
