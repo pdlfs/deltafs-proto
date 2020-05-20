@@ -41,11 +41,16 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
+#include <arpa/inet.h>
 #include <ctype.h>
+#include <ifaddrs.h>
 #include <mpi.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <time.h>
 
 namespace pdlfs {
@@ -59,7 +64,11 @@ int FLAGS_comm_size = 1;
 // My rank number.
 int FLAGS_rank = 0;
 
-// Listening port for rank 0.
+// If a host is configured with 1+ ip addresses, use the one with the following
+// prefix.
+const char* FLAGS_ip_prefix = "127.0.0.1";
+
+// Listening port.
 int FLAGS_port = 10086;
 
 // Number of listening ports per rank.
@@ -82,14 +91,14 @@ class Server {
   FilesystemDb* fsdb_;
   Filesystem* fs_;
   FilesystemServer** svrs_;
-  int n_;
 
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "IP Addr:            %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "Port:               %d, starting from\n", FLAGS_port);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
-    fprintf(stdout, "0th port:           %d\n", FLAGS_port);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/<rank>\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -163,6 +172,47 @@ class Server {
 #endif
   }
 
+  std::string PickAddr() {
+    const size_t prefix_len = strlen(FLAGS_ip_prefix);
+    std::string result;
+
+    struct ifaddrs *ifaddr, *ifa;
+    int rv = getifaddrs(&ifaddr);
+    if (rv != 0) {
+      fprintf(stderr, "%d: Cannot getifaddrs: %s\n", FLAGS_rank,
+              strerror(errno));
+      MPI_Finalize();
+      exit(1);
+    }
+
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+      if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
+        continue;
+      }
+      char tmp[INET_ADDRSTRLEN];
+      if (strncmp(
+              inet_ntop(AF_INET,
+                        &reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr)
+                             ->sin_addr,
+                        tmp, sizeof(tmp)),
+              FLAGS_ip_prefix, prefix_len) == 0) {
+        result = tmp;
+        break;
+      }
+    }
+
+    freeifaddrs(ifaddr);
+
+    if (result.empty()) {
+      fprintf(stderr, "%d: Cannot find a matching addr: %s\n", FLAGS_rank,
+              FLAGS_ip_prefix);
+      MPI_Finalize();
+      exit(1);
+    }
+
+    return result;
+  }
+
   FilesystemIf* OpenFilesystem() {
     Env* const env = Env::Default();
     env->CreateDir(FLAGS_db);
@@ -191,11 +241,11 @@ class Server {
     return fs_;
   }
 
-  FilesystemServer* OpenPort(int port, FilesystemIf* const fs) {
+  FilesystemServer* OpenPort(const char* ip, int port, FilesystemIf* const fs) {
     FilesystemServerOptions srvopts;
     srvopts.num_rpc_threads = 1;
-    char uri[10];
-    snprintf(uri, sizeof(uri), ":%d", port);
+    char uri[50];
+    snprintf(uri, sizeof(uri), "%s:%d", ip, port);
     srvopts.uri = uri;
     FilesystemServer* const rpcsrv = new FilesystemServer(srvopts);
     rpcsrv->SetFs(fs);
@@ -241,10 +291,11 @@ class Server {
       PrintHeader();
     }
     FilesystemIf* const fs = OpenFilesystem();
+    std::string ip = PickAddr();
     svrs_ = new FilesystemServer*[FLAGS_ports_per_rank];
     int base_port = FLAGS_port + FLAGS_rank * FLAGS_ports_per_rank;
     for (int i = 0; i < FLAGS_ports_per_rank; i++) {
-      svrs_[i] = OpenPort(base_port + i, fs);
+      svrs_[i] = OpenPort(ip.c_str(), base_port + i, fs);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
@@ -299,6 +350,8 @@ void Doit(int* const argc, char*** const argv) {
       pdlfs::FLAGS_use_existing_db = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
+    } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
+      pdlfs::FLAGS_ip_prefix = (*argv)[i] + 5;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
