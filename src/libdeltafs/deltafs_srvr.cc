@@ -74,6 +74,9 @@ int FLAGS_port = 10086;
 // Number of listening ports per rank.
 int FLAGS_ports_per_rank = 1;
 
+// Print the ip addresses of all ranks for debugging.
+bool FLAGS_print_ips = false;
+
 // Skip all fs checks.
 bool FLAGS_skip_fs_checks = false;
 
@@ -95,10 +98,10 @@ class Server {
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "IP Addr:            %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "IP prefix:          %s*\n", FLAGS_ip_prefix);
     fprintf(stdout, "Port:               %d, starting from\n", FLAGS_port);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
+    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/<rank>\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
@@ -172,9 +175,8 @@ class Server {
 #endif
   }
 
-  std::string PickAddr() {
+  const char* PickAddr(char* dst) {
     const size_t prefix_len = strlen(FLAGS_ip_prefix);
-    std::string result;
 
     struct ifaddrs *ifaddr, *ifa;
     int rv = getifaddrs(&ifaddr);
@@ -196,21 +198,21 @@ class Server {
                              ->sin_addr,
                         tmp, sizeof(tmp)),
               FLAGS_ip_prefix, prefix_len) == 0) {
-        result = tmp;
+        strcpy(dst, tmp);
         break;
       }
     }
 
     freeifaddrs(ifaddr);
 
-    if (result.empty()) {
+    if (!dst[0]) {
       fprintf(stderr, "%d: Cannot find a matching addr: %s\n", FLAGS_rank,
               FLAGS_ip_prefix);
       MPI_Finalize();
       exit(1);
     }
 
-    return result;
+    return dst;
   }
 
   FilesystemIf* OpenFilesystem() {
@@ -291,13 +293,27 @@ class Server {
       PrintHeader();
     }
     FilesystemIf* const fs = OpenFilesystem();
-    std::string ip = PickAddr();
+    char myip[INET_ADDRSTRLEN];
+    memset(myip, 0, sizeof(myip));
+    PickAddr(myip);
     svrs_ = new FilesystemServer*[FLAGS_ports_per_rank];
     int base_port = FLAGS_port + FLAGS_rank * FLAGS_ports_per_rank;
     for (int i = 0; i < FLAGS_ports_per_rank; i++) {
-      svrs_[i] = OpenPort(ip.c_str(), base_port + i, fs);
+      svrs_[i] = OpenPort(myip, base_port + i, fs);
     }
     MPI_Barrier(MPI_COMM_WORLD);
+    char* ip_info = NULL;
+    if (FLAGS_rank == 0) {
+      ip_info = new char[INET_ADDRSTRLEN * FLAGS_comm_size];
+    }
+    MPI_Gather(myip, INET_ADDRSTRLEN, MPI_CHAR, ip_info, INET_ADDRSTRLEN,
+               MPI_CHAR, 0, MPI_COMM_WORLD);
+    if (FLAGS_rank == 0 && FLAGS_print_ips) {
+      puts("IP addrs >>>");
+      for (int i = 0; i < FLAGS_comm_size; i++) {
+        fprintf(stdout, "%d:\t%s\n", i, ip_info + INET_ADDRSTRLEN * i);
+      }
+    }
     if (FLAGS_rank == 0) {
       puts("Running...");
     }
@@ -342,6 +358,8 @@ void Doit(int* const argc, char*** const argv) {
       pdlfs::FLAGS_port = n;
     } else if (sscanf((*argv)[i], "--ports_per_rank=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_ports_per_rank = n;
+    } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_print_ips = n;
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
