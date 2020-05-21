@@ -31,50 +31,59 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#include "fsis.h"
 
-#include "fscom.h"
-
-#include "pdlfs-common/rpc.h"
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
-
-struct FilesystemServerOptions {
-  FilesystemServerOptions();
-  int num_rpc_threads;
-  std::string uri;
-};
-
-// Each filesystem server acts as a router. An embedded rpc server handles
-// network communication and listens to client requests. Each client request
-// received by it (the rpc server) is sent to the filesystem server for
-// processing. The filesystem server processes a request by routing it to a
-// corresponding handler for processing. Requests are routed according to a
-// routing table established at the beginning of filesystem server
-// initialization.
-class FilesystemServer : public rpc::If {
+class FilesystemInfoServerTest {
  public:
-  explicit FilesystemServer(const FilesystemServerOptions& options);
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~FilesystemServer();
+  FilesystemInfoServerTest()  ///
+      : srv_(new FilesystemInfoServer(options_)) {}
+  virtual ~FilesystemInfoServerTest() {  ///
+    delete srv_;
+  }
 
-  void SetFs(FilesystemIf* fs);
-  Status OpenServer();
-  Status Close();
-
-  If* TEST_CreateCli(const std::string& uri);
-  typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);
-  // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, RequestHandler h);
-
- private:
-  // No copying allowed
-  void operator=(const FilesystemServer&);
-  FilesystemServer(const FilesystemServer& other);
-  FilesystemServerOptions options_;
-  FilesystemIf* fs_;  // fs_ not owned by us
-  RequestHandler* hmap_;
-  RPC* rpc_;
+  FilesystemInfoServerOptions options_;
+  FilesystemInfoServer* srv_;
 };
+
+TEST(FilesystemInfoServerTest, StartAndStop) {
+  ASSERT_OK(srv_->OpenServer());
+  ASSERT_OK(srv_->Close());
+}
+
+TEST(FilesystemInfoServerTest, EmptyInfo) {
+  ASSERT_OK(srv_->OpenServer());
+  rpc::If* const cli = srv_->TEST_CreateSelfCli();
+  rpc::If::Message in, out;
+  EncodeFixed32(&in.buf[0], 0);
+  in.contents = Slice(&in.buf[0], 4);
+  ASSERT_OK(cli->Call(in, out));
+  ASSERT_TRUE(out.contents.empty());
+  ASSERT_OK(srv_->Close());
+  delete cli;
+}
+
+TEST(FilesystemInfoServerTest, InfoMapping) {
+  ASSERT_OK(srv_->OpenServer());
+  srv_->SetInfo(0, "12345");
+  srv_->SetInfo(1, "23456");
+  srv_->SetInfo(2, "34567");
+  rpc::If* const cli = srv_->TEST_CreateSelfCli();
+  rpc::If::Message in, out;
+  EncodeFixed32(&in.buf[0], 1);
+  in.contents = Slice(&in.buf[0], 4);
+  ASSERT_OK(cli->Call(in, out));
+  ASSERT_EQ(out.contents.size(), 5);
+  ASSERT_EQ(out.contents, "23456");
+  ASSERT_OK(srv_->Close());
+  delete cli;
+}
 
 }  // namespace pdlfs
+
+int main(int argc, char* argv[]) {
+  return pdlfs::test::RunAllTests(&argc, &argv);
+}

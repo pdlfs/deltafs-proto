@@ -31,50 +31,58 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#include "fsis.h"
 
-#include "fscom.h"
-
-#include "pdlfs-common/rpc.h"
+#include "pdlfs-common/coding.h"
 
 namespace pdlfs {
 
-struct FilesystemServerOptions {
-  FilesystemServerOptions();
-  int num_rpc_threads;
-  std::string uri;
-};
+FilesystemInfoServerOptions::FilesystemInfoServerOptions()
+    : num_rpc_threads(1), uri(":10085") {}
 
-// Each filesystem server acts as a router. An embedded rpc server handles
-// network communication and listens to client requests. Each client request
-// received by it (the rpc server) is sent to the filesystem server for
-// processing. The filesystem server processes a request by routing it to a
-// corresponding handler for processing. Requests are routed according to a
-// routing table established at the beginning of filesystem server
-// initialization.
-class FilesystemServer : public rpc::If {
- public:
-  explicit FilesystemServer(const FilesystemServerOptions& options);
-  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~FilesystemServer();
+FilesystemInfoServer::FilesystemInfoServer(
+    const FilesystemInfoServerOptions& options)
+    : options_(options), rpc_(NULL) {}
 
-  void SetFs(FilesystemIf* fs);
-  Status OpenServer();
-  Status Close();
+FilesystemInfoServer::~FilesystemInfoServer() { delete rpc_; }
 
-  If* TEST_CreateCli(const std::string& uri);
-  typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);
-  // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, RequestHandler h);
+rpc::If* FilesystemInfoServer::TEST_CreateSelfCli() {
+  if (!rpc_) return NULL;
+  std::string uri = rpc_->GetUri();
+  size_t p = uri.find("0.0.0.0");
+  if (p != std::string::npos) {
+    uri.replace(p, strlen("0.0.0.0"), "127.0.0.1");
+  }
+  return rpc_->OpenStubFor(uri);
+}
 
- private:
-  // No copying allowed
-  void operator=(const FilesystemServer&);
-  FilesystemServer(const FilesystemServer& other);
-  FilesystemServerOptions options_;
-  FilesystemIf* fs_;  // fs_ not owned by us
-  RequestHandler* hmap_;
-  RPC* rpc_;
-};
+void FilesystemInfoServer::SetInfo(int idx, const Slice& info) {
+  imap_[idx] = info;
+}
+
+Status FilesystemInfoServer::Call(Message& in, Message& out) RPCNOEXCEPT {
+  if (in.contents.size() >= 4) {
+    out.contents = imap_[DecodeFixed32(&in.contents[0])];
+    return Status::OK();
+  } else {
+    return Status::InvalidArgument("Bad req fmt");
+  }
+}
+
+Status FilesystemInfoServer::Close() {
+  if (rpc_) return rpc_->Stop();
+  return Status::OK();
+}
+
+Status FilesystemInfoServer::OpenServer() {
+  RPCOptions options;
+  options.fs = this;
+  options.impl = rpc::kSocketRPC;
+  options.mode = rpc::kServerClient;
+  options.num_rpc_threads = options_.num_rpc_threads;
+  options.uri = options_.uri;
+  rpc_ = RPC::Open(options);
+  return rpc_->Start();
+}
 
 }  // namespace pdlfs

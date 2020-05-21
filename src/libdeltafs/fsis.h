@@ -33,47 +33,39 @@
  */
 #pragma once
 
-#include "fscom.h"
-
 #include "pdlfs-common/rpc.h"
+
+#include <map>
 
 namespace pdlfs {
 
-struct FilesystemServerOptions {
-  FilesystemServerOptions();
+struct FilesystemInfoServerOptions {
+  FilesystemInfoServerOptions();
   int num_rpc_threads;
   std::string uri;
 };
 
-// Each filesystem server acts as a router. An embedded rpc server handles
-// network communication and listens to client requests. Each client request
-// received by it (the rpc server) is sent to the filesystem server for
-// processing. The filesystem server processes a request by routing it to a
-// corresponding handler for processing. Requests are routed according to a
-// routing table established at the beginning of filesystem server
-// initialization.
-class FilesystemServer : public rpc::If {
+// Filesystem information server. It provides a service where clients can
+// retrieve various deployment-related information about their servers.
+class FilesystemInfoServer : public rpc::If {
  public:
-  explicit FilesystemServer(const FilesystemServerOptions& options);
+  explicit FilesystemInfoServer(const FilesystemInfoServerOptions& options);
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
-  virtual ~FilesystemServer();
+  virtual ~FilesystemInfoServer();
 
-  void SetFs(FilesystemIf* fs);
+  void SetInfo(int idx, const Slice& info);
+  // Create a client that connects to the server itself. The returned client
+  // should be deleted when it is no longer needed.
+  If* TEST_CreateSelfCli();
   Status OpenServer();
   Status Close();
 
-  If* TEST_CreateCli(const std::string& uri);
-  typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);
-  // Reset the handler for a specific type of operations.
-  void TEST_Remap(int i, RequestHandler h);
-
  private:
   // No copying allowed
-  void operator=(const FilesystemServer&);
-  FilesystemServer(const FilesystemServer& other);
-  FilesystemServerOptions options_;
-  FilesystemIf* fs_;  // fs_ not owned by us
-  RequestHandler* hmap_;
+  void operator=(const FilesystemInfoServer&);
+  FilesystemInfoServer(const FilesystemInfoServer& other);
+  FilesystemInfoServerOptions options_;
+  std::map<int, Slice> imap_;
   RPC* rpc_;
 };
 

@@ -46,9 +46,9 @@
 
 # main directory sources and tests
 set (deltafs-srcs fsdb.cc fsapi.cc fscom.cc env_wrapper.cc
-        fssvr.cc fscli.cc fs.cc)
-set (deltafs-tests fssvr_test.cc fscli_test.cc fscom_test.cc fs_test.cc
-        fsdb_test.cc)
+        fsis.cc fssvr.cc fscli.cc fs.cc)
+set (deltafs-tests fsis_test.cc fssvr_test.cc fscli_test.cc
+        fscom_test.cc fs_test.cc fsdb_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
