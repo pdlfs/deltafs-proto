@@ -33,6 +33,7 @@
  */
 #include "fs.h"
 #include "fsdb.h"
+#include "fsis.h"
 #include "fssvr.h"
 
 #include "pdlfs-common/leveldb/db.h"
@@ -91,9 +92,10 @@ class Server {
   port::Mutex mu_;
   port::AtomicPointer shutting_down_;
   port::CondVar cv_;
-  FilesystemDb* fsdb_;
-  Filesystem* fs_;
+  FilesystemInfoServer* infosvr_;
   FilesystemServer** svrs_;
+  Filesystem* fs_;
+  FilesystemDb* fsdb_;
 
   static void PrintHeader() {
     PrintEnvironment();
@@ -175,7 +177,7 @@ class Server {
 #endif
   }
 
-  const char* PickAddr(char* dst) {
+  void PickAddr(char* dst) {
     const size_t prefix_len = strlen(FLAGS_ip_prefix);
 
     struct ifaddrs *ifaddr, *ifa;
@@ -211,8 +213,6 @@ class Server {
       MPI_Finalize();
       exit(1);
     }
-
-    return dst;
   }
 
   FilesystemIf* OpenFilesystem() {
@@ -243,26 +243,44 @@ class Server {
     return fs_;
   }
 
-  FilesystemServer* OpenPort(const char* ip, int port, FilesystemIf* const fs) {
-    FilesystemServerOptions srvopts;
-    srvopts.num_rpc_threads = 1;
+  FilesystemInfoServer* OpenInfoPort(const char* ip, int port) {
+    FilesystemInfoServerOptions infosvropts;
+    infosvropts.num_rpc_threads = 1;
     char uri[50];
     snprintf(uri, sizeof(uri), "%s:%d", ip, port);
-    srvopts.uri = uri;
-    FilesystemServer* const rpcsrv = new FilesystemServer(srvopts);
-    rpcsrv->SetFs(fs);
-    Status s = rpcsrv->OpenServer();
+    infosvropts.uri = uri;
+    FilesystemInfoServer* const infosvr = new FilesystemInfoServer(infosvropts);
+    Status s = infosvr->OpenServer();
     if (!s.ok()) {
-      fprintf(stderr, "%d: Cannot open rpc: %s\n", FLAGS_rank,
+      fprintf(stderr, "%d: Cannot open info port: %s\n", FLAGS_rank,
               s.ToString().c_str());
       MPI_Finalize();
       exit(1);
     }
-    return rpcsrv;
+    return infosvr;
   }
 
-  void Close(FilesystemServer* const rpcsrv) {
-    Status s = rpcsrv->Close();
+  FilesystemServer* OpenPort(const char* ip, int port, FilesystemIf* const fs) {
+    FilesystemServerOptions svropts;
+    svropts.num_rpc_threads = 1;
+    char uri[50];
+    snprintf(uri, sizeof(uri), "%s:%d", ip, port);
+    svropts.uri = uri;
+    FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
+    rpcsvr->SetFs(fs);
+    Status s = rpcsvr->OpenServer();
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open port: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Finalize();
+      exit(1);
+    }
+    return rpcsvr;
+  }
+
+  template <typename T>
+  void Close(T* const svr) {
+    Status s = svr->Close();
     if (!s.ok()) {
       fprintf(stderr, "%d: Fail to close rpc: %s\n", FLAGS_rank,
               s.ToString().c_str());
@@ -271,7 +289,12 @@ class Server {
 
  public:
   Server()
-      : shutting_down_(NULL), cv_(&mu_), fsdb_(NULL), fs_(NULL), svrs_(NULL) {}
+      : shutting_down_(NULL),
+        cv_(&mu_),
+        infosvr_(NULL),
+        svrs_(NULL),
+        fs_(NULL),
+        fsdb_(NULL) {}
 
   ~Server() {
     for (int i = 0; i < FLAGS_ports_per_rank; i++) {
@@ -308,22 +331,26 @@ class Server {
     }
     MPI_Gather(myip, INET_ADDRSTRLEN, MPI_CHAR, ip_info, INET_ADDRSTRLEN,
                MPI_CHAR, 0, MPI_COMM_WORLD);
-    if (FLAGS_rank == 0 && FLAGS_print_ips) {
-      puts("IP addrs >>>");
-      for (int i = 0; i < FLAGS_comm_size; i++) {
-        fprintf(stdout, "%d:\t%s\n", i, ip_info + INET_ADDRSTRLEN * i);
-      }
-    }
     if (FLAGS_rank == 0) {
+      infosvr_ = OpenInfoPort(myip, FLAGS_port - 1);
+      infosvr_->SetInfo(0, Slice(ip_info, INET_ADDRSTRLEN * FLAGS_comm_size));
+      if (FLAGS_print_ips) {
+        puts("IP addrs >>>");
+        for (int i = 0; i < FLAGS_comm_size; i++) {
+          fprintf(stdout, "%d:\t%s\n", i, ip_info + INET_ADDRSTRLEN * i);
+        }
+      }
       puts("Running...");
     }
     MutexLock ml(&mu_);
     while (!shutting_down_.Acquire_Load()) {
       cv_.Wait();
     }
+    Close(infosvr_);
     for (int i = 0; i < FLAGS_ports_per_rank; i++) {
       Close(svrs_[i]);
     }
+    delete[] ip_info;
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
       puts("Bye!");
