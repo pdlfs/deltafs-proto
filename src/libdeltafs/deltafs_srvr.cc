@@ -278,15 +278,6 @@ class Server {
     return rpcsvr;
   }
 
-  template <typename T>
-  void Close(T* const svr) {
-    Status s = svr->Close();
-    if (!s.ok()) {
-      fprintf(stderr, "%d: Fail to close rpc: %s\n", FLAGS_rank,
-              s.ToString().c_str());
-    }
-  }
-
  public:
   Server()
       : shutting_down_(NULL),
@@ -346,11 +337,11 @@ class Server {
     while (!shutting_down_.Acquire_Load()) {
       cv_.Wait();
     }
-    Close(infosvr_);
-    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
-      Close(svrs_[i]);
-    }
+    infosvr_->Close();
     delete[] ip_info;
+    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
+      svrs_[i]->Close();
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
       puts("Bye!");
