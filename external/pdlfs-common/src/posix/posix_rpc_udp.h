@@ -20,9 +20,12 @@ namespace pdlfs {
 class PosixUDPServer : public PosixSocketServer {
  public:
   explicit PosixUDPServer(rpc::If* srv, size_t max_msgsz = 1432);
-  virtual ~PosixUDPServer() { BGStop(); }
+  virtual ~PosixUDPServer() {
+    BGStop();
+  }  // More resources to be released by parent
 
-  // On OK, BGStart() should then be called to start receiving client data.
+  // On OK, BGStart() from parent should then be called to start background
+  // progressing.
   virtual Status OpenAndBind(const std::string& uri);
 
  private:

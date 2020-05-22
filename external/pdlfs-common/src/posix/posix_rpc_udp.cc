@@ -12,7 +12,9 @@
 
 #include "pdlfs-common/mutexlock.h"
 
+#include <errno.h>
 #include <poll.h>
+#include <string.h>
 #include <unistd.h>
 
 namespace pdlfs {
@@ -23,7 +25,7 @@ PosixUDPServer::PosixUDPServer(rpc::If* srv, size_t max_msgsz)
 Status PosixUDPServer::OpenAndBind(const std::string& uri) {
   MutexLock ml(&mutex_);
   if (fd_ != -1) {
-    return Status::AssertionFailed(" Socket already opened");
+    return Status::AssertionFailed("Socket already opened");
   }
   Status status = addr_->ResolvUri(uri);
   if (!status.ok()) {
@@ -68,9 +70,9 @@ Status PosixUDPServer::BGLoop(int myid) {
     call->addrlen = sizeof(call->addr);
     // Try performing a quick non-blocking receive from peers before sinking
     // into poll.
-    int rv = recvfrom(po.fd, call->msg, max_msgsz_, MSG_DONTWAIT,
-                      reinterpret_cast<struct sockaddr*>(&call->addr),
-                      &call->addrlen);
+    ssize_t rv = recvfrom(fd_, call->msg, max_msgsz_, MSG_DONTWAIT,
+                          reinterpret_cast<struct sockaddr*>(&call->addr),
+                          &call->addrlen);
     if (rv > 0) {
       call->msgsz = rv;
       HandleIncomingCall(call);
@@ -100,7 +102,7 @@ void PosixUDPServer::HandleIncomingCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
   srv_->Call(in, out);
-  int nbytes =
+  ssize_t nbytes =
       sendto(fd_, out.contents.data(), out.contents.size(), 0,
              reinterpret_cast<struct sockaddr*>(&call->addr), call->addrlen);
   if (nbytes != out.contents.size()) {
@@ -139,7 +141,7 @@ Status PosixUDPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
     return status_;
   }
   Status status;
-  int rv = send(fd_, in.contents.data(), in.contents.size(), 0);
+  ssize_t rv = send(fd_, in.contents.data(), in.contents.size(), 0);
   if (rv != in.contents.size()) {
     status = Status::IOError(strerror(errno));
     return status;

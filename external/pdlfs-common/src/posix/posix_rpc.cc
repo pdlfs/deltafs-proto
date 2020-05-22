@@ -169,7 +169,11 @@ PosixRPC::PosixRPC(const RPCOptions& options)
     : srv_(NULL), options_(options), tcp_(0) {
   tcp_ = Slice(options_.uri).starts_with("tcp://");
   if (options_.mode == rpc::kServerClient) {
-    srv_ = tcp_ ? NULL : new PosixUDPServer(options_.fs);
+    if (tcp_) {
+      srv_ = new PosixTCPServer(options_.fs, options_.rpc_timeout);
+    } else {
+      srv_ = new PosixUDPServer(options_.fs);
+    }
   }
 }
 
@@ -205,7 +209,9 @@ rpc::If* PosixRPC::OpenStubFor(const std::string& uri) {
     cli->Open(uri);
     return cli;
   } else {
-    return NULL;
+    PosixTCPCli* const cli = new PosixTCPCli(options_.rpc_timeout);
+    cli->SetTarget(uri);
+    return cli;
   }
 }
 

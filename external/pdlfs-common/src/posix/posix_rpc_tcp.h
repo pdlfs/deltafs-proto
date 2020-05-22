@@ -12,10 +12,20 @@
 
 #include "posix_rpc.h"
 
+#include <stddef.h>
+#include <sys/socket.h>
+
 namespace pdlfs {
 // RPC srv impl using TCP.
 class PosixTCPServer : public PosixSocketServer {
  public:
+  PosixTCPServer(rpc::If* srv, uint64_t timeout, size_t buf_sz = 4000);
+  virtual ~PosixTCPServer() {
+    BGStop();
+  }  // More resources to be released by parent
+
+  // On OK, BGStart() from parent should then be called to start background
+  // progressing.
   virtual Status OpenAndBind(const std::string& uri);
 
  private:
@@ -27,7 +37,8 @@ class PosixTCPServer : public PosixSocketServer {
   };
   void HandleIncomingCall(CallState* call);
   virtual Status BGLoop(int myid);
-  const size_t buf_sz_;  // Buffer size for reading peer data
+  const uint64_t rpc_timeout_;  // In microseconds
+  const size_t buf_sz_;         // Buffer size for reading peer data
   rpc::If* const srv_;
 };
 

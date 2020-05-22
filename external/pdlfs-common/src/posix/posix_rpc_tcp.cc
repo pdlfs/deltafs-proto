@@ -19,10 +19,13 @@
 #include <unistd.h>
 
 namespace pdlfs {
+PosixTCPServer::PosixTCPServer(rpc::If* srv, uint64_t timeout, size_t buf_sz)
+    : rpc_timeout_(timeout), buf_sz_(buf_sz), srv_(srv) {}
+
 Status PosixTCPServer::OpenAndBind(const std::string& uri) {
   MutexLock ml(&mutex_);
   if (fd_ != -1) {
-    return Status::AssertionFailed(" Socket already opened");
+    return Status::AssertionFailed("Socket already opened");
   }
   Status status = addr_->ResolvUri(uri);
   if (!status.ok()) {
@@ -79,6 +82,7 @@ Status PosixTCPServer::BGLoop(int myid) {
     if (rv != -1) {
       call.fd = rv;
       HandleIncomingCall(&call);
+      close(rv);
       continue;
     } else if (errno == EWOULDBLOCK) {
       rv = poll(&po, 1, 200);
@@ -98,7 +102,54 @@ Status PosixTCPServer::BGLoop(int myid) {
 }
 
 void PosixTCPServer::HandleIncomingCall(CallState* const call) {
+  int err;
   rpc::If::Message in, out;
+  const uint64_t start = CurrentMicros();
+  struct pollfd po;
+  memset(&po, 0, sizeof(struct pollfd));
+  po.events = POLLIN;
+  po.fd = call->fd;
+  char* const buf = new char[buf_sz_];
+  while (true) {
+    ssize_t rv = recv(call->fd, buf, buf_sz_, MSG_DONTWAIT);
+    if (rv > 0) {
+      in.extra_buf.append(buf, rv);
+      continue;
+    } else if (rv == 0) {  // End of message
+      in.contents = in.extra_buf;
+      break;
+    } else if (errno == EWOULDBLOCK) {
+      // We wait for 0.2 second and therefore timeouts are only checked
+      // roughly every that amount of time.
+      rv = poll(&po, 1, 200);
+    }
+
+    // Either recv or poll may have returned errors
+    if (rv == -1) {
+      err = errno;
+      break;
+    } else if (rv == 1) {
+      continue;
+    } else if (CurrentMicros() - start >= rpc_timeout_) {
+      err = -1;
+      break;
+    }
+  }
+
+  delete[] buf;
+  if (err) {
+    //
+    return;
+  }
+
+  srv_->Call(in, out);
+  ssize_t nbytes = send(call->fd, out.contents.data(), out.contents.size(), 0);
+  if (nbytes != out.contents.size()) {
+    //
+    return;
+  }
+
+  shutdown(call->fd, SHUT_WR);
 }
 
 PosixTCPCli::PosixTCPCli(uint64_t timeout, size_t buf_sz)
@@ -132,7 +183,7 @@ Status PosixTCPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   if (!status.ok()) {
     return status;
   }
-  int rv = send(fd, in.contents.data(), in.contents.size(), 0);
+  ssize_t rv = send(fd, in.contents.data(), in.contents.size(), 0);
   if (rv != in.contents.size()) {
     status = Status::IOError(strerror(errno));
     close(fd);
@@ -144,7 +195,7 @@ Status PosixTCPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   memset(&po, 0, sizeof(struct pollfd));
   po.events = POLLIN;
   po.fd = fd;
-  char* buf = new char[buf_sz_];
+  char* const buf = new char[buf_sz_];
   while (true) {
     rv = recv(fd, buf, buf_sz_, MSG_DONTWAIT);
     if (rv > 0) {
@@ -172,7 +223,6 @@ Status PosixTCPCli::Call(Message& in, Message& out) RPCNOEXCEPT {
   }
 
   delete[] buf;
-  shutdown(fd, SHUT_RD);
   close(fd);
   return status;
 }
