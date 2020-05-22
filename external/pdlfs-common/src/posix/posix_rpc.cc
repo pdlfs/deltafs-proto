@@ -144,7 +144,10 @@ Status PosixSocketServer::BGStart(Env* const env, int num_threads) {
   while (bg_threads_ < bg_n_) {
     bg_cv_.Wait();
   }
-  return Status::OK();
+  // All background threads have started and they may have already
+  // encountered errors and have exited so now is a good time we report
+  // any errors back to the user.
+  return bg_status_;
 }
 
 Status PosixSocketServer::BGStop() {
@@ -182,6 +185,7 @@ Status PosixRPC::Start() {
   if (srv_) {
     status = srv_->OpenAndBind(options_.uri);
     if (status.ok()) {
+      // BGStart() will wait until all threads are up
       status = srv_->BGStart(options_.env, options_.num_rpc_threads);
     }
   }
