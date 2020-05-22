@@ -59,12 +59,14 @@ class PosixSocketServer {
   PosixSocketServer();
   virtual ~PosixSocketServer();
 
+  virtual std::string GetUri() = 0;
   virtual Status OpenAndBind(const std::string& uri) = 0;
   Status BGStart(Env* env, int num_threads);
   Status BGStop();
 
-  // Return uri of the server.
-  std::string GetUri();
+  // Return base uri of the server. A base uri does not contain protocol
+  // information.
+  std::string GetBaseUri();
   Status status();
 
  protected:

@@ -124,7 +124,7 @@ void PosixSocketServer::BGCall() {
   }
 }
 
-std::string PosixSocketServer::GetUri() {
+std::string PosixSocketServer::GetBaseUri() {
   MutexLock ml(&mutex_);
   if (fd_ != -1) return actual_addr_->GetUri();
   return addr_->GetUri();

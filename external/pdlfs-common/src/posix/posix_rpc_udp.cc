@@ -110,6 +110,10 @@ void PosixUDPServer::HandleIncomingCall(CallState* const call) {
   }
 }
 
+std::string PosixUDPServer::GetUri() {
+  return std::string("udp://") + GetBaseUri();
+}
+
 PosixUDPCli::PosixUDPCli(uint64_t timeout, size_t max_msgsz)
     : rpc_timeout_(timeout), max_msgsz_(max_msgsz), fd_(-1) {}
 

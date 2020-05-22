@@ -156,6 +156,10 @@ void PosixTCPServer::HandleIncomingCall(CallState* const call) {
   shutdown(call->fd, SHUT_WR);
 }
 
+std::string PosixTCPServer::GetUri() {
+  return std::string("tcp://") + GetBaseUri();
+}
+
 PosixTCPCli::PosixTCPCli(uint64_t timeout, size_t buf_sz)
     : rpc_timeout_(timeout), buf_sz_(buf_sz) {}
 

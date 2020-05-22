@@ -24,9 +24,10 @@ class PosixUDPServer : public PosixSocketServer {
     BGStop();
   }  // More resources to be released by parent
 
-  // On OK, BGStart() from parent should then be called to start background
-  // progressing.
+  // On OK, BGStart() from parent should then be called to commence background
+  // server progressing.
   virtual Status OpenAndBind(const std::string& uri);
+  virtual std::string GetUri();
 
  private:
   // State for each incoming procedure call.
