@@ -38,34 +38,44 @@ class RPCTest : public rpc::If {
 
 TEST(RPCTest, Addr) {
   RPC* rpc = Open("0.0.0.0:0");
-  ASSERT_EQ(rpc->GetUri(), "0.0.0.0:0");
+  ASSERT_EQ(rpc->GetUri(), "udp://0.0.0.0:0");
   ASSERT_OK(rpc->Start());
   fprintf(stderr, "Actual Uri: %s\n", rpc->GetUri().c_str());
   delete rpc;
 }
 
 TEST(RPCTest, Open) {
-  RPC* rpc = Open("127.0.0.1:22222");
-  ASSERT_TRUE(rpc != NULL);
-  ASSERT_OK(rpc->Start());
-  delete rpc;
+  const char* uris[2] = {"udp://127.0.0.1:22222", "tcp://127.0.0.1:22222"};
+  for (int i = 0; i < 2; i++) {
+    fprintf(stderr, "Uri: %s\n", uris[i]);
+    RPC* rpc = Open(uris[i]);
+    ASSERT_TRUE(rpc != NULL);
+    ASSERT_OK(rpc->Start());
+    ASSERT_OK(rpc->Stop());
+    delete rpc;
+  }
 }
 
 TEST(RPCTest, SendAndRecv) {
-  RPC* rpc = Open("127.0.0.1:22222");
-  ASSERT_TRUE(rpc != NULL);
-  ASSERT_OK(rpc->Start());
-  SleepForMicroseconds(1 * 1000 * 1000);
-  rpc::If* client = rpc->OpenStubFor("127.0.0.1:22222");
-  ASSERT_TRUE(client != NULL);
-  rpc::If::Message in, out;
-  in.contents = Slice("xxyyzz");
-  Status status = client->Call(in, out);
-  ASSERT_OK(status);
-  ASSERT_TRUE(out.contents == in.contents);
-  ASSERT_OK(rpc->Stop());
-  delete client;
-  delete rpc;
+  const char* uris[2] = {"udp://127.0.0.1:22222", "tcp://127.0.0.1:22222"};
+  for (int i = 0; i < 2; i++) {
+    fprintf(stderr, "Uri: %s\n", uris[i]);
+    RPC* rpc = Open(uris[i]);
+    ASSERT_TRUE(rpc != NULL);
+    ASSERT_OK(rpc->Start());
+    SleepForMicroseconds(1000);
+    ASSERT_OK(rpc->status());
+    rpc::If* client = rpc->OpenStubFor(uris[i]);
+    ASSERT_TRUE(client != NULL);
+    rpc::If::Message in, out;
+    in.contents = Slice("xxyyzz");
+    Status status = client->Call(in, out);
+    ASSERT_OK(status);
+    ASSERT_TRUE(out.contents == in.contents);
+    ASSERT_OK(rpc->Stop());
+    delete client;
+    delete rpc;
+  }
 }
 
 namespace {
