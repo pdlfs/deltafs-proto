@@ -1,0 +1,59 @@
+/*
+ * Copyright (c) 2019 Carnegie Mellon University,
+ * Copyright (c) 2019 Triad National Security, LLC, as operator of
+ *     Los Alamos National Laboratory.
+ *
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+#pragma once
+
+#include "posix_rpc.h"
+
+namespace pdlfs {
+// RPC srv impl using TCP.
+class PosixTCPServer : public PosixSocketServer {
+ public:
+  virtual Status OpenAndBind(const std::string& uri);
+
+ private:
+  // State for each incoming procedure call.
+  struct CallState {
+    struct sockaddr_storage addr;  // Location of the caller
+    socklen_t addrlen;
+    int fd;
+  };
+  void HandleIncomingCall(CallState* call);
+  virtual Status BGLoop(int myid);
+  const size_t buf_sz_;  // Buffer size for reading peer data
+  rpc::If* const srv_;
+};
+
+// TCP client.
+class PosixTCPCli : public rpc::If {
+ public:
+  explicit PosixTCPCli(uint64_t timeout, size_t buf_sz = 4000);
+  virtual ~PosixTCPCli() {}
+
+  // Each call creates a new socket, followed by a connection operation, a send,
+  // and a receive.
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
+
+  // If we fail to resolve the uri, we will record the error and return it at
+  // the next Call() invocation.
+  void SetTarget(const std::string& uri);
+
+ private:
+  // No copying allowed
+  void operator=(const PosixTCPCli&);
+  PosixTCPCli(const PosixTCPCli& other);
+  Status OpenAndConnect(int* fd);
+  const uint64_t rpc_timeout_;  // In microseconds
+  const size_t buf_sz_;
+  PosixSocketAddr addr_;
+  Status status_;
+};
+
+}  // namespace pdlfs

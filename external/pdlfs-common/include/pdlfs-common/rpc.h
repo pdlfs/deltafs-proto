@@ -112,7 +112,7 @@ class RPC {
   virtual Status Stop() = 0;
 
   // Return errors if there is any.
-  virtual Status status() const;
+  virtual Status status();
 
  private:
   // No copying allowed
