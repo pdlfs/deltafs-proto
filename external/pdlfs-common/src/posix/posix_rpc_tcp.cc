@@ -75,10 +75,14 @@ Status PosixTCPServer::BGLoop(int myid) {
   CallState call;
 
   int err = 0;
+  int rv = listen(fd_, 256);
+  if (rv == -1) {
+    err = errno;
+  }
   while (!err && !shutting_down_.Acquire_Load()) {
     call.addrlen = sizeof(call.addr);
-    int rv = accept(fd_, reinterpret_cast<struct sockaddr*>(&call.addr),
-                    &call.addrlen);
+    rv = accept(fd_, reinterpret_cast<struct sockaddr*>(&call.addr),
+                &call.addrlen);
     if (rv != -1) {
       call.fd = rv;
       HandleIncomingCall(&call);
