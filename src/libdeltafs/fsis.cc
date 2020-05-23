@@ -38,7 +38,7 @@
 namespace pdlfs {
 
 FilesystemInfoServerOptions::FilesystemInfoServerOptions()
-    : num_rpc_threads(1), uri(":10085") {}
+    : impl(rpc::kSocketRPC), num_rpc_threads(1), uri("tcp://0.0.0.0:10085") {}
 
 FilesystemInfoServer::FilesystemInfoServer(
     const FilesystemInfoServerOptions& options)
@@ -77,8 +77,8 @@ Status FilesystemInfoServer::Close() {
 Status FilesystemInfoServer::OpenServer() {
   RPCOptions options;
   options.fs = this;
-  options.impl = rpc::kSocketRPC;
   options.mode = rpc::kServerClient;
+  options.impl = options_.impl;
   options.num_rpc_threads = options_.num_rpc_threads;
   options.uri = options_.uri;
   rpc_ = RPC::Open(options);

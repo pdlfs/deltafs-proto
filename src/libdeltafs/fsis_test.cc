@@ -35,6 +35,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"
+#include "pdlfs-common/testutil.h"
 
 namespace pdlfs {
 class FilesystemInfoServerTest {
@@ -54,19 +55,35 @@ TEST(FilesystemInfoServerTest, StartAndStop) {
   ASSERT_OK(srv_->Close());
 }
 
-TEST(FilesystemInfoServerTest, EmptyInfo) {
+TEST(FilesystemInfoServerTest, EmptyItem) {
   ASSERT_OK(srv_->OpenServer());
   rpc::If* const cli = srv_->TEST_CreateSelfCli();
   rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 0);
-  in.contents = Slice(&in.buf[0], 4);
+  in.contents = Slice(&in.buf[0], sizeof(uint32_t));
   ASSERT_OK(cli->Call(in, out));
   ASSERT_TRUE(out.contents.empty());
   ASSERT_OK(srv_->Close());
   delete cli;
 }
 
-TEST(FilesystemInfoServerTest, InfoMapping) {
+TEST(FilesystemInfoServerTest, VeryLargeItem) {
+  ASSERT_OK(srv_->OpenServer());
+  std::string biginfo;
+  Random rnd(test::RandomSeed());
+  srv_->SetInfo(0, test::RandomString(&rnd, 1000 * 1000, &biginfo));
+  rpc::If* const cli = srv_->TEST_CreateSelfCli();
+  rpc::If::Message in, out;
+  EncodeFixed32(&in.buf[0], 0);
+  in.contents = Slice(&in.buf[0], sizeof(uint32_t));
+  ASSERT_OK(cli->Call(in, out));
+  ASSERT_EQ(out.contents.size(), biginfo.size());
+  ASSERT_EQ(out.contents, biginfo);
+  ASSERT_OK(srv_->Close());
+  delete cli;
+}
+
+TEST(FilesystemInfoServerTest, Mapping) {
   ASSERT_OK(srv_->OpenServer());
   srv_->SetInfo(0, "12345");
   srv_->SetInfo(1, "23456");
@@ -74,7 +91,7 @@ TEST(FilesystemInfoServerTest, InfoMapping) {
   rpc::If* const cli = srv_->TEST_CreateSelfCli();
   rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 1);
-  in.contents = Slice(&in.buf[0], 4);
+  in.contents = Slice(&in.buf[0], sizeof(uint32_t));
   ASSERT_OK(cli->Call(in, out));
   ASSERT_EQ(out.contents.size(), 5);
   ASSERT_EQ(out.contents, "23456");

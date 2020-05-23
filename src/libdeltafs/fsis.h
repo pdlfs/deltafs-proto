@@ -41,6 +41,7 @@ namespace pdlfs {
 
 struct FilesystemInfoServerOptions {
   FilesystemInfoServerOptions();
+  rpc::Engine impl;  // RPC impl selector
   int num_rpc_threads;
   std::string uri;
 };
