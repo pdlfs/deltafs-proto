@@ -82,14 +82,15 @@ TEST(FilesystemServerTest, StartAndStop) {
 TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(srv_->OpenServer());
   srv_->TEST_Remap(0, TEST_Handler);
-  rpc::If* cli = srv_->TEST_CreateCli("127.0.0.1" + options_.uri);
+  rpc::If* cli = srv_->TEST_CreateSelfCli();
   rpc::If::Message in, out;
   EncodeFixed32(&in.buf[0], 0);
-  EncodeFixed32(&in.buf[4], 12345);
-  in.contents = Slice(&in.buf[0], 8);
+  uint32_t salt = 12345;
+  EncodeFixed32(&in.buf[4], salt);
+  in.contents = Slice(&in.buf[0], 2 * sizeof(uint32_t));
   ASSERT_OK(cli->Call(in, out));
   ASSERT_EQ(out.contents.size(), 4);
-  ASSERT_EQ(DecodeFixed32(&out.contents[0]), 12345);
+  ASSERT_EQ(DecodeFixed32(&out.contents[0]), salt);
   ASSERT_OK(srv_->Close());
 }
 

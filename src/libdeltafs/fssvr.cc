@@ -36,7 +36,7 @@
 namespace pdlfs {
 
 FilesystemServerOptions::FilesystemServerOptions()
-    : num_rpc_threads(1), uri(":10086") {}
+    : impl(rpc::kSocketRPC), num_rpc_threads(1), uri(":10086") {}
 
 FilesystemServer::FilesystemServer(  ///
     const FilesystemServerOptions& options)
@@ -62,8 +62,21 @@ Status FilesystemServer::Call(Message& in, Message& out) RPCNOEXCEPT {
   }
 }
 
+rpc::If* FilesystemServer::TEST_CreateSelfCli() {
+  if (rpc_) {
+    std::string uri = rpc_->GetUri();
+    size_t p = uri.find("0.0.0.0");
+    if (p != std::string::npos) {
+      uri.replace(p, strlen("0.0.0.0"), "127.0.0.1");
+    }
+    return rpc_->OpenStubFor(uri);
+  } else {
+    return NULL;
+  }
+}
+
 rpc::If* FilesystemServer::TEST_CreateCli(const std::string& uri) {
-  return rpc_->OpenStubFor(uri);
+  return rpc_ ? rpc_->OpenStubFor(uri) : NULL;
 }
 
 void FilesystemServer::TEST_Remap(int i, RequestHandler h) {

@@ -41,6 +41,7 @@ namespace pdlfs {
 
 struct FilesystemServerOptions {
   FilesystemServerOptions();
+  rpc::Engine impl;  // RPC impl selector.
   int num_rpc_threads;
   std::string uri;
 };
@@ -62,6 +63,7 @@ class FilesystemServer : public rpc::If {
   Status OpenServer();
   Status Close();
 
+  If* TEST_CreateSelfCli();  // Create a client that connects the server itself
   If* TEST_CreateCli(const std::string& uri);
   typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);
   // Reset the handler for a specific type of operations.
