@@ -70,7 +70,7 @@ class FilesystemServerTest {
 Status TEST_Handler(FilesystemIf*, rpc::If::Message& in,
                     rpc::If::Message& out) {
   EncodeFixed32(&out.buf[0], DecodeFixed32(&in.contents[4]));
-  out.contents = Slice(&out.buf[0], 4);
+  out.contents = Slice(&out.buf[0], sizeof(uint32_t));
   return Status::OK();
 }
 
@@ -84,10 +84,10 @@ TEST(FilesystemServerTest, OpRoute) {
   srv_->TEST_Remap(0, TEST_Handler);
   rpc::If* cli = srv_->TEST_CreateSelfCli();
   rpc::If::Message in, out;
-  EncodeFixed32(&in.buf[0], 0);
   uint32_t salt = 12345;
-  EncodeFixed32(&in.buf[4], salt);
-  in.contents = Slice(&in.buf[0], 2 * sizeof(uint32_t));
+  PutFixed32(&in.extra_buf, 0);
+  PutFixed32(&in.extra_buf, salt);
+  in.contents = in.extra_buf;
   ASSERT_OK(cli->Call(in, out));
   ASSERT_EQ(out.contents.size(), 4);
   ASSERT_EQ(DecodeFixed32(&out.contents[0]), salt);
