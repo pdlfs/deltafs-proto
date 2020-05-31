@@ -77,7 +77,7 @@ struct FilesystemDbOptions {
   int l0_soft_limit;
   // Number of files in level-0 until writes are entirely stalled.
   int l0_hard_limit;
-  // Collect performance stats for db file io.
+  // Collect performance stats for db table files.
   bool enable_io_monitoring;
   // Log to stderr.
   bool use_default_logger;

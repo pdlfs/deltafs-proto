@@ -104,25 +104,30 @@ void FilesystemDbEnvWrapper::SetDbLoc(const std::string& dbloc) {
 }
 
 namespace {
-bool IsTableFile(const std::string& dbprefix, const char* filename) {
+// REQUIRES: dbprefix is given as dbhome + "/"
+bool TryResolveFileType(const std::string& dbprefix, const char* filename,
+                        FileType* type) {
   uint64_t filenum;
-  FileType type;
-  if (strncmp(filename, dbprefix.c_str(), dbprefix.size()) == 0 &&
-      ParseFileName(filename + dbprefix.size(), &filenum, &type)) {
-    return type == kTableFile;
-  } else {
-    return false;
+  if (strncmp(filename, dbprefix.c_str(), dbprefix.size()) == 0) {
+    if (ParseFileName(filename + dbprefix.size(), &filenum, type)) {
+      return true;
+    }
   }
+  return false;
 }
+
 }  // namespace
 
 Status FilesystemDbEnvWrapper::NewSequentialFile(  ///
     const char* f, SequentialFile** r) {
   SequentialFile* file;
+  FileType type;
   Status s = target()->NewSequentialFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
+  } else if (  ///
+      options_.enable_io_monitoring &&
+      TryResolveFileType(dbprefix_, f, &type) && type == kTableFile) {
     MutexLock ml(&mu_);
     SequentialFileStats* const stats = new SequentialFileStats;
     *r = new MonitoredSequentialFile(stats, file);
@@ -136,10 +141,13 @@ Status FilesystemDbEnvWrapper::NewSequentialFile(  ///
 Status FilesystemDbEnvWrapper::NewRandomAccessFile(  ///
     const char* f, RandomAccessFile** r) {
   RandomAccessFile* file;
+  FileType type;
   Status s = target()->NewRandomAccessFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
+  } else if (  ///
+      options_.enable_io_monitoring &&
+      TryResolveFileType(dbprefix_, f, &type) && type == kTableFile) {
     MutexLock ml(&mu_);
     RandomAccessFileStats* const stats = new RandomAccessFileStats;
     *r = new MonitoredRandomAccessFile(stats, file);
@@ -153,15 +161,36 @@ Status FilesystemDbEnvWrapper::NewRandomAccessFile(  ///
 Status FilesystemDbEnvWrapper::NewWritableFile(  ///
     const char* f, WritableFile** r) {
   WritableFile* file;
+  FileType type;
   Status s = target()->NewWritableFile(f, &file);
   if (!s.ok()) {
     *r = NULL;
-  } else if (options_.enable_io_monitoring && IsTableFile(dbprefix_, f)) {
-    MutexLock ml(&mu_);
-    WritableFileStats* const stats = new WritableFileStats;
-    *r = new pdlfs::MonitoredWritableFile(stats, file);
-    writablefile_repo_.push_back(stats);
   } else {
+    if (TryResolveFileType(dbprefix_, f, &type)) {
+      if (options_.enable_io_monitoring && type == kTableFile) {
+        MutexLock ml(&mu_);
+        WritableFileStats* stats = new WritableFileStats;
+        file = new pdlfs::MonitoredWritableFile(stats, file);
+        writablefile_repo_.push_back(stats);
+      }
+      uint64_t bufsize = 0;
+      switch (type) {
+        case kLogFile:
+          bufsize = options_.write_ahead_log_buffer;
+          break;
+        case kDescriptorFile:
+          bufsize = options_.manifest_buffer;
+          break;
+        case kTableFile:
+          bufsize = options_.table_buffer;
+          break;
+        default:
+          break;
+      }
+      if (bufsize) {
+        file = new MinMaxBufferedWritableFile(file, bufsize, (bufsize << 1));
+      }
+    }
     *r = file;
   }
   return s;
