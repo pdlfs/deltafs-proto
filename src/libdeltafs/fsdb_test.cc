@@ -942,6 +942,7 @@ class Benchmark {
 
 namespace {
 void BM_Main(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_dboptions.use_default_logger = true;
   pdlfs::FLAGS_dboptions.ReadFromEnv();
 
   for (int i = 2; i < *argc; i++) {
