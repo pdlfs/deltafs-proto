@@ -42,6 +42,7 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
+#include <errno.h>
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <ifaddrs.h>
