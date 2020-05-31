@@ -38,13 +38,15 @@ IncludeCategories:
   - Regex:           '^"deltafs/'
     Priority:        2
   - Regex:           '^"pdlfs-common/leveldb'
+    Priority:        4
+  - Regex:           '^"pdlfs-common/rados'
     Priority:        3
   - Regex:           '^"pdlfs-common/'
-    Priority:        4
+    Priority:        5
   - Regex:           '^<.*\.h>'
-    Priority:        5
+    Priority:        6
   - Regex:           '^<.*'
-    Priority:        5
+    Priority:        6
   - Regex:           '.*'
     Priority:        1
 ...

@@ -52,6 +52,9 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <vector>
+#if defined(PDLFS_RADOS)
+#include "pdlfs-common/rados/rados_connmgr.h"
+#endif
 #if defined(PDLFS_OS_LINUX)
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -124,6 +127,18 @@ TEST(FilesystemDbTest, Base64) {
 namespace {  // Db benchmark
 FilesystemDbOptions FLAGS_dboptions;
 
+// Parameters for opening ceph
+#if defined(PDLFS_RADOS)
+const char* FLAGS_rados_cli_name = "client.admin";
+const char* FLAGS_rados_cluster_name = "ceph";
+const char* FLAGS_rados_pool = "test";
+const char* FLAGS_rados_conf = "/tmp/ceph.conf";
+#endif
+
+// Testing env.
+enum TestEnv { kRados, kUnbufferedIo, kDefault };
+TestEnv FLAGS_env = kDefault;
+
 // Testing mode.
 enum TestMode { kFsFullCliApi, kFsCliApi, kFsApi, kDb };
 TestMode FLAGS_mode = kDb;
@@ -152,9 +167,6 @@ int FLAGS_uid = 1;
 
 // Group id.
 int FLAGS_gid = 1;
-
-// Force using unbuffered io. Performance may degrade due to increased os calls.
-bool FLAGS_use_unbuffered_io = false;
 
 // Skip various fs checks.
 bool FLAGS_fs_skip_checks = false;
@@ -417,12 +429,25 @@ struct ThreadState {
 class Benchmark {
  private:
   FilesystemDb* db_;
-  // If FLAGS_with_fscli is true, all read and write operations will be invoked
-  // through fscli_ instead of db_
+  // According to FLAGS_mode, all read and write operations may be invoked
+  // through fscli_ or fs_ instead of db_
   FilesystemCli* fscli_;
-  // If FLAGS_with_fs is true, all operations will be invoked through fs_
   Filesystem* fs_;
+#if defined(PDLFS_RADOS)
+  rados::RadosConnMgr* mgr_;
+  Env* myenv_;
+#endif
   User me_;
+
+#if defined(PDLFS_RADOS)
+  static void PrintRadosInfo() {
+    fprintf(stdout, "-RADOS-\n");
+    fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
+    fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
+    fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
+    fprintf(stdout, "Conf: %s\n", FLAGS_rados_conf);
+  }
+#endif
 
   static void PrintHeader() {
     PrintEnvironment();
@@ -454,12 +479,22 @@ class Benchmark {
     fprintf(stdout, "Level factor:       %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
+    fprintf(stdout, "-Api-\n");
     fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_mode == kFsFullCliApi);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_mode == kFsCliApi);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_mode == kFsApi);
-    fprintf(stdout, "Unbuffered Io:      %d\n", FLAGS_use_unbuffered_io);
+    fprintf(stdout, "-Env-\n");
+    fprintf(stdout, "Use default:        %d\n", FLAGS_env == kDefault);
+    fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_env == kUnbufferedIo);
+#if defined(PDLFS_RADOS)
+    fprintf(stdout, "Use rados:          %d\n", FLAGS_env == kRados);
+    if (FLAGS_env == kRados) {
+      PrintRadosInfo();
+    }
+#endif
+    fprintf(stdout, "-Db-\n");
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
-    fprintf(stdout, "Db: %s\n", FLAGS_db);
+    fprintf(stdout, "Dbhome: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -768,10 +803,41 @@ class Benchmark {
     }
   }
 
+  Env* OpenEnv() {
+    Env* env;
+    switch (FLAGS_env) {
+      case kRados: {
+        using namespace rados;
+#if defined(PDLFS_RADOS)
+        mgr_ = new RadosConnMgr(RadosConnMgrOptions());
+        RadosConn* conn;
+        Osd* osd;
+        ASSERT_OK(mgr_->OpenConn(  ///
+            FLAGS_rados_cluster_name, FLAGS_rados_cli_name, FLAGS_rados_conf,
+            RadosConnOptions(), &conn));
+        ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_rados_pool, RadosOptions(), &osd));
+        myenv_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
+        env = myenv_;
+        mgr_->Release(conn);
+        break;
+#else
+        fprintf(stderr, "Rados not installed\n");
+        exit(1);
+#endif
+      }
+      case kUnbufferedIo:
+        env = Env::GetUnBufferedIoEnv();
+        break;
+      default:
+        env = Env::Default();
+        break;
+    }
+    return env;
+  }
+
   void Open() {
     FilesystemDbOptions dbopts = FLAGS_dboptions;
-    Env* const env =
-        FLAGS_use_unbuffered_io ? Env::GetUnBufferedIoEnv() : Env::Default();
+    Env* env = OpenEnv();
     db_ = new FilesystemDb(dbopts, env);
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
@@ -793,6 +859,10 @@ class Benchmark {
 
  public:
   Benchmark() : db_(NULL), fscli_(NULL), fs_(NULL) {
+#if defined(PDLFS_RADOS)
+    myenv_ = NULL;
+    mgr_ = NULL;
+#endif
     me_.uid = FLAGS_uid;
     me_.gid = FLAGS_gid;
     if (!FLAGS_use_existing_db) {
@@ -804,6 +874,10 @@ class Benchmark {
     delete fscli_;
     delete fs_;
     delete db_;
+#if defined(PDLFS_RADOS)
+    delete myenv_;
+    delete mgr_;
+#endif
   }
 
   void Run() {
@@ -896,6 +970,17 @@ void BM_Main(int* const argc, char*** const argv) {
       if (n == 1) {
         pdlfs::FLAGS_mode = pdlfs::kFsApi;
       }
+    } else if (sscanf((*argv)[i], "--env_use_unbuffered_io=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      if (n == 1) {
+        pdlfs::FLAGS_env = pdlfs::kUnbufferedIo;
+      }
+    } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      if (n == 1) {
+        pdlfs::FLAGS_env = pdlfs::kRados;
+      }
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dboptions.compression = n;
@@ -914,9 +999,6 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_shared_dir = n;
-    } else if (sscanf((*argv)[i], "--use_unbuffered_io=%d%c", &n, &junk) == 1 &&
-               (n == 0 || n == 1)) {
-      pdlfs::FLAGS_use_unbuffered_io = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
