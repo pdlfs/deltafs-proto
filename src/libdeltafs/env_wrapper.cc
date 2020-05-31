@@ -129,7 +129,7 @@ Status FilesystemDbEnvWrapper::NewSequentialFile(  ///
       options_.enable_io_monitoring &&
       TryResolveFileType(dbprefix_, f, &type) && type == kTableFile) {
     MutexLock ml(&mu_);
-    SequentialFileStats* const stats = new SequentialFileStats;
+    SequentialFileStats* stats = new SequentialFileStats;
     *r = new MonitoredSequentialFile(stats, file);
     sequentialfile_repo_.push_back(stats);
   } else {
@@ -149,7 +149,7 @@ Status FilesystemDbEnvWrapper::NewRandomAccessFile(  ///
       options_.enable_io_monitoring &&
       TryResolveFileType(dbprefix_, f, &type) && type == kTableFile) {
     MutexLock ml(&mu_);
-    RandomAccessFileStats* const stats = new RandomAccessFileStats;
+    RandomAccessFileStats* stats = new RandomAccessFileStats;
     *r = new MonitoredRandomAccessFile(stats, file);
     randomaccessfile_repo_.push_back(stats);
   } else {
@@ -170,7 +170,7 @@ Status FilesystemDbEnvWrapper::NewWritableFile(  ///
       if (options_.enable_io_monitoring && type == kTableFile) {
         MutexLock ml(&mu_);
         WritableFileStats* stats = new WritableFileStats;
-        file = new pdlfs::MonitoredWritableFile(stats, file);
+        file = new MonitoredWritableFile(stats, file);
         writablefile_repo_.push_back(stats);
       }
       uint64_t bufsize = 0;
