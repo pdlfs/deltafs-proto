@@ -807,8 +807,8 @@ class Benchmark {
     Env* env;
     switch (FLAGS_env) {
       case kRados: {
-        using namespace rados;
 #if defined(PDLFS_RADOS)
+        using namespace rados;
         mgr_ = new RadosConnMgr(RadosConnMgrOptions());
         RadosConn* conn;
         Osd* osd;
