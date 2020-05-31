@@ -89,7 +89,7 @@ inline uint64_t SumUpOps(const std::list<T*>* v) {
 
 }  // namespace
 
-size_t FilesystemDbEnvWrapper::TotalDbWriteOps() {
+uint64_t FilesystemDbEnvWrapper::TotalDbWriteOps() {
   MutexLock l(&mu_);
   return SumUpOps(&writablefile_repo_);
 }
