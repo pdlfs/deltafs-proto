@@ -473,9 +473,9 @@ class Benchmark {
     fprintf(stdout, "Lsm compaction off: %d\n",
             FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Mem table size:     %d MB\n",
-            int(FLAGS_dboptions.write_buffer_size >> 20));
+            int(FLAGS_dboptions.memtable_size >> 20));
     fprintf(stdout, "Table size:         %d MB\n",
-            int(FLAGS_dboptions.table_file_size >> 20));
+            int(FLAGS_dboptions.table_size >> 20));
     fprintf(stdout, "Level factor:       %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
@@ -1012,8 +1012,8 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--max_open_files=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_dboptions.table_cache_size = n;
     } else if (sscanf((*argv)[i], "--table_file_size=%dM%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_dboptions.table_file_size = n << 20;
-      pdlfs::FLAGS_dboptions.write_buffer_size = (n << 20) << 1;
+      pdlfs::FLAGS_dboptions.table_size = n << 20;
+      pdlfs::FLAGS_dboptions.memtable_size = (n << 20) << 1;
     } else if (sscanf((*argv)[i], "--block_size=%dK%c", &n, &junk) == 1) {
       pdlfs::FLAGS_dboptions.block_size = n << 10;
     } else if (sscanf((*argv)[i], "--l1_compaction_trigger=%d%c", &n, &junk) ==

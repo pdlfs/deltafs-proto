@@ -66,12 +66,15 @@ void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
 }
 
 FilesystemDbOptions::FilesystemDbOptions()
-    : write_buffer_size(4u << 20u),
-      table_file_size(2u << 20u),
-      block_size(64u << 10u),
+    : write_ahead_log_buffer(4 << 10),
+      manifest_buffer(1 << 10),
+      table_buffer(64 << 10),
+      memtable_size(4 << 20),
+      table_size(2 << 20),
+      block_size(4 << 10),
       table_cache_size(1000),
       filter_bits_per_key(14),
-      block_cache_size(32u << 20u),
+      block_cache_size(8 << 20),
       block_restart_interval(16),
       level_factor(10),
       l1_compaction_trigger(5),
@@ -107,8 +110,12 @@ void ReadBoolFromEnv(const char* key, bool* dst) {
 
 // Read options from system env. All env keys start with "DELTAFS_Db_".
 void FilesystemDbOptions::ReadFromEnv() {
-  ReadIntegerOptionFromEnv("DELTAFS_Db_write_buffer_size", &write_buffer_size);
-  ReadIntegerOptionFromEnv("DELTAFS_Db_table_file_size", &table_file_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_write_ahead_log_buffer",
+                           &write_ahead_log_buffer);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_manifest_buffer", &manifest_buffer);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_table_buffer", &table_buffer);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_memtable_size", &memtable_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Db_table_size", &table_size);
   ReadIntegerOptionFromEnv("DELTAFS_Db_block_size", &block_size);
   ReadIntegerOptionFromEnv("DELTAFS_Db_filter_bits_per_key",
                            &filter_bits_per_key);
@@ -142,8 +149,8 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.table_cache = table_cache_;
   dbopts.block_cache = block_cache_;
   dbopts.filter_policy = filter_;
-  dbopts.write_buffer_size = options_.write_buffer_size;
-  dbopts.table_file_size = options_.table_file_size;
+  dbopts.write_buffer_size = options_.memtable_size;
+  dbopts.table_file_size = options_.table_size;
   dbopts.block_size = options_.block_size;
   dbopts.block_restart_interval = options_.block_restart_interval;
   dbopts.level_factor = options_.level_factor;

@@ -45,10 +45,16 @@ struct FilesystemDbOptions {
   FilesystemDbOptions();
   // Read options from env.
   void ReadFromEnv();
-  // Max size for a memory table.
-  size_t write_buffer_size;
+  // Write buffer size for db write ahead log files. Set 0 to disable.
+  uint64_t write_ahead_log_buffer;
+  // Write buffer size for db manifest files. Set 0 to disable.
+  uint64_t manifest_buffer;
+  // Write buffer size for db table files. Set 0 to disable.
+  uint64_t table_buffer;
+  // Max size for a MemTable.
+  size_t memtable_size;
   // Planned size for each on-disk table file.
-  size_t table_file_size;
+  size_t table_size;
   // Size for a table block.
   size_t block_size;
   // Max number of table files we open.
