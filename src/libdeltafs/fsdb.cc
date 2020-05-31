@@ -137,6 +137,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
   dbopts.disable_compaction = options_.disable_compaction;
   dbopts.disable_seek_compaction = true;
+  dbopts.rotating_manifest = true;
   dbopts.skip_lock_file = true;
   dbopts.table_cache = table_cache_;
   dbopts.block_cache = block_cache_;
