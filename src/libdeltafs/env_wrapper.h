@@ -66,6 +66,8 @@ class FilesystemDbEnvWrapper : public EnvWrapper {
   // for background db compaction and data read for foreground db queries. A db
   // may be configured to cache data in memory reducing physical data reads.
   uint64_t TotalDbBytesRead();
+  // Total number of write operations performed on db table files.
+  uint64_t TotalDbWriteOps();
   // Total number of db table files opened for write.
   size_t TotalTableFilesOpenedForWrite();
   // Total amount of data written to db table files. Data written to db

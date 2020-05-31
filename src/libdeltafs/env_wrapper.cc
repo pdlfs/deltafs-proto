@@ -77,7 +77,22 @@ inline uint64_t SumUpBytes(const std::list<T*>* v) {
   return result;
 }
 
+template <typename T>
+inline uint64_t SumUpOps(const std::list<T*>* v) {
+  uint64_t result = 0;
+  typename std::list<T*>::const_iterator it = v->begin();
+  for (; it != v->end(); ++it) {
+    result += (*it)->TotalOps();
+  }
+  return result;
+}
+
 }  // namespace
+
+size_t FilesystemDbEnvWrapper::TotalDbWriteOps() {
+  MutexLock l(&mu_);
+  return SumUpOps(&writablefile_repo_);
+}
 
 size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForWrite() {
   MutexLock l(&mu_);
