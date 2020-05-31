@@ -640,8 +640,8 @@ class Benchmark {
       fprintf(stdout, "Total bytes written: %llu ",
               static_cast<unsigned long long>(
                   db_->GetDbEnv()->TotalDbBytesWritten()));
-      fprintf(stdout, "(Avg write size: %.1f)\n",
-              1.0 * db_->GetDbEnv()->TotalDbBytesWritten() /
+      fprintf(stdout, "(Avg write size: %.1fK)\n",
+              1.0 * db_->GetDbEnv()->TotalDbBytesWritten() / 1024.0 /
                   db_->GetDbEnv()->TotalDbWriteOps());
       fprintf(
           stdout, "Total bytes read: %llu\n",
