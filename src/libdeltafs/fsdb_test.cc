@@ -637,9 +637,12 @@ class Benchmark {
     }
     arg[0].thread->stats.Report(name);
     if (FLAGS_dboptions.enable_io_monitoring) {
-      fprintf(stdout, "Total bytes written: %llu\n",
+      fprintf(stdout, "Total bytes written: %llu ",
               static_cast<unsigned long long>(
                   db_->GetDbEnv()->TotalDbBytesWritten()));
+      fprintf(stdout, "(Avg write size: %.1f)\n",
+              1.0 * db_->GetDbEnv()->TotalDbBytesWritten() /
+                  db_->GetDbEnv()->TotalDbWriteOps());
       fprintf(
           stdout, "Total bytes read: %llu\n",
           static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
