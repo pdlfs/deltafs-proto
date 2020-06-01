@@ -736,7 +736,7 @@ class Benchmark {
   }
 
   void Compact(ThreadState* thread) {
-    Status s = db_->Flush(true);
+    Status s = db_->Flush(!FLAGS_dboptions.disable_compaction);
     if (!s.ok()) {
       fprintf(stderr, "Db flush error: %s\n", s.ToString().c_str());
       exit(1);
