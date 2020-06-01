@@ -441,7 +441,7 @@ class Benchmark {
 
 #if defined(PDLFS_RADOS)
   static void PrintRadosInfo() {
-    fprintf(stdout, "-RADOS-\n");
+    fprintf(stdout, "RADOS:\n");
     fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
     fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
     fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
@@ -474,20 +474,20 @@ class Benchmark {
             int(FLAGS_dboptions.write_ahead_log_buffer >> 10));
     fprintf(stdout, "Lsm compaction off: %d\n",
             FLAGS_dboptions.disable_compaction);
-    fprintf(stdout, "Mem table size:     %d MB\n",
+    fprintf(stdout, "MEMTABLE size:      %d MB\n",
             int(FLAGS_dboptions.memtable_size >> 20));
-    fprintf(stdout, "Table size:         %d MB\n",
+    fprintf(stdout, "SST size:           %d MB\n",
             int(FLAGS_dboptions.table_size >> 20));
-    fprintf(stdout, "Table write buffer: %d KB\n",
+    fprintf(stdout, "SST write buffer:   %d KB\n",
             int(FLAGS_dboptions.table_buffer >> 10));
     fprintf(stdout, "Level factor:       %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
-    fprintf(stdout, "-Api-\n");
+    fprintf(stdout, "Api:\n");
     fprintf(stdout, "Use fs cli full api:%d\n", FLAGS_mode == kFsFullCliApi);
     fprintf(stdout, "Use fs cli api:     %d\n", FLAGS_mode == kFsCliApi);
     fprintf(stdout, "Use fs api:         %d\n", FLAGS_mode == kFsApi);
-    fprintf(stdout, "-Env-\n");
+    fprintf(stdout, "Env:\n");
     fprintf(stdout, "Use default:        %d\n", FLAGS_env == kDefault);
     fprintf(stdout, "Use unbuffered io:  %d\n", FLAGS_env == kUnbufferedIo);
 #if defined(PDLFS_RADOS)
@@ -496,7 +496,7 @@ class Benchmark {
       PrintRadosInfo();
     }
 #endif
-    fprintf(stdout, "-Db-\n");
+    fprintf(stdout, "Db:\n");
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Dbhome: %s\n", FLAGS_db);
     fprintf(stdout, "------------------------------------------------\n");
