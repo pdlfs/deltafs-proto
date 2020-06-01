@@ -237,4 +237,11 @@ std::string FilesystemDb::GetDbStats() {
   return tmp;
 }
 
+Status FilesystemDb::DestroyDb(const std::string& dbloc, Env* const env) {
+  DBOptions dbopts;
+  dbopts.skip_lock_file = true;
+  dbopts.env = env;
+  return DestroyDB(dbloc, dbopts);
+}
+
 }  // namespace pdlfs

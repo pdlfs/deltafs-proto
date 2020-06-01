@@ -848,10 +848,13 @@ class Benchmark {
     return env;
   }
 
-  void Open() {
+  void Open(bool destroy_db_first) {
     FilesystemDbOptions dbopts = FLAGS_dboptions;
     Env* env = OpenEnv();
     db_ = new FilesystemDb(dbopts, env);
+    if (destroy_db_first) {
+      FilesystemDb::DestroyDb(FLAGS_db, env);
+    }
     Status s = db_->Open(FLAGS_db);
     if (!s.ok()) {
       fprintf(stderr, "Cannot open db: %s\n", s.ToString().c_str());
@@ -936,11 +939,10 @@ class Benchmark {
           fs_ = NULL;
           delete db_;
           db_ = NULL;
-          DestroyDB(FLAGS_db, DBOptions());
-          Open();
+          Open(fresh_db);
         }
       } else if (db_ == NULL) {
-        Open();
+        Open(fresh_db);
       }
 
       if (method != NULL) {
