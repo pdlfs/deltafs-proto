@@ -1,4 +1,4 @@
-**Massive serverless client middleware for distributed file system metadata service.**
+**Massive serverless client middleware for fast distributed file system metadata functions.**
 
 [![Build Status](https://travis-ci.org/pdlfs/deltafs-proto.svg?branch=master)](https://travis-ci.org/pdlfs/deltafs-proto)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
