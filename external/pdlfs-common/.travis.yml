@@ -10,7 +10,7 @@
 #
 language: cpp
 
-matrix:
+jobs:
   include:
     - os: linux
       dist: bionic
@@ -18,10 +18,6 @@ matrix:
       dist: xenial
     - os: linux
       dist: trusty
-
-compiler:
-  - clang
-  - gcc
 
 env:
   global:
