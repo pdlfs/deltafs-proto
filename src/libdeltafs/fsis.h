@@ -41,9 +41,12 @@ namespace pdlfs {
 
 struct FilesystemInfoServerOptions {
   FilesystemInfoServerOptions();
-  rpc::Engine impl;  // RPC impl selector
+  rpc::Engine impl;  // RPC impl selector.
   int num_rpc_threads;
   std::string uri;
+  // Logger object for progressing/error information.
+  // Default: NULL; Logger::Default() will be used.
+  Logger* info_log;
 };
 
 // Filesystem information server. It provides a service where clients can

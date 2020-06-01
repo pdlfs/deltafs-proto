@@ -38,11 +38,18 @@
 namespace pdlfs {
 
 FilesystemInfoServerOptions::FilesystemInfoServerOptions()
-    : impl(rpc::kSocketRPC), num_rpc_threads(1), uri("tcp://0.0.0.0:10085") {}
+    : impl(rpc::kSocketRPC),
+      num_rpc_threads(1),
+      uri("tcp://0.0.0.0:10085"),
+      info_log(NULL) {}
 
 FilesystemInfoServer::FilesystemInfoServer(
     const FilesystemInfoServerOptions& options)
-    : options_(options), rpc_(NULL) {}
+    : options_(options), rpc_(NULL) {
+  if (!options_.info_log) {
+    options_.info_log = Logger::Default();
+  }
+}
 
 FilesystemInfoServer::~FilesystemInfoServer() { delete rpc_; }
 
@@ -80,9 +87,17 @@ Status FilesystemInfoServer::OpenServer() {
   options.mode = rpc::kServerClient;
   options.impl = options_.impl;
   options.num_rpc_threads = options_.num_rpc_threads;
+  options.info_log = options_.info_log;
   options.uri = options_.uri;
   rpc_ = RPC::Open(options);
-  return rpc_->Start();
+  Status status = rpc_->Start();
+  if (status.ok()) {
+#if VERBOSE >= 1
+    Log(options_.info_log, 1, "Filesystem info server is up: %s",
+        rpc_->GetUri().c_str());
+#endif
+  }
+  return status;
 }
 
 }  // namespace pdlfs
