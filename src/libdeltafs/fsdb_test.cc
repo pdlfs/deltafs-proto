@@ -648,8 +648,11 @@ class Benchmark {
               1.0 * db_->GetDbEnv()->TotalDbBytesWritten() / 1024.0 /
                   db_->GetDbEnv()->TotalDbWriteOps());
       fprintf(
-          stdout, "Total bytes read: %llu\n",
+          stdout, "Total bytes read: %llu ",
           static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
+      fprintf(stdout, "(Avg read size: %.1fK)\n",
+              1.0 * db_->GetDbEnv()->TotalDbBytesRead() / 1024.0 /
+                  db_->GetDbEnv()->TotalDbReadOps());
     }
     fprintf(stdout, " - Db stats: >>>\n%s\n", db_->GetDbStats().c_str());
     fprintf(stdout, " - L0 stats: >>>\n%s\n", db_->GetDbLevel0Events().c_str());
