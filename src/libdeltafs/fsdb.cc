@@ -170,6 +170,24 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   return status;
 }
 
+Status FilesystemDb::DestroyDb(  ///
+    const std::string& dbloc, Env* const env) {
+  if (env) {
+    // XXX: The above code forces the db dir to be mounted in case
+    // that the underlying env is an object store. Created dir
+    // will eventually be deleted by the subsequent
+    // DestroyDB() so no harm will be done.
+    //
+    // When env is NULL, this step is unnecessary because
+    // Env::Default() will be used which does not require a pre-mount.
+    env->CreateDir(dbloc.c_str());
+  }
+  DBOptions dbopts;
+  dbopts.skip_lock_file = true;
+  dbopts.env = env;
+  return DestroyDB(dbloc, dbopts);
+}
+
 struct FilesystemDb::Tx {
   const Snapshot* snap;
   WriteBatch bat;
@@ -235,18 +253,6 @@ std::string FilesystemDb::GetDbStats() {
   std::string tmp;
   db_->GetProperty("leveldb.stats", &tmp);
   return tmp;
-}
-
-Status FilesystemDb::DestroyDb(  ///
-    const std::string& dbloc, Env* const env) {
-  env->CreateDir(dbloc.c_str());
-  // XXX: The above code forces the db dir to be mounted when the underlying
-  // env is an object store. Created dir will eventually be deleted by the
-  // subsequent DestroyDB() so no harm is done.
-  DBOptions dbopts;
-  dbopts.skip_lock_file = true;
-  dbopts.env = env;
-  return DestroyDB(dbloc, dbopts);
 }
 
 }  // namespace pdlfs
