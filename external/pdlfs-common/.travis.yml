@@ -10,19 +10,30 @@
 #
 language: cpp
 
-os: linux
-dist: bionic
-
-compiler:
-  - clang
-  - gcc
+jobs:
+  include:
+    - os: linux
+      compiler: gcc
+      dist: bionic
+    - os: linux
+      compiler: clang
+      dist: bionic
+    - os: linux
+      compiler: gcc
+      dist: xenial
+    - os: linux
+      compiler: clang
+      dist: xenial
+    - os: linux
+      compiler: gcc
+      dist: trusty
+    - os: linux
+      compiler: clang
+      dist: trusty
 
 env:
   global:
     - GIT_SSL_NO_VERIFY=true
-  jobs:
-    - WITH_DFS_COMMON=ON
-    - WITH_DFS_COMMON=OFF
 
 addons:
   apt:
@@ -40,7 +51,6 @@ script:
     cmake -DCMAKE_INSTALL_PREFIX=/tmp/pdlfs-common \
           -DCMAKE_CXX_COMPILER=`which $CXX` \
           -DCMAKE_C_COMPILER=`which $CC` \
-          -DPDLFS_DFS_COMMON=${WITH_DFS_COMMON} \
           -DPDLFS_RADOS=ON -DPDLFS_SNAPPY=ON \
           -DBUILD_SHARED_LIBS=ON \
           -DBUILD_TESTS=ON \
