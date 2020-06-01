@@ -36,7 +36,10 @@
 namespace pdlfs {
 
 FilesystemServerOptions::FilesystemServerOptions()
-    : impl(rpc::kSocketRPC), num_rpc_threads(1), uri(":10086") {}
+    : impl(rpc::kSocketRPC),
+      num_rpc_threads(1),
+      uri("udp://0.0.0.0:10086"),
+      info_log(NULL) {}
 
 FilesystemServer::FilesystemServer(  ///
     const FilesystemServerOptions& options)
@@ -48,6 +51,9 @@ FilesystemServer::FilesystemServer(  ///
   hmap_[kMkfle] = Mkfle;
   hmap_[kMkfls] = Mkfls;
   hmap_[kLstat] = Lstat;
+  if (!options_.info_log) {
+    options_.info_log = Logger::Default();
+  }
 }
 
 void FilesystemServer::SetFs(FilesystemIf* const fs) {
@@ -99,9 +105,17 @@ Status FilesystemServer::OpenServer() {
   options.impl = rpc::kSocketRPC;
   options.mode = rpc::kServerClient;
   options.num_rpc_threads = options_.num_rpc_threads;
+  options.info_log = options_.info_log;
   options.uri = options_.uri;
   rpc_ = RPC::Open(options);
-  return rpc_->Start();
+  Status status = rpc_->Start();
+  if (status.ok()) {
+#if VERBOSE >= 2
+    Log(options_.info_log, 2, "Filesystem m server is up: %s",
+        rpc_->GetUri().c_str());
+#endif
+  }
+  return status;
 }
 
 }  // namespace pdlfs

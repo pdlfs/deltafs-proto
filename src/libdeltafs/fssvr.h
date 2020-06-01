@@ -44,6 +44,9 @@ struct FilesystemServerOptions {
   rpc::Engine impl;  // RPC impl selector.
   int num_rpc_threads;
   std::string uri;
+  // Logger object for progressing/error information.
+  // Default: NULL, which causes Logger::Default() to be used.
+  Logger* info_log;
 };
 
 // Each filesystem server acts as a router. An embedded rpc server handles
