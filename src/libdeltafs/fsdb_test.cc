@@ -129,6 +129,7 @@ FilesystemDbOptions FLAGS_dboptions;
 
 // Parameters for opening ceph
 #if defined(PDLFS_RADOS)
+rados::RadosOptions FLAGS_rados_opts;
 const char* FLAGS_rados_cli_name = "client.admin";
 const char* FLAGS_rados_cluster_name = "ceph";
 const char* FLAGS_rados_pool = "test";
@@ -442,6 +443,7 @@ class Benchmark {
 #if defined(PDLFS_RADOS)
   static void PrintRadosInfo() {
     fprintf(stdout, "RADOS:\n");
+    fprintf(stdout, "Disable async io:   %d\n", FLAGS_rados_opts.force_syncio);
     fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
     fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
     fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
@@ -828,7 +830,8 @@ class Benchmark {
         ASSERT_OK(mgr_->OpenConn(  ///
             FLAGS_rados_cluster_name, FLAGS_rados_cli_name, FLAGS_rados_conf,
             RadosConnOptions(), &conn));
-        ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_rados_pool, RadosOptions(), &osd));
+        ASSERT_OK(
+            mgr_->OpenOsd(conn, FLAGS_rados_pool, FLAGS_rados_opts, &osd));
         myenv_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
         env = myenv_;
         mgr_->Release(conn);
@@ -997,6 +1000,10 @@ void BM_Main(int* const argc, char*** const argv) {
       if (n == 1) {
         pdlfs::FLAGS_env = pdlfs::kRados;
       }
+    } else if (sscanf((*argv)[i], "--rados_force_syncio=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_rados_opts.force_syncio = n;
     } else if (sscanf((*argv)[i], "--snappy=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dboptions.compression = n;
