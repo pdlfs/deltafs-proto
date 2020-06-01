@@ -10,26 +10,12 @@
 #
 language: cpp
 
-jobs:
-  include:
-    - os: linux
-      compiler: gcc
-      dist: bionic
-    - os: linux
-      compiler: clang
-      dist: bionic
-    - os: linux
-      compiler: gcc
-      dist: xenial
-    - os: linux
-      compiler: clang
-      dist: xenial
-    - os: linux
-      compiler: gcc
-      dist: trusty
-    - os: linux
-      compiler: clang
-      dist: trusty
+os: linux
+dist: bionic
+
+compiler:
+  - clang
+  - gcc
 
 env:
   global:
