@@ -45,7 +45,7 @@ struct FilesystemInfoServerOptions {
   int num_rpc_threads;
   std::string uri;
   // Logger object for progressing/error information.
-  // Default: NULL; Logger::Default() will be used.
+  // Default: NULL, which causes Logger::Default() to be used.
   Logger* info_log;
 };
 
