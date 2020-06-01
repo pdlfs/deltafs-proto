@@ -458,9 +458,9 @@ class Benchmark {
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
-    fprintf(stdout, "Block cache size:   %d MB\n",
+    fprintf(stdout, "BLK cache size:     %d MB\n",
             int(FLAGS_dboptions.block_cache_size >> 20));
-    fprintf(stdout, "Block size:         %d KB\n",
+    fprintf(stdout, "BLK size:           %d KB\n",
             int(FLAGS_dboptions.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dboptions.filter_bits_per_key));

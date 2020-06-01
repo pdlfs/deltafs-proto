@@ -239,10 +239,10 @@ std::string FilesystemDb::GetDbStats() {
 
 Status FilesystemDb::DestroyDb(  ///
     const std::string& dbloc, Env* const env) {
-  // XXX: The following code forces the db dir to be mounted when the underlying
-  // env is an object store. Created dir will eventually be deleted by
-  // DestroyDB() so no harm is done.
   env->CreateDir(dbloc.c_str());
+  // XXX: The above code forces the db dir to be mounted when the underlying
+  // env is an object store. Created dir will eventually be deleted by the
+  // subsequent DestroyDB() so no harm is done.
   DBOptions dbopts;
   dbopts.skip_lock_file = true;
   dbopts.env = env;
