@@ -104,6 +104,11 @@ uint64_t FilesystemDbEnvWrapper::TotalDbBytesWritten() {
   return SumUpBytes(&writablefile_repo_);
 }
 
+uint64_t FilesystemDbEnvWrapper::TotalDbReadOps() {
+  MutexLock l(&mu_);
+  return SumUpOps(&randomaccessfile_repo_);
+}
+
 size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForRead() {
   MutexLock l(&mu_);
   return randomaccessfile_repo_.size();

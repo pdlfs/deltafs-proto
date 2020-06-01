@@ -59,6 +59,8 @@ class FilesystemDbEnvWrapper : public EnvWrapper {
                                      RandomAccessFile** r) OVERRIDE;
   virtual Status NewWritableFile(const char* f, WritableFile** r) OVERRIDE;
 
+  // Total number of read operations performed on db table files.
+  uint64_t TotalDbReadOps();
   // Total number of db table files opened for read. A db may be configured to
   // cache table file handles in memory reducing physical file opens.
   size_t TotalTableFilesOpenedForRead();
