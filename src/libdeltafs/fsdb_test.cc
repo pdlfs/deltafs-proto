@@ -741,6 +741,9 @@ class Benchmark {
       fprintf(stderr, "Db flush error: %s\n", s.ToString().c_str());
       exit(1);
     }
+    if (FLAGS_dboptions.disable_compaction) {
+      return;
+    }
     s = db_->DrainCompaction();
     if (!s.ok()) {
       fprintf(stderr, "Db drain compaction error: %s\n", s.ToString().c_str());
