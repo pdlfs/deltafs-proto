@@ -173,9 +173,9 @@ Status FilesystemDb::Open(const std::string& dbloc) {
 Status FilesystemDb::DestroyDb(  ///
     const std::string& dbloc, Env* const env) {
   if (env) {
-    // XXX: The above code forces the db dir to be mounted in case
-    // that the underlying env is an object store. Created dir
-    // will eventually be deleted by the subsequent
+    // XXX: The following code forces the db dir to be mounted in
+    // case that the underlying env is an object store. Created
+    // dir will eventually be deleted by the subsequent
     // DestroyDB() so no harm will be done.
     //
     // When env is NULL, this step is unnecessary because
