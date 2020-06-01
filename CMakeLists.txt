@@ -61,12 +61,14 @@
 #   -DPDLFS_SNAPPY=ON                      -- compile in snappy compression
 #     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
+#   -DPDLFS_RADOS=ON                       -- compile with ceph librados
 #   -DPDLFS_VERBOSE=1                      -- set max log verbose level
 #
 # DELTAFS specific compile time options flags:
 #   -DDELTAFS_CXX_STANDARD=11              -- CXX stardard to request
 #   -DDELTAFS_CXX_STANDARD_REQUIRED=OFF    -- if CXX stardard must be met
 #   -DDELTAFS_COMMON_INTREE=OFF            -- in-tree common lib (for devel)
+#   -DDELTAFS_MPI=OFF                      -- build parallel progs (for testing)
 #
 # note: package config files for external packages must be preinstalled in
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
@@ -89,8 +91,7 @@ set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 set (PDLFS_SILT_ECT    "OFF" CACHE BOOL "Include SILT ECT code")
 set (PDLFS_MARGO_RPC   "OFF" CACHE BOOL "Use Margo RPC")
 set (PDLFS_MERCURY_RPC "OFF" CACHE BOOL "Use Mercury RPC")
-set (PDLFS_RADOS       "OFF" CACHE BOOL "Use RADOS OSD")
-mark_as_advanced(PDLFS_SILT_ECT PDLFS_MARGO_RPC PDLFS_MERCURY_RPC PDLFS_RADOS)
+mark_as_advanced(PDLFS_SILT_ECT PDLFS_MARGO_RPC PDLFS_MERCURY_RPC)
 
 #
 # we compile everything with -DDELTAFS_PROTO by attaching it as a property of
@@ -134,6 +135,8 @@ include (cmake-options)
 
 # handle all the common PDLFS options using cmake/pdlfs-options.cmake
 include (pdlfs-options)
+
+set (DELTAFS_MPI "OFF" CACHE BOOL "Build parallel tests")
 
 #
 # we build the in-tree pdlfs-common if DELTAFS_COMMON_INTREE is set,

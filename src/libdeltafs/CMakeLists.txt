@@ -132,26 +132,28 @@ endif ()
 # end of the compiler/machine/os dependent stuff!
 #
 
-find_package (MPI MODULE REQUIRED)
-string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
+if (DELTAFS_MPI)
+    find_package (MPI MODULE REQUIRED)
+    string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
 
-foreach (tgt deltafs_srvr deltafs_bm)
-    add_executable (${tgt} ${tgt}.cc)
-    target_link_libraries (${tgt} deltafs)
-    foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
-        if (NOT ${lcv} STREQUAL "")
-            target_compile_options (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
-        endif ()
+    foreach (tgt deltafs_srvr deltafs_bm)
+        add_executable (${tgt} ${tgt}.cc)
+        target_link_libraries (${tgt} deltafs)
+        foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
+            if (NOT ${lcv} STREQUAL "")
+                target_compile_options (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
+            endif ()
+        endforeach ()
+        foreach (lcv ${MPI_CXX_INCLUDE_PATH})
+            target_include_directories (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
+        endforeach ()
+        foreach (lcv ${MPI_CXX_LIBRARIES})
+            target_link_libraries(${tgt} $<BUILD_INTERFACE:${lcv}>)
+        endforeach ()
+        set_property (TARGET ${tgt} APPEND PROPERTY LINK_FLAGS
+                ${MPI_CXX_LINK_FLAGS})
     endforeach ()
-    foreach (lcv ${MPI_CXX_INCLUDE_PATH})
-        target_include_directories (${tgt} PUBLIC $<BUILD_INTERFACE:${lcv}>)
-    endforeach ()
-    foreach (lcv ${MPI_CXX_LIBRARIES})
-        target_link_libraries(${tgt} $<BUILD_INTERFACE:${lcv}>)
-    endforeach ()
-    set_property (TARGET ${tgt} APPEND PROPERTY LINK_FLAGS
-            ${MPI_CXX_LINK_FLAGS})
-endforeach ()
+endif()
 
 #
 # installation stuff (packaging and install commands)
@@ -165,7 +167,6 @@ write_basic_package_version_file(
 configure_file (deltafs-config.cmake.in deltafs-config.cmake @ONLY)
 
 # "make install" rules...
-install (TARGETS deltafs_srvr RUNTIME DESTINATION bin)
 install (TARGETS deltafs EXPORT deltafs-targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib)
@@ -180,6 +181,9 @@ install (DIRECTORY ../../include/deltafs
 install (FILES
         "${CMAKE_CURRENT_BINARY_DIR}/../../include/deltafs/deltafs_config.h"
         DESTINATION include/deltafs)
+if (DELTAFS_MPI)
+    install (TARGETS deltafs_srvr RUNTIME DESTINATION bin)
+endif()
 
 #
 # tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-options.cmake's
