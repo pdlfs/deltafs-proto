@@ -42,9 +42,9 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
-#include <errno.h>
 #include <arpa/inet.h>
 #include <ctype.h>
+#include <errno.h>
 #include <ifaddrs.h>
 #include <mpi.h>
 #include <netdb.h>
@@ -86,7 +86,7 @@ bool FLAGS_skip_fs_checks = false;
 bool FLAGS_use_existing_db = false;
 
 // Use the db at the following prefix.
-const char* FLAGS_db = NULL;
+const char* FLAGS_db_prefix = NULL;
 
 class Server {
  private:
@@ -106,7 +106,7 @@ class Server {
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
-    fprintf(stdout, "Db: %s/<rank>\n", FLAGS_db);
+    fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -218,12 +218,12 @@ class Server {
 
   FilesystemIf* OpenFilesystem() {
     Env* const env = Env::Default();
-    env->CreateDir(FLAGS_db);
+    env->CreateDir(FLAGS_db_prefix);
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
-    char dbsuffix[100];
-    snprintf(dbsuffix, sizeof(dbsuffix), "/%d", FLAGS_rank);
-    std::string dbpath = FLAGS_db;
-    dbpath += dbsuffix;
+    char dbid[100];
+    snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
+    std::string dbpath = FLAGS_db_prefix;
+    dbpath += dbid;
     if (!FLAGS_use_existing_db) {
       DestroyDB(dbpath, DBOptions());
     }
@@ -386,7 +386,7 @@ void Doit(int* const argc, char*** const argv) {
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
-      pdlfs::FLAGS_db = (*argv)[i] + 5;
+      pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
       pdlfs::FLAGS_ip_prefix = (*argv)[i] + 5;
     } else {
@@ -399,10 +399,10 @@ void Doit(int* const argc, char*** const argv) {
   }
 
   std::string default_db_prefix;
-  // Choose a location for the test database if none given with --db=<path>
-  if (!pdlfs::FLAGS_db) {
+  // Choose a prefix for the test db if none given with --db=<path>
+  if (!pdlfs::FLAGS_db_prefix) {
     default_db_prefix = "/tmp/deltafs_srvr";
-    pdlfs::FLAGS_db = default_db_prefix.c_str();
+    pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
   }
 
   pdlfs::Server srvr;
