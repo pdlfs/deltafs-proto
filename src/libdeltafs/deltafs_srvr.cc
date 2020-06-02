@@ -225,7 +225,7 @@ class Server {
     std::string dbpath = FLAGS_db_prefix;
     dbpath += dbid;
     if (!FLAGS_use_existing_db) {
-      DestroyDB(dbpath, DBOptions());
+      FilesystemDb::DestroyDb(dbpath, env);
     }
     Status s = fsdb_->Open(dbpath);
     if (!s.ok()) {
