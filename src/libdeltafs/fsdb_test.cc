@@ -136,6 +136,13 @@ const char* FLAGS_rados_pool = "test";
 const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 #endif
 
+// If not NULL, will start a monitoring thread periodically sending perf stats
+// to a local TSDB service at the specified uri.
+const char* FLAGS_mon_destination_uri = NULL;
+
+// Number of seconds for sending the next stats packet.
+int FLAGS_mon_interval = 1;
+
 // Testing env.
 enum TestEnv { kRados, kUnbufferedIo, kDefault };
 TestEnv FLAGS_env = kDefault;
@@ -357,9 +364,15 @@ struct SharedState {
   int num_initialized;
   int num_done;
   bool start;
+  bool is_mon_running;  // True if the mon thread is running
 
   explicit SharedState(int total)
-      : cv(&mu), total(total), num_initialized(0), num_done(0), start(false) {}
+      : cv(&mu),
+        total(total),
+        num_initialized(0),
+        num_done(0),
+        start(false),
+        is_mon_running(false) {}
 };
 
 // A wrapper over our own random object.
@@ -457,6 +470,9 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Num (rd/wr):        %d/%d per thread\n", FLAGS_reads,
             FLAGS_num);
+    fprintf(stdout, "Mon:                %s (interval=%d)\n",
+            FLAGS_mon_destination_uri ? FLAGS_mon_destination_uri : "OFF",
+            FLAGS_mon_interval);
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
@@ -610,10 +626,42 @@ class Benchmark {
     }
   }
 
+  static void Send(Stats** stats, int n) {
+    fprintf(stdout, "Send mon stats\n");
+  }
+
+  struct MonitorArg {
+    SharedState* shared;
+    Stats** stats;
+  };
+
+  static void MonitorBody(void* v) {
+    MonitorArg* const arg = reinterpret_cast<MonitorArg*>(v);
+    SharedState* const shared = arg->shared;
+
+    MutexLock ml(&shared->mu);
+    shared->is_mon_running = true;
+    shared->cv.SignalAll();
+    while (!shared->start) {
+      shared->cv.Wait();
+    }
+
+    while (shared->num_done < shared->total) {
+      shared->mu.Unlock();
+      Send(arg->stats, shared->total);
+      SleepForMicroseconds(FLAGS_mon_interval * 1000 * 1000);
+      shared->mu.Lock();
+    }
+
+    Send(arg->stats, shared->total);
+    shared->is_mon_running = false;
+    shared->cv.SignalAll();
+  }
+
   void RunBenchmark(int n, int m, Slice name,
                     void (Benchmark::*method)(ThreadState*)) {
     SharedState shared(n);
-
+    std::vector<Stats*> per_thread_stats;
     ThreadArg* const arg = new ThreadArg[n];
     for (int i = 0; i < n; i++) {
       arg[i].bm = this;
@@ -622,21 +670,34 @@ class Benchmark {
       arg[i].thread = new ThreadState(
           i, m * 1000, name.ToString().find("random") != std::string::npos,
           name.ToString().find("fill") != std::string::npos);
+      per_thread_stats.push_back(&arg[i].thread->stats);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
     }
-
-    shared.mu.Lock();
-    while (shared.num_initialized < n) {
-      shared.cv.Wait();
+    MonitorArg mon_arg;
+    mon_arg.stats = &per_thread_stats[0];
+    mon_arg.shared = &shared;
+    if (FLAGS_mon_destination_uri) {
+      Env::Default()->StartThread(MonitorBody, &mon_arg);
     }
 
-    shared.start = true;
-    shared.cv.SignalAll();
-    while (shared.num_done < n) {
-      shared.cv.Wait();
+    {
+      MutexLock l(&shared.mu);
+      while (FLAGS_mon_destination_uri && !shared.is_mon_running) {
+        shared.cv.Wait();
+      }
+      while (shared.num_initialized < n) {
+        shared.cv.Wait();
+      }
+      shared.start = true;
+      shared.cv.SignalAll();
+      while (shared.num_done < n) {
+        shared.cv.Wait();
+      }
+      while (shared.is_mon_running) {
+        shared.cv.Wait();
+      }
     }
-    shared.mu.Unlock();
 
     for (int i = 1; i < n; i++) {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
@@ -1054,6 +1115,10 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_dboptions.block_cache_size = n;
     } else if (sscanf((*argv)[i], "--bloom_bits=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_dboptions.filter_bits_per_key = n;
+    } else if (sscanf((*argv)[i], "--mon_interval=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_mon_interval = n;
+    } else if (strncmp((*argv)[i], "--mon=", 6) == 0) {
+      pdlfs::FLAGS_mon_destination_uri = (*argv)[i] + 6;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
