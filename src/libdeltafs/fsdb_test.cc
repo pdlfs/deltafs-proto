@@ -470,9 +470,11 @@ class Benchmark {
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
     fprintf(stdout, "Num (rd/wr):        %d/%d per thread\n", FLAGS_reads,
             FLAGS_num);
-    fprintf(stdout, "Mon:                %s (interval=%d)\n",
-            FLAGS_mon_destination_uri ? FLAGS_mon_destination_uri : "OFF",
-            FLAGS_mon_interval);
+    char mon_info[100];
+    snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
+             FLAGS_mon_destination_uri, FLAGS_mon_interval);
+    fprintf(stdout, "Mon:                %s\n",
+            FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
