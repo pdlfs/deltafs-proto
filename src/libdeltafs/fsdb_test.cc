@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <vector>
 #if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_connmgr.h"
@@ -58,7 +59,6 @@
 #include <ctype.h>
 #include <sys/resource.h>
 #include <sys/time.h>
-#include <time.h>
 #endif
 
 namespace pdlfs {
@@ -140,6 +140,9 @@ const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 // If not NULL, will start a monitoring thread periodically sending perf stats
 // to a local TSDB service at the specified uri.
 const char* FLAGS_mon_destination_uri = NULL;
+
+// Name for the time series data.
+const char* FLAGS_mon_metric_name = "myfs.ops";
 
 // Number of seconds for sending the next stats packet.
 int FLAGS_mon_interval = 1;
@@ -234,6 +237,8 @@ class Stats {
   }
 
  public:
+  int NumDone() { return done_; }
+
   Stats() { Start(); }
 
   void Start() {
@@ -629,8 +634,16 @@ class Benchmark {
     }
   }
 
-  static void Send(Stats** stats, int n) {
-    fprintf(stdout, "Send mon stats\n");
+  static void Send(UDPSocket* sock, Stats** stats, int n) {
+    char msg[100];
+    for (int i = 0; i < n; i++) {
+      snprintf(msg, sizeof(msg), "%s %10d %d thread=%d\n",
+               FLAGS_mon_metric_name, int(time(NULL)), stats[i]->NumDone(), i);
+      Status s = sock->Send(msg);
+      if (!s.ok()) {
+        fprintf(stderr, "Fail to send data: %s\n", s.ToString().c_str());
+      }
+    }
   }
 
   struct MonitorArg {
@@ -640,7 +653,15 @@ class Benchmark {
 
   static void MonitorBody(void* v) {
     MonitorArg* const arg = reinterpret_cast<MonitorArg*>(v);
-    SharedState* const shared = arg->shared;
+    SharedState* shared = arg->shared;
+    Stats** stats = arg->stats;
+    UDPSocket* const sock = CreateUDPSocket();
+    Status s = sock->Connect(FLAGS_mon_destination_uri);
+    if (!s.ok()) {
+      fprintf(stderr, "Cannot open mon socket: %s\n", s.ToString().c_str());
+      delete sock;
+      return;
+    }
 
     MutexLock ml(&shared->mu);
     shared->is_mon_running = true;
@@ -651,14 +672,15 @@ class Benchmark {
 
     while (shared->num_done < shared->total) {
       shared->mu.Unlock();
-      Send(arg->stats, shared->total);
+      Send(sock, stats, shared->total);
       SleepForMicroseconds(FLAGS_mon_interval * 1000 * 1000);
       shared->mu.Lock();
     }
 
-    Send(arg->stats, shared->total);
+    Send(sock, stats, shared->total);
     shared->is_mon_running = false;
     shared->cv.SignalAll();
+    delete sock;
   }
 
   void RunBenchmark(int n, int m, Slice name,
