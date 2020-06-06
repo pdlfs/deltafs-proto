@@ -40,24 +40,25 @@
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
 
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
 #include <algorithm>
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <vector>
 #if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_connmgr.h"
 #endif
 #if defined(PDLFS_OS_LINUX)
+#include <ctype.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <time.h>
 #endif
 
 namespace pdlfs {
