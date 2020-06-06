@@ -225,7 +225,7 @@ void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
 }
 
 Logger* Logger::Default() {
-#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
+#if defined(PDLFS_GLOG)
   static PosixGoogleLogger logger;
   return &logger;
 #elif defined(PDLFS_PLATFORM_POSIX)
