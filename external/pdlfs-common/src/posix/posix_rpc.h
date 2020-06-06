@@ -70,6 +70,7 @@ class PosixRPC : public RPC {
   virtual Status Start();  // Open server the start background progressing
   virtual Status Stop();
 
+  virtual int GetPort();
   virtual std::string GetUri();
   virtual Status status();
 

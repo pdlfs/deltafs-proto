@@ -137,6 +137,11 @@ Status PosixRPC::Stop() {
   return Status::OK();
 }
 
+int PosixRPC::GetPort() {
+  if (srv_) return srv_->GetPort();
+  return -1;
+}
+
 std::string PosixRPC::GetUri() {
   if (srv_) return srv_->GetUri();
   return "-1:-1";
