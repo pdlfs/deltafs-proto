@@ -55,6 +55,12 @@ void PosixSocketServer::BGCall() {
   }
 }
 
+int PosixSocketServer::GetPort() {
+  MutexLock ml(&mutex_);
+  if (fd_ != -1) return actual_addr_->GetPort();
+  return addr_->GetPort();
+}
+
 std::string PosixSocketServer::GetBaseUri() {
   MutexLock ml(&mutex_);
   if (fd_ != -1) return actual_addr_->GetUri();
