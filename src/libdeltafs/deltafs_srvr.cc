@@ -54,6 +54,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <vector>
 
 namespace pdlfs {
 namespace {
@@ -70,8 +71,8 @@ int FLAGS_rank = 0;
 // prefix.
 const char* FLAGS_ip_prefix = "127.0.0.1";
 
-// Listening port.
-int FLAGS_port = 10086;
+// Listening port for the information server.
+int FLAGS_info_port = 10086;
 
 // Number of listening ports per rank.
 int FLAGS_ports_per_rank = 1;
@@ -94,17 +95,17 @@ class Server {
   port::AtomicPointer shutting_down_;
   port::CondVar cv_;
   FilesystemInfoServer* infosvr_;
-  FilesystemServer** svrs_;
+  std::vector<FilesystemServer*> svrs_;
   Filesystem* fs_;
   FilesystemDb* fsdb_;
 
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "IP prefix:          %s*\n", FLAGS_ip_prefix);
-    fprintf(stdout, "Port:               %d, starting from\n", FLAGS_port);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
+    fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
     fprintf(stdout, "------------------------------------------------\n");
@@ -178,7 +179,7 @@ class Server {
 #endif
   }
 
-  void PickAddr(char* dst) {
+  const char* PickAddr(char* dst) {
     const size_t prefix_len = strlen(FLAGS_ip_prefix);
 
     struct ifaddrs *ifaddr, *ifa;
@@ -214,6 +215,8 @@ class Server {
       MPI_Finalize();
       exit(1);
     }
+
+    return dst;
   }
 
   FilesystemIf* OpenFilesystem() {
@@ -261,12 +264,11 @@ class Server {
     return infosvr;
   }
 
-  FilesystemServer* OpenPort(const char* ip, int port, FilesystemIf* const fs) {
+  FilesystemServer* OpenPort(const char* ip, FilesystemIf* fs) {
     FilesystemServerOptions svropts;
     svropts.num_rpc_threads = 1;
-    char uri[50];
-    snprintf(uri, sizeof(uri), "%s:%d", ip, port);
-    svropts.uri = uri;
+    svropts.uri = "udp://";
+    svropts.uri += ip;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
     rpcsvr->SetFs(fs);
     Status s = rpcsvr->OpenServer();
@@ -284,15 +286,14 @@ class Server {
       : shutting_down_(NULL),
         cv_(&mu_),
         infosvr_(NULL),
-        svrs_(NULL),
         fs_(NULL),
         fsdb_(NULL) {}
 
   ~Server() {
-    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
+    int n = svrs_.size();
+    for (int i = 0; i < n; i++) {
       delete svrs_[i];
     }
-    delete[] svrs_;
     delete fs_;
     delete fsdb_;
   }
@@ -308,28 +309,34 @@ class Server {
       PrintHeader();
     }
     FilesystemIf* const fs = OpenFilesystem();
-    char myip[INET_ADDRSTRLEN];
-    memset(myip, 0, sizeof(myip));
-    PickAddr(myip);
-    svrs_ = new FilesystemServer*[FLAGS_ports_per_rank];
-    int base_port = FLAGS_port + FLAGS_rank * FLAGS_ports_per_rank;
-    for (int i = 0; i < FLAGS_ports_per_rank; i++) {
-      svrs_[i] = OpenPort(myip, base_port + i, fs);
+    char ip_str[INET_ADDRSTRLEN];
+    memset(ip_str, 0, sizeof(ip_str));
+    const unsigned int myip = inet_addr(PickAddr(ip_str));
+    int np = FLAGS_ports_per_rank;
+    std::vector<unsigned short> myports;
+    for (int i = 0; i < np; i++) {
+      FilesystemServer* svr = OpenPort(ip_str, fs);
+      myports.push_back(svr->GetPort());
+      svrs_.push_back(svr);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    char* ip_info = NULL;
+    unsigned int* ip_info = NULL;
     if (FLAGS_rank == 0) {
-      ip_info = new char[INET_ADDRSTRLEN * FLAGS_comm_size];
+      ip_info = new unsigned int[FLAGS_comm_size];
     }
-    MPI_Gather(myip, INET_ADDRSTRLEN, MPI_CHAR, ip_info, INET_ADDRSTRLEN,
-               MPI_CHAR, 0, MPI_COMM_WORLD);
+    MPI_Gather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED, 0,
+               MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
-      infosvr_ = OpenInfoPort(myip, FLAGS_port - 1);
-      infosvr_->SetInfo(0, Slice(ip_info, INET_ADDRSTRLEN * FLAGS_comm_size));
+      infosvr_ = OpenInfoPort(ip_str, FLAGS_info_port);
+      infosvr_->SetInfo(  ///
+          0, Slice(reinterpret_cast<char*>(ip_info),
+                   FLAGS_comm_size * sizeof(unsigned int)));
       if (FLAGS_print_ips) {
-        puts("IP addrs >>>");
+        struct in_addr tmp_addr;
+        puts("Dumping fs metadata svc uris >>>");
         for (int i = 0; i < FLAGS_comm_size; i++) {
-          fprintf(stdout, "%d:\t%s\n", i, ip_info + INET_ADDRSTRLEN * i);
+          tmp_addr.s_addr = ip_info[i];
+          fprintf(stdout, "%-5d: %s\n", i, inet_ntoa(tmp_addr));
         }
       }
       puts("Running...");
@@ -373,8 +380,8 @@ void Doit(int* const argc, char*** const argv) {
   for (int i = 1; i < (*argc); i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--port=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_port = n;
+    if (sscanf((*argv)[i], "--info_port=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_info_port = n;
     } else if (sscanf((*argv)[i], "--ports_per_rank=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_ports_per_rank = n;
     } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
