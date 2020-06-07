@@ -388,6 +388,7 @@ void HandleSig(const int sig) {
 }
 
 void Doit(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
 
   for (int i = 1; i < (*argc); i++) {
