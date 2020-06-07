@@ -179,7 +179,7 @@ class Server {
 #endif
   }
 
-  const char* PickAddr(char* dst) {
+  static const char* PickAddr(char* dst) {
     const size_t prefix_len = strlen(FLAGS_ip_prefix);
 
     struct ifaddrs *ifaddr, *ifa;
@@ -264,13 +264,12 @@ class Server {
     return infosvr;
   }
 
-  FilesystemServer* OpenPort(const char* ip, FilesystemIf* fs) {
+  FilesystemServer* OpenSvrPort(const char* ip) {
     FilesystemServerOptions svropts;
     svropts.num_rpc_threads = 1;
     svropts.uri = "udp://";
     svropts.uri += ip;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
-    rpcsvr->SetFs(fs);
     Status s = rpcsvr->OpenServer();
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot open port: %s\n", FLAGS_rank,
@@ -311,13 +310,14 @@ class Server {
     FilesystemIf* const fs = OpenFilesystem();
     char ip_str[INET_ADDRSTRLEN];
     memset(ip_str, 0, sizeof(ip_str));
-    const unsigned myip = inet_addr(PickAddr(ip_str));
+    unsigned myip = inet_addr(PickAddr(ip_str));
     int np = FLAGS_ports_per_rank;
     std::vector<unsigned short> myports;
     for (int i = 0; i < np; i++) {
-      FilesystemServer* svr = OpenPort(ip_str, fs);
+      FilesystemServer* const svr = OpenSvrPort(ip_str);
       myports.push_back(svr->GetPort());
       svrs_.push_back(svr);
+      svr->SetFs(fs);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     std::string info;
