@@ -125,6 +125,16 @@ class Server {
   Env* myenv_;
 #endif
 
+#if defined(PDLFS_RADOS)
+  static void PrintRadosSettings() {
+    fprintf(stdout, "Disable async io:   %d\n", FLAGS_rados_force_syncio);
+    fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
+    fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
+    fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
+    fprintf(stdout, "Conf: %s\n", FLAGS_rados_conf);
+  }
+#endif
+
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
@@ -132,6 +142,10 @@ class Server {
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
+#if defined(PDLFS_RADOS)
+    fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
+    if (FLAGS_env_use_rados) PrintRadosSettings();
+#endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
     fprintf(stdout, "------------------------------------------------\n");
@@ -477,6 +491,13 @@ void Doit(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
+    } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_env_use_rados = n;
+    } else if (sscanf((*argv)[i], "--rados_force_syncio=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_rados_force_syncio = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
