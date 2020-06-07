@@ -71,6 +71,7 @@ bool FLAGS_env_use_rados = false;
 // True iff rados async io (AIO) should be disabled.
 bool FLAGS_rados_force_syncio = false;
 
+#if defined(PDLFS_RADOS)
 // User name for ceph rados connection.
 const char* FLAGS_rados_cli_name = "client.admin";
 
@@ -82,6 +83,7 @@ const char* FLAGS_rados_pool = "test";
 
 // Rados cluster configuration file.
 const char* FLAGS_rados_conf = "/tmp/ceph.conf";
+#endif
 
 // Total number of ranks.
 int FLAGS_comm_size = 1;
