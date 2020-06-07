@@ -290,8 +290,8 @@ class Server {
         fsdb_(NULL) {}
 
   ~Server() {
-    int n = svrs_.size();
-    for (int i = 0; i < n; i++) {
+    delete infosvr_;
+    for (size_t i = 0; i < svrs_.size(); i++) {
       delete svrs_[i];
     }
     delete fs_;
@@ -311,7 +311,7 @@ class Server {
     FilesystemIf* const fs = OpenFilesystem();
     char ip_str[INET_ADDRSTRLEN];
     memset(ip_str, 0, sizeof(ip_str));
-    const unsigned int myip = inet_addr(PickAddr(ip_str));
+    const unsigned myip = inet_addr(PickAddr(ip_str));
     int np = FLAGS_ports_per_rank;
     std::vector<unsigned short> myports;
     for (int i = 0; i < np; i++) {
@@ -320,23 +320,35 @@ class Server {
       svrs_.push_back(svr);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    unsigned int* ip_info = NULL;
-    if (FLAGS_rank == 0) {
-      ip_info = new unsigned int[FLAGS_comm_size];
-    }
-    MPI_Gather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED, 0,
-               MPI_COMM_WORLD);
-    if (FLAGS_rank == 0) {
+    std::string info;
+    if (FLAGS_rank != 0) {  // Send addr info to rank 0
+      MPI_Gather(&myports[0], np, MPI_UNSIGNED_SHORT, NULL, np,
+                 MPI_UNSIGNED_SHORT, 0, MPI_COMM_WORLD);
+      MPI_Gather(&myip, 1, MPI_UNSIGNED, NULL, 1, MPI_UNSIGNED, 0,
+                 MPI_COMM_WORLD);
+    } else {
+      size_t size_per_rank = 2 * np + 4;
+      info.resize(size_per_rank * FLAGS_comm_size);
+      unsigned short* const port_info =
+          reinterpret_cast<unsigned short*>(&info[0]);
+      unsigned* const ip_info =
+          reinterpret_cast<unsigned*>(&info[2 * np * FLAGS_comm_size]);
+      MPI_Gather(&myports[0], np, MPI_UNSIGNED_SHORT, port_info, np,
+                 MPI_UNSIGNED_SHORT, 0, MPI_COMM_WORLD);
+      MPI_Gather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED, 0,
+                 MPI_COMM_WORLD);
       infosvr_ = OpenInfoPort(ip_str, FLAGS_info_port);
-      infosvr_->SetInfo(  ///
-          0, Slice(reinterpret_cast<char*>(ip_info),
-                   FLAGS_comm_size * sizeof(unsigned int)));
+      infosvr_->SetInfo(0, info);
       if (FLAGS_print_ips) {
         struct in_addr tmp_addr;
-        puts("Dumping fs metadata svc uris >>>");
+        puts("Dumping fs uri(s) >>>");
         for (int i = 0; i < FLAGS_comm_size; i++) {
           tmp_addr.s_addr = ip_info[i];
-          fprintf(stdout, "%-5d: %s\n", i, inet_ntoa(tmp_addr));
+          for (int j = 0; j < np; j++) {
+            fprintf(stdout, "%s:%hu\n", inet_ntoa(tmp_addr),
+                    port_info[j + i * np]);
+          }
+          fflush(stdout);
         }
       }
       puts("Running...");
@@ -345,8 +357,9 @@ class Server {
     while (!shutting_down_.Acquire_Load()) {
       cv_.Wait();
     }
-    infosvr_->Close();
-    delete[] ip_info;
+    if (FLAGS_rank == 0) {
+      infosvr_->Close();
+    }
     for (int i = 0; i < FLAGS_ports_per_rank; i++) {
       svrs_[i]->Close();
     }
