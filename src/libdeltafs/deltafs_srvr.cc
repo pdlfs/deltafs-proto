@@ -219,7 +219,7 @@ class Server {
     return dst;
   }
 
-  FilesystemIf* OpenFilesystem() {
+  void OpenFilesystem() {
     Env* const env = Env::Default();
     env->CreateDir(FLAGS_db_prefix);
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
@@ -244,14 +244,13 @@ class Server {
             FLAGS_skip_fs_checks;
     fs_ = new Filesystem(opts);
     fs_->SetDb(fsdb_);
-    return fs_;
   }
 
-  FilesystemInfoServer* OpenInfoPort(const char* ip, int port) {
+  static FilesystemInfoServer* OpenInfoPort(const char* ip) {
     FilesystemInfoServerOptions infosvropts;
     infosvropts.num_rpc_threads = 1;
     char uri[50];
-    snprintf(uri, sizeof(uri), "tcp://%s:%d", ip, port);
+    snprintf(uri, sizeof(uri), "tcp://%s:%d", ip, FLAGS_info_port);
     infosvropts.uri = uri;
     FilesystemInfoServer* const infosvr = new FilesystemInfoServer(infosvropts);
     Status s = infosvr->OpenServer();
@@ -264,12 +263,13 @@ class Server {
     return infosvr;
   }
 
-  FilesystemServer* OpenSvrPort(const char* ip) {
+  static FilesystemServer* OpenSvrPort(const char* ip, FilesystemIf* fs) {
     FilesystemServerOptions svropts;
     svropts.num_rpc_threads = 1;
     svropts.uri = "udp://";
     svropts.uri += ip;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
+    rpcsvr->SetFs(fs);
     Status s = rpcsvr->OpenServer();
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot open port: %s\n", FLAGS_rank,
@@ -307,17 +307,16 @@ class Server {
     if (FLAGS_rank == 0) {
       PrintHeader();
     }
-    FilesystemIf* const fs = OpenFilesystem();
+    OpenFilesystem();
     char ip_str[INET_ADDRSTRLEN];
     memset(ip_str, 0, sizeof(ip_str));
     unsigned myip = inet_addr(PickAddr(ip_str));
     int np = FLAGS_ports_per_rank;
     std::vector<unsigned short> myports;
     for (int i = 0; i < np; i++) {
-      FilesystemServer* const svr = OpenSvrPort(ip_str);
+      FilesystemServer* const svr = OpenSvrPort(ip_str, fs_);
       myports.push_back(svr->GetPort());
       svrs_.push_back(svr);
-      svr->SetFs(fs);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     std::string info;
@@ -337,7 +336,7 @@ class Server {
                  MPI_UNSIGNED_SHORT, 0, MPI_COMM_WORLD);
       MPI_Gather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED, 0,
                  MPI_COMM_WORLD);
-      infosvr_ = OpenInfoPort(ip_str, FLAGS_info_port);
+      infosvr_ = OpenInfoPort(ip_str);
       infosvr_->SetInfo(0, info);
       if (FLAGS_print_ips) {
         struct in_addr tmp_addr;
