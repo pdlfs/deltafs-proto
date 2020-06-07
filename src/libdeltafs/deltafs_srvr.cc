@@ -251,7 +251,7 @@ class Server {
     FilesystemInfoServerOptions infosvropts;
     infosvropts.num_rpc_threads = 1;
     char uri[50];
-    snprintf(uri, sizeof(uri), "%s:%d", ip, port);
+    snprintf(uri, sizeof(uri), "tcp://%s:%d", ip, port);
     infosvropts.uri = uri;
     FilesystemInfoServer* const infosvr = new FilesystemInfoServer(infosvropts);
     Status s = infosvr->OpenServer();
