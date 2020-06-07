@@ -43,23 +43,45 @@
 #include "pdlfs-common/port.h"
 
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
 #include <ifaddrs.h>
 #include <mpi.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include <time.h>
 #include <vector>
+#if defined(PDLFS_RADOS)
+#include "pdlfs-common/rados/rados_connmgr.h"
+#endif
+#if defined(PDLFS_OS_LINUX)
+#include <ctype.h>
+#include <time.h>
+#endif
 
 namespace pdlfs {
 namespace {
 // Db options.
 FilesystemDbOptions FLAGS_dbopts;
+
+// True iff rados env should be used.
+bool FLAGS_env_use_rados = false;
+
+// True iff rados async io (AIO) should be disabled.
+bool FLAGS_rados_force_syncio = false;
+
+// User name for ceph rados connection.
+const char* FLAGS_rados_cli_name = "client.admin";
+
+// Rados cluster name.
+const char* FLAGS_rados_cluster_name = "ceph";
+
+// Rados storage pool name.
+const char* FLAGS_rados_pool = "test";
+
+// Rados cluster configuration file.
+const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 
 // Total number of ranks.
 int FLAGS_comm_size = 1;
@@ -98,6 +120,10 @@ class Server {
   std::vector<FilesystemServer*> svrs_;
   Filesystem* fs_;
   FilesystemDb* fsdb_;
+#if defined(PDLFS_RADOS)
+  rados::RadosConnMgr* mgr_;
+  Env* myenv_;
+#endif
 
   static void PrintHeader() {
     PrintEnvironment();
@@ -153,14 +179,14 @@ class Server {
     fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
 
     FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
-    if (cpuinfo != nullptr) {
+    if (cpuinfo != NULL) {
       char line[1000];
       int num_cpus = 0;
       std::string cpu_type;
       std::string cache_size;
-      while (fgets(line, sizeof(line), cpuinfo) != nullptr) {
+      while (fgets(line, sizeof(line), cpuinfo) != NULL) {
         const char* sep = strchr(line, ':');
-        if (sep == nullptr) {
+        if (sep == NULL) {
           continue;
         }
         Slice key = TrimSpace(Slice(line, sep - 1 - line));
@@ -219,8 +245,48 @@ class Server {
     return dst;
   }
 
+  Env* OpenEnv() {
+    if (FLAGS_env_use_rados) {
+#if defined(PDLFS_RADOS)
+      using namespace rados;
+      RadosOptions options;
+      options.force_syncio = FLAGS_rados_force_syncio;
+      RadosConn* conn;
+      Osd* osd;
+      mgr_ = new RadosConnMgr(RadosConnMgrOptions());
+      Status s = mgr_->OpenConn(  ///
+          FLAGS_rados_cluster_name, FLAGS_rados_cli_name, FLAGS_rados_conf,
+          RadosConnOptions(), &conn);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot connect to rados: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      s = mgr_->OpenOsd(conn, FLAGS_rados_pool, options, &osd);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot open rados object pool: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      myenv_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
+      mgr_->Release(conn);
+      return myenv_;
+#else
+      if (FLAGS_rank == 0) {
+        fprintf(stderr, "Rados not installed\n");
+      }
+      MPI_Finalize();
+      exit(1);
+#endif
+    } else {
+      return Env::Default();
+    }
+  }
+
   void OpenFilesystem() {
-    Env* const env = Env::Default();
+    Env* env = OpenEnv();
     env->CreateDir(FLAGS_db_prefix);
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
     char dbid[100];
@@ -263,7 +329,7 @@ class Server {
     return infosvr;
   }
 
-  static FilesystemServer* OpenSvrPort(const char* ip, FilesystemIf* fs) {
+  static FilesystemServer* OpenPort(const char* ip, FilesystemIf* const fs) {
     FilesystemServerOptions svropts;
     svropts.num_rpc_threads = 1;
     svropts.uri = "udp://";
@@ -286,7 +352,12 @@ class Server {
         cv_(&mu_),
         infosvr_(NULL),
         fs_(NULL),
-        fsdb_(NULL) {}
+        fsdb_(NULL) {
+#if defined(PDLFS_RADOS)
+    mgr_ = NULL;
+    myenv_ = NULL;
+#endif
+  }
 
   ~Server() {
     delete infosvr_;
@@ -295,6 +366,10 @@ class Server {
     }
     delete fs_;
     delete fsdb_;
+#if defined(PDLFS_RADOS)
+    delete myenv_;
+    delete mgr_;
+#endif
   }
 
   void Interrupt() {
@@ -314,7 +389,7 @@ class Server {
     int np = FLAGS_ports_per_rank;
     std::vector<unsigned short> myports;
     for (int i = 0; i < np; i++) {
-      FilesystemServer* const svr = OpenSvrPort(ip_str, fs_);
+      FilesystemServer* const svr = OpenPort(ip_str, fs_);
       myports.push_back(svr->GetPort());
       svrs_.push_back(svr);
     }
