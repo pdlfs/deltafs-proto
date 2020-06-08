@@ -247,7 +247,7 @@ Status FilesystemCli::BatchCommit(BAT* bat) {
   bc->commit_status = 1;
   bc->mu.Unlock();
   Status s;
-  for (int i = 0; i < options_.nsrvs; i++) {
+  for (int i = 0; i < srvs_; i++) {
     s = Mkfls1(bc->who, *lease->value, Slice(), bc->mode, true, i,
                &bc->wribufs[i]);
     if (!s.ok()) {
@@ -522,11 +522,10 @@ Status FilesystemCli::CreateBatch(  ///
     *result = bc;
     // In future, we could allow each dir to define its own amount
     // of virtual servers.
-    int n = options_.nsrvs;
     bc->mode = 0660;
     bc->commit_status = 0;
     bc->refs = 0;  // To be increased by the caller
-    bc->wribufs = new WriBuf[n];
+    bc->wribufs = new WriBuf[srvs_];
     bc->dir = dir;
     bc->who = who;
   }
@@ -808,7 +807,7 @@ Status FilesystemCli::Lokup2(  ///
     if (fs_ != NULL) {
       s = fs_->Lokup(who, p, name, tmp);
     } else if (stub_ != NULL) {
-      assert(part->index < options_.nsrvs);
+      assert(part->index < srvs_);
       LokupOptions opts;
       opts.parent = &p;
       opts.name = name;
@@ -873,7 +872,7 @@ Status FilesystemCli::Mkfls2(  ///
   if (fs_ != NULL) {
     s = fs_->Mkfls(who, p, namearr, mode, &n);
   } else if (stub_ != NULL) {
-    assert(i < options_.nsrvs);
+    assert(i < srvs_);
     MkflsOptions opts;
     opts.parent = &p;
     opts.namearr = namearr;
@@ -898,7 +897,7 @@ Status FilesystemCli::Mkfle2(  ///
   if (fs_ != NULL) {
     s = fs_->Mkfle(who, p, name, mode, stat);
   } else if (stub_ != NULL) {
-    assert(i < options_.nsrvs);
+    assert(i < srvs_);
     MkfleOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -923,7 +922,7 @@ Status FilesystemCli::Mkdir2(  ///
   if (fs_ != NULL) {
     s = fs_->Mkdir(who, p, name, mode, stat);
   } else if (stub_ != NULL) {
-    assert(i < options_.nsrvs);
+    assert(i < srvs_);
     MkdirOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -948,7 +947,7 @@ Status FilesystemCli::Lstat2(  ///
   if (fs_ != NULL) {
     s = fs_->Lstat(who, p, name, stat);
   } else if (stub_ != NULL) {
-    assert(i < options_.nsrvs);
+    assert(i < srvs_);
     LstatOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -1108,8 +1107,8 @@ Status FilesystemCli::FetchDir(uint32_t zeroth_server, Dir* dir) {
   }
 
   dir->giga_opts = new DirIndexOptions;
-  dir->giga_opts->num_virtual_servers = options_.vsrvs;
-  dir->giga_opts->num_servers = options_.nsrvs;
+  dir->giga_opts->num_virtual_servers = srvs_;
+  dir->giga_opts->num_servers = srvs_;
 
   const uint32_t zsrv = Filesystem::PickupServer(*dir->id);
   dir->giga = new DirIndex(zsrv, dir->giga_opts);
@@ -1254,9 +1253,10 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
       plru_(NULL),
       pars_(NULL),
       options_(options),
-      stub_(NULL),
       fs_(NULL),
-      rpc_(NULL) {
+      stub_(NULL),
+      ports_per_srv_(1),
+      srvs_(1) {
   dirs_ = new HashTable<Dir>;
   dirlist_.next = &dirlist_;
   dirlist_.prev = &dirlist_;
@@ -1275,21 +1275,10 @@ FilesystemCliOptions::FilesystemCliOptions()
     : per_partition_lease_lru_size(4096),
       partition_lru_size(4096),
       batch_size(16),
-      skip_perm_checks(false),
-      vsrvs(1),
-      nsrvs(1) {}
+      skip_perm_checks(false) {}
 
 void FilesystemCli::SetLocalFs(Filesystem* fs) {
   fs_ = fs;  // This is a weak reference; fs_ is not owned by us
-}
-
-Status FilesystemCli::Open(RPC* rpc, const std::string* uri) {
-  stub_ = new rpc::If*[options_.nsrvs];
-  for (int i = 0; i < options_.nsrvs; i++) {
-    stub_[i] = rpc->OpenStubFor(uri[i]);
-  }
-  rpc_ = rpc;
-  return Status::OK();
 }
 
 FilesystemCli::~FilesystemCli() {
@@ -1301,12 +1290,11 @@ FilesystemCli::~FilesystemCli() {
   assert(dirs_->Empty());
   delete dirs_;
   if (stub_) {
-    for (int i = 0; i < options_.nsrvs; i++) {
+    for (int i = 0; i < (srvs_ * ports_per_srv_); i++) {
       delete stub_[i];
     }
   }
   delete[] stub_;
-  delete rpc_;
 }
 
 }  // namespace pdlfs

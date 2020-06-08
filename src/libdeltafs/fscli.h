@@ -55,10 +55,6 @@ struct FilesystemCliOptions {
   size_t partition_lru_size;
   size_t batch_size;
   bool skip_perm_checks;
-  // Total number of virtual servers
-  int vsrvs;
-  // Number of servers
-  int nsrvs;
 };
 
 // A filesystem client may either talk to a local metadata manager via the
@@ -67,7 +63,6 @@ class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
   void SetLocalFs(Filesystem* fs);
-  Status Open(RPC* rpc, const std::string* uri);
   ~FilesystemCli();
 
   // Reference to a resolved parent directory serving as a relative root for
@@ -286,9 +281,13 @@ class FilesystemCli {
   LookupStat rtlokupstat_;
   Lease rtlease_;
   FilesystemCliOptions options_;
+  // If not NULL, the cli runs in a serverless mode
+  Filesystem* fs_;  // This is a weak reference; fs_ is not owned by us
+  // The following is set when running in the
+  // traditional client-server mode
   rpc::If** stub_;
-  Filesystem* fs_;
-  RPC* rpc_;
+  int ports_per_srv_;
+  int srvs_;
 };
 
 }  // namespace pdlfs
