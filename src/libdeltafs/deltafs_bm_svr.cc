@@ -325,6 +325,8 @@ class Server {
     opts.skip_partition_checks = opts.skip_perm_checks =
         opts.skip_lease_due_checks = opts.skip_name_collision_checks =
             FLAGS_skip_fs_checks;
+    opts.vsrvs = opts.nsrvs = FLAGS_comm_size;
+    opts.srvid = FLAGS_rank;
     fs_ = new Filesystem(opts);
     fs_->SetDb(fsdb_);
   }
