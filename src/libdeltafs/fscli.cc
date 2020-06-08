@@ -44,12 +44,12 @@
 namespace pdlfs {
 namespace {
 Status Nofs() {  ///
-  return Status::Disconnected("No fs manager");
+  return Status::AssertionFailed("No filesystem backend");
 }
 }  // namespace
 
 Status FilesystemCli::TEST_Mkfle(  ///
-    const User& who, const LookupStat& parent, const Slice& fname,
+    FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& fname,
     const Stat& stat, FilesystemDbStats* const stats) {
   Status status;
   if (fname.empty()) {
@@ -59,12 +59,12 @@ Status FilesystemCli::TEST_Mkfle(  ///
     Partition* part;
     Dir* dir;
     int i;
-    status = AcquireAndFetch(who, parent, fname, &dir, &i);
+    status = AcquireAndFetch(ctx, parent, fname, &dir, &i);
     if (status.ok()) {
       status = AcquirePartition(dir, i, &part);
       if (status.ok()) {
         mutex_.Unlock();
-        status = fs_->TEST_Mkfle(who, parent, fname, stat, stats);
+        status = fs_->TEST_Mkfle(ctx->who, parent, fname, stat, stats);
         mutex_.Lock();
         Release(part);
       }
@@ -75,16 +75,16 @@ Status FilesystemCli::TEST_Mkfle(  ///
 }
 
 Status FilesystemCli::TEST_Mkfle(  ///
-    const User& who, const char* const pathname, const Stat& stat,
+    FilesystemCliCtx* const ctx, const char* pathname, const Stat& stat,
     FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     const LookupStat& p = *parent_dir->value;
-    status = TEST_Mkfle(who, p, tgt, stat, stats);
+    status = TEST_Mkfle(ctx, p, tgt, stat, stats);
   }
   if (parent_dir) {
     Release(parent_dir);
@@ -93,7 +93,7 @@ Status FilesystemCli::TEST_Mkfle(  ///
 }
 
 Status FilesystemCli::TEST_Lstat(  ///
-    const User& who, const LookupStat& parent, const Slice& fname,
+    FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& fname,
     Stat* const stat, FilesystemDbStats* const stats) {
   Status status;
   if (fname.empty()) {
@@ -103,12 +103,12 @@ Status FilesystemCli::TEST_Lstat(  ///
     Partition* part;
     Dir* dir;
     int i;
-    status = AcquireAndFetch(who, parent, fname, &dir, &i);
+    status = AcquireAndFetch(ctx, parent, fname, &dir, &i);
     if (status.ok()) {
       status = AcquirePartition(dir, i, &part);
       if (status.ok()) {
         mutex_.Unlock();
-        status = fs_->TEST_Lstat(who, parent, fname, stat, stats);
+        status = fs_->TEST_Lstat(ctx->who, parent, fname, stat, stats);
         mutex_.Lock();
         Release(part);
       }
@@ -119,16 +119,16 @@ Status FilesystemCli::TEST_Lstat(  ///
 }
 
 Status FilesystemCli::TEST_Lstat(  ///
-    const User& who, const char* const pathname, Stat* const stat,
+    FilesystemCliCtx* const ctx, const char* pathname, Stat* const stat,
     FilesystemDbStats* const stats) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     const LookupStat& p = *parent_dir->value;
-    status = TEST_Lstat(who, p, tgt, stat, stats);
+    status = TEST_Lstat(ctx, p, tgt, stat, stats);
   }
   if (parent_dir) {
     Release(parent_dir);
@@ -145,13 +145,13 @@ struct FilesystemCli::AT {
 };
 
 Status FilesystemCli::Atdir(  ///
-    const User& who, const AT* const at, const char* const pathname,
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
     AT** result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
       AT* rv = new AT;
@@ -180,13 +180,13 @@ struct FilesystemCli::BAT {
 // dir's lease from server and a reference to the internal batch context object
 // associated with the lease.
 Status FilesystemCli::BatchStart(  ///
-    const User& who, const AT* const at, const char* const pathname,
-    BAT** const result) {
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
+    BAT** result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
       Lease* dir_lease;
@@ -194,7 +194,7 @@ Status FilesystemCli::BatchStart(  ///
       // simultaneously locking the newly created dir. Any subsequent regular
       // lookup operation either finds a non-regular lease with a batch context
       // or fails to initialize a regular lease from server.
-      status = Lokup(who, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
+      status = Lokup(ctx, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
         assert(dir_lease->batch != NULL);
         BAT* const bat = new BAT;  // Opaque handle to the batch
@@ -225,7 +225,7 @@ Status FilesystemCli::BatchInsert(BAT* bat, const char* name) {
   const int i = bc->dir->giga->SelectServer(name);
   bc->mu.Unlock();
   Status s =
-      Mkfls1(bc->who, *lease->value, name, bc->mode, false, i, &bc->wribufs[i]);
+      Mkfls1(bc->ctx, *lease->value, name, bc->mode, false, i, &bc->wribufs[i]);
   bc->mu.Lock();
   if (!s.ok() && bc->bg_status.ok()) {
     bc->bg_status = s;
@@ -248,7 +248,7 @@ Status FilesystemCli::BatchCommit(BAT* bat) {
   bc->mu.Unlock();
   Status s;
   for (int i = 0; i < srvs_; i++) {
-    s = Mkfls1(bc->who, *lease->value, Slice(), bc->mode, true, i,
+    s = Mkfls1(bc->ctx, *lease->value, Slice(), bc->mode, true, i,
                &bc->wribufs[i]);
     if (!s.ok()) {
       break;
@@ -297,19 +297,19 @@ Status FilesystemCli::BatchEnd(BAT* bat) {
 }
 
 Status FilesystemCli::Mkfle(  ///
-    const User& who, const AT* const at, const char* const pathname,
-    uint32_t mode, Stat* const stat) {
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
+    const uint32_t mode, Stat* const stat) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty() && !has_tailing_slashes) {
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Mkfle1(who, *parent_dir->value, tgt, mode, stat);
+        status = Mkfle1(ctx, *parent_dir->value, tgt, mode, stat);
       }
     } else {
       status = Status::FileExpected("Path is dir");
@@ -322,19 +322,19 @@ Status FilesystemCli::Mkfle(  ///
 }
 
 Status FilesystemCli::Mkdir(  ///
-    const User& who, const AT* const at, const char* const pathname,
-    uint32_t mode, Stat* const stat) {
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
+    const uint32_t mode, Stat* const stat) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Mkdir1(who, *parent_dir->value, tgt, mode, stat);
+        status = Mkdir1(ctx, *parent_dir->value, tgt, mode, stat);
       }
     } else {  // Special case: pathname is root
       status = Status::AlreadyExists(Slice());
@@ -347,19 +347,19 @@ Status FilesystemCli::Mkdir(  ///
 }
 
 Status FilesystemCli::Lstat(  ///
-    const User& who, const AT* const at, const char* const pathname,
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
     Stat* const stat) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
   Status status =
-      Resolu(who, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Lstat1(who, *parent_dir->value, tgt, stat);
+        status = Lstat1(ctx, *parent_dir->value, tgt, stat);
         if (has_tailing_slashes) {
           if (!S_ISDIR(stat->FileMode())) {
             status = Status::DirExpected("Not a dir");
@@ -379,7 +379,7 @@ Status FilesystemCli::Lstat(  ///
 // After a call, the caller must release *parent_dir when it is set. *parent_dir
 // may be set even when an non-OK status is returned.
 Status FilesystemCli::Resolu(  ///
-    const User& who, const AT* const at, const char* const pathname,
+    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
     Lease** parent_dir, Slice* last_component,  ///
     bool* has_tailing_slashes) {
 #define PATH_PREFIX(pathname, remaining_path) \
@@ -389,14 +389,14 @@ Status FilesystemCli::Resolu(  ///
   // Relative root
   Lease* rr;
   if (at != NULL) {
-    status = Lokup(who, at->parent_of_root, at->name, kRegular, &rr);
+    status = Lokup(ctx, at->parent_of_root, at->name, kRegular, &rr);
     if (!status.ok()) {
       return status;
     }
   } else {
     rr = &rtlease_;
   }
-  status = Resolv(who, rr, pathname, parent_dir, last_component, &rp);
+  status = Resolv(ctx, rr, pathname, parent_dir, last_component, &rp);
   if (status.IsDirExpected() && rp) {
     return Status::DirExpected(PATH_PREFIX(pathname, rp));
   } else if (status.IsNotFound() && rp) {
@@ -415,8 +415,8 @@ Status FilesystemCli::Resolu(  ///
 // After a call, the caller must release *parent_dir. One *parent_dir is
 // returned regardless of the return status.
 Status FilesystemCli::Resolv(  ///
-    const User& who, Lease* const relative_root, const char* const pathname,
-    Lease** parent_dir, Slice* last_component,  ///
+    FilesystemCliCtx* const ctx, Lease* const relative_root,
+    const char* pathname, Lease** parent_dir, Slice* last_component,
     const char** remaining_path) {
   assert(pathname);
   const char* p = pathname;
@@ -465,7 +465,7 @@ Status FilesystemCli::Resolv(  ///
     }
     current_name = Slice(p + 1, q - p - 1);
     p = c - 1;
-    status = Lokup(who, *current_parent->value, current_name, kRegular, &tmp);
+    status = Lokup(ctx, *current_parent->value, current_name, kRegular, &tmp);
     if (status.ok()) {
       Release(current_parent);
       current_parent = tmp;
@@ -487,19 +487,19 @@ Status FilesystemCli::Resolv(  ///
 // After a successful call, the caller must release *stat after use. On errors,
 // no lease is returned.
 Status FilesystemCli::Lokup(  ///
-    const User& who, const LookupStat& parent, const Slice& name,
+    FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& name,
     LokupMode mode, Lease** stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;  // Index of the partition holding the name being looked up
-  Status s = AcquireAndFetch(who, parent, name, &dir, &i);
+  Status s = AcquireAndFetch(ctx, parent, name, &dir, &i);
   if (s.ok()) {
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
       // Lokup1() uses per-partition locking. Unlock here...
       mutex_.Unlock();
-      s = Lokup1(who, parent, name, mode, part, stat);
+      s = Lokup1(ctx, parent, name, mode, part, stat);
       mutex_.Lock();
       if (s.ok()) {  // Increase partition ref before returning the lease
         assert(*stat != &rtlease_);
@@ -513,10 +513,11 @@ Status FilesystemCli::Lokup(  ///
 }
 
 Status FilesystemCli::CreateBatch(  ///
-    const User& who, const LookupStat& parent, BatchedCreates** result) {
+    FilesystemCliCtx* const ctx, const LookupStat& parent,
+    BatchedCreates** result) {
   MutexLock lock(&mutex_);
   Dir* dir;
-  Status s = AcquireAndFetch(who, parent, Slice(), &dir, NULL);
+  Status s = AcquireAndFetch(ctx, parent, Slice(), &dir, NULL);
   if (s.ok()) {
     BatchedCreates* bc = new BatchedCreates;
     *result = bc;
@@ -527,7 +528,7 @@ Status FilesystemCli::CreateBatch(  ///
     bc->refs = 0;  // To be increased by the caller
     bc->wribufs = new WriBuf[srvs_];
     bc->dir = dir;
-    bc->who = who;
+    bc->ctx = ctx;
   }
   return s;
 }
@@ -536,14 +537,14 @@ Status FilesystemCli::CreateBatch(  ///
 // errors, no directory handle is returned.
 // REQUIRES: mutex_ has been locked.
 Status FilesystemCli::AcquireAndFetch(  ///
-    const User& who, const LookupStat& parent, const Slice& name, Dir** result,
-    int* i) {
+    FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& name,
+    Dir** result, int* i) {
   mutex_.AssertHeld();
   DirId at(parent);
   Status s = AcquireDir(at, result);
   if (s.ok()) {
     mutex_.Unlock();  // Fetch1() uses per-dir locking
-    s = Fetch1(who, parent, name, *result, i);
+    s = Fetch1(ctx, parent, name, *result, i);
     mutex_.Lock();
     if (!s.ok()) {
       Release(*result);
@@ -601,8 +602,8 @@ bool IsLookupOk(const FilesystemCliOptions& options, const LookupStat& parent,
 }  // namespace
 
 Status FilesystemCli::Fetch1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Dir* const dir,
-    int* const rv) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    Dir* const dir, int* const rv) {
   // If there is an ongoing dir index status change, wait until that change is
   // done before operating upon the index.
   MutexLock lock(dir->mu);
@@ -624,9 +625,9 @@ Status FilesystemCli::Fetch1(  ///
 // will additionally carry a reference to a batch create context embedded within
 // the lease. Such references must also be released after use.
 Status FilesystemCli::Lokup1(  ///
-    const User& who, const LookupStat& p, const Slice& name, LokupMode mode,
-    Partition* const part, Lease** const stat) {
-  if (!IsLookupOk(options_, p, who))  // Parental perm checks
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    LokupMode mode, Partition* const part, Lease** stat) {
+  if (!IsLookupOk(options_, p, ctx->who))  // Parental perm checks
     return Status::AccessDenied("No x perm");
   Lease* lease;
   MutexLock lock(part->mu);
@@ -634,7 +635,7 @@ Status FilesystemCli::Lokup1(  ///
   // in the per-partition lease LRU cache, and for lookups in the per-partition
   // lease table.
   const uint32_t hash = Hash(name.data(), name.size(), 0);
-  Status s = Lokup2(who, p, name, hash, mode, part, &lease);
+  Status s = Lokup2(ctx, p, name, hash, mode, part, &lease);
   if (s.ok()) {
     assert(lease->part == part);  // Pending partition reference increment
     if (mode == kBatchedCreats) {
@@ -648,12 +649,13 @@ Status FilesystemCli::Lokup1(  ///
 }
 
 Status FilesystemCli::Mkfls1(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    bool force_flush, const int i, WriBuf* const buf) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t mode, const bool force_flush, const int i,
+    WriBuf* const buf) {
   Status s;
   MutexLock lock(&buf->mu);  // Shall we use double buffering?
   if (force_flush || buf->n >= options_.batch_size) {
-    s = Mkfls2(who, p, buf->namearr, buf->n, mode, i);
+    s = Mkfls2(ctx, p, buf->namearr, buf->n, mode, i);
     if (s.ok()) {
       buf->namearr.resize(0);
       buf->n = 0;
@@ -667,18 +669,18 @@ Status FilesystemCli::Mkfls1(  ///
 }
 
 Status FilesystemCli::Mkfle1(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t mode, Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
-  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  Status s = AcquireAndFetch(ctx, p, name, &dir, &i);
   if (s.ok()) {
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
-      mutex_.Unlock();  // Mkfle2() uses server-side locking. Unlock here...
-      s = Mkfle2(who, p, name, mode, i, stat);
+      mutex_.Unlock();  // Mkfle2() is serialized by server; unlock here...
+      s = Mkfle2(ctx, p, name, mode, i, stat);
       mutex_.Lock();
       Release(part);
     }
@@ -688,18 +690,18 @@ Status FilesystemCli::Mkfle1(  ///
 }
 
 Status FilesystemCli::Mkdir1(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    Stat* const stat) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t mode, Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
-  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  Status s = AcquireAndFetch(ctx, p, name, &dir, &i);
   if (s.ok()) {
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
-      mutex_.Unlock();  // Mkdir2() uses server-side locking. Unlock here...
-      s = Mkdir2(who, p, name, mode, i, stat);
+      mutex_.Unlock();  // Mkdir2() is serialized by server; unlock here...
+      s = Mkdir2(ctx, p, name, mode, i, stat);
       mutex_.Lock();
       Release(part);
     }
@@ -709,17 +711,18 @@ Status FilesystemCli::Mkdir1(  ///
 }
 
 Status FilesystemCli::Lstat1(  ///
-    const User& who, const LookupStat& p, const Slice& name, Stat* const stat) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    Stat* const stat) {
   MutexLock lock(&mutex_);
   Dir* dir;
   int i;
-  Status s = AcquireAndFetch(who, p, name, &dir, &i);
+  Status s = AcquireAndFetch(ctx, p, name, &dir, &i);
   if (s.ok()) {
     Partition* part;
     s = AcquirePartition(dir, i, &part);
     if (s.ok()) {
-      mutex_.Unlock();  // Lstat2() uses server-side locking. Unlock here...
-      s = Lstat2(who, p, name, i, stat);
+      mutex_.Unlock();  // Lstat2() is serialized by server; unlock here...
+      s = Lstat2(ctx, p, name, i, stat);
       mutex_.Lock();
       Release(part);
     }
@@ -730,8 +733,9 @@ Status FilesystemCli::Lstat1(  ///
 
 // part->mu has been locked.
 Status FilesystemCli::Lokup2(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t hash,
-    LokupMode mode, Partition* const part, Lease** const stat) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t hash, LokupMode mode, Partition* const part,
+    Lease** const stat) {
   part->mu->AssertHeld();
   Lease* lease;
   Status s;
@@ -805,16 +809,15 @@ Status FilesystemCli::Lokup2(  ///
     part->mu->Unlock();
     LookupStat* tmp = new LookupStat;
     if (fs_ != NULL) {
-      s = fs_->Lokup(who, p, name, tmp);
-    } else if (stubs_ != NULL) {
-      assert(part->index < srvs_);
+      s = fs_->Lokup(ctx->who, p, name, tmp);
+    } else if (srv_uris_ != NULL) {
       LokupOptions opts;
       opts.parent = &p;
       opts.name = name;
-      opts.me = who;
+      opts.me = ctx->who;
       LokupRet ret;
       ret.stat = tmp;
-      s = rpc::LokupCli(stubs_[part->index])(opts, &ret);
+      s = rpc::LokupCli(ctx->stubs_[part->index])(opts, &ret);
     } else {
       s = Nofs();
     }
@@ -822,7 +825,7 @@ Status FilesystemCli::Lokup2(  ///
     BatchedCreates* tmpbat = NULL;
     if (s.ok()) {
       if (mode == kBatchedCreats) {
-        s = CreateBatch(who, *tmp, &tmpbat);
+        s = CreateBatch(ctx, *tmp, &tmpbat);
       }
     }
 
@@ -864,23 +867,22 @@ Status FilesystemCli::Lokup2(  ///
 }
 
 Status FilesystemCli::Mkfls2(  ///
-    const User& who, const LookupStat& p, const Slice& namearr, uint32_t n,
-    uint32_t mode, const int i) {
-  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& namearr,
+    uint32_t n, const uint32_t mode, const int i) {
+  if (!IsDirWriteOk(options_, p, ctx->who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
-    s = fs_->Mkfls(who, p, namearr, mode, &n);
-  } else if (stubs_ != NULL) {
-    assert(i < srvs_);
+    s = fs_->Mkfls(ctx->who, p, namearr, mode, &n);
+  } else if (srv_uris_ != NULL) {
     MkflsOptions opts;
     opts.parent = &p;
     opts.namearr = namearr;
     opts.mode = mode;
     opts.n = n;
-    opts.me = who;
+    opts.me = ctx->who;
     MkflsRet ret;
-    s = rpc::MkflsCli(stubs_[i])(opts, &ret);
+    s = rpc::MkflsCli(ctx->stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -889,23 +891,22 @@ Status FilesystemCli::Mkfls2(  ///
 }
 
 Status FilesystemCli::Mkfle2(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    const int i, Stat* const stat) {
-  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t mode, const int i, Stat* const stat) {
+  if (!IsDirWriteOk(options_, p, ctx->who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
-    s = fs_->Mkfle(who, p, name, mode, stat);
-  } else if (stubs_ != NULL) {
-    assert(i < srvs_);
+    s = fs_->Mkfle(ctx->who, p, name, mode, stat);
+  } else if (srv_uris_ != NULL) {
     MkfleOptions opts;
     opts.parent = &p;
     opts.name = name;
     opts.mode = mode;
-    opts.me = who;
+    opts.me = ctx->who;
     MkfleRet ret;
     ret.stat = stat;
-    s = rpc::MkfleCli(stubs_[i])(opts, &ret);
+    s = rpc::MkfleCli(ctx->stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -914,23 +915,22 @@ Status FilesystemCli::Mkfle2(  ///
 }
 
 Status FilesystemCli::Mkdir2(  ///
-    const User& who, const LookupStat& p, const Slice& name, uint32_t mode,
-    const int i, Stat* const stat) {
-  if (!IsDirWriteOk(options_, p, who))  // Parental perm checks
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const uint32_t mode, const int i, Stat* const stat) {
+  if (!IsDirWriteOk(options_, p, ctx->who))  // Parental perm checks
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
-    s = fs_->Mkdir(who, p, name, mode, stat);
-  } else if (stubs_ != NULL) {
-    assert(i < srvs_);
+    s = fs_->Mkdir(ctx->who, p, name, mode, stat);
+  } else if (srv_uris_ != NULL) {
     MkdirOptions opts;
     opts.parent = &p;
     opts.name = name;
     opts.mode = mode;
-    opts.me = who;
+    opts.me = ctx->who;
     MkdirRet ret;
     ret.stat = stat;
-    s = rpc::MkdirCli(stubs_[i])(opts, &ret);
+    s = rpc::MkdirCli(ctx->stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -939,22 +939,21 @@ Status FilesystemCli::Mkdir2(  ///
 }
 
 Status FilesystemCli::Lstat2(  ///
-    const User& who, const LookupStat& p, const Slice& name, const int i,
-    Stat* const stat) {
-  if (!IsLookupOk(options_, p, who))  // Avoid unnecessary server rpc
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const int i, Stat* const stat) {
+  if (!IsLookupOk(options_, p, ctx->who))  // Avoid unnecessary server rpc
     return Status::AccessDenied("No x perm");
   Status s;
   if (fs_ != NULL) {
-    s = fs_->Lstat(who, p, name, stat);
-  } else if (stubs_ != NULL) {
-    assert(i < srvs_);
+    s = fs_->Lstat(ctx->who, p, name, stat);
+  } else if (srv_uris_ != NULL) {
     LstatOptions opts;
     opts.parent = &p;
     opts.name = name;
-    opts.me = who;
+    opts.me = ctx->who;
     LstatRet ret;
     ret.stat = stat;
-    s = rpc::LstatCli(stubs_[i])(opts, &ret);
+    s = rpc::LstatCli(ctx->stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -1254,7 +1253,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
       pars_(NULL),
       options_(options),
       fs_(NULL),
-      stubs_(NULL),
+      srv_uris_(NULL),
       ports_per_srv_(1),
       srvs_(1) {
   dirs_ = new HashTable<Dir>;
@@ -1277,13 +1276,11 @@ FilesystemCliOptions::FilesystemCliOptions()
       batch_size(16),
       skip_perm_checks(false) {}
 
-void FilesystemCli::SetFsSrvs(rpc::If** stubs, int srvs, int ports_per_srv) {
-  stubs_ = stubs;
+void FilesystemCli::RegisterFsSrvUris(  ///
+    const char** uris, int srvs, int ports_per_srv) {
+  srv_uris_ = uris;
   ports_per_srv_ = ports_per_srv;
   srvs_ = srvs;
-  for (int i = 0; i < (srvs_ * ports_per_srv_); i++) {
-    assert(stubs_[i]);
-  }
 }
 
 void FilesystemCli::SetLocalFs(Filesystem* fs) {
@@ -1298,12 +1295,6 @@ FilesystemCli::~FilesystemCli() {
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
   delete dirs_;
-  if (stubs_) {
-    for (int i = 0; i < (srvs_ * ports_per_srv_); i++) {
-      delete stubs_[i];
-    }
-  }
-  delete[] stubs_;
 }
 
 }  // namespace pdlfs

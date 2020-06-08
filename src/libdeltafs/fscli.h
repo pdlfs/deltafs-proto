@@ -49,6 +49,13 @@ struct DirId;
 class Filesystem;
 class DirIndex;
 
+// Client context to make filesystem calls.
+struct FilesystemCliCtx {
+  FilesystemCliCtx() {}  // Not initialized for performance
+  rpc::If** stubs_;
+  User who;
+};
+
 struct FilesystemCliOptions {
   FilesystemCliOptions();
   size_t per_partition_lease_lru_size;
@@ -62,39 +69,40 @@ struct FilesystemCliOptions {
 class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
-  void SetFsSrvs(rpc::If** stubs, int srvs, int ports_per_srv = 1);
+  void RegisterFsSrvUris(const char** uris, int srvs, int ports_per_srv = 1);
   void SetLocalFs(Filesystem* fs);
   ~FilesystemCli();
 
   // Reference to a resolved parent directory serving as a relative root for
   // pathnames
   struct AT;
-  Status Atdir(const User& who, const AT* at, const char* pathname, AT**);
+  Status Atdir(FilesystemCliCtx* ctx, const AT* at, const char* pathname, AT**);
   void Destroy(AT* at);
 
-  Status Mkfle(const User& who, const AT* at, const char* pathname,
+  Status Mkfle(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
-  Status Mkdir(const User& who, const AT* at, const char* pathname,
+  Status Mkdir(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                uint32_t mode, Stat* stat);
-  Status Lstat(const User& who, const AT* at, const char* pathname, Stat* stat);
+  Status Lstat(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
+               Stat* stat);
 
   // Reference to a batch of create operations buffered at the client under a
   // server-issued parent dir lease
   struct BAT;
-  Status BatchStart(const User& who, const AT* at, const char* pathname,
+  Status BatchStart(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                     BAT** bat);
   Status BatchInsert(BAT* bat, const char* name);
   Status BatchCommit(BAT* bat);
   Status BatchEnd(BAT* bat);
 
-  Status TEST_Mkfle(const User& who, const LookupStat& parent,
+  Status TEST_Mkfle(FilesystemCliCtx* ctx, const LookupStat& parent,
                     const Slice& fname, const Stat& stat,
                     FilesystemDbStats* stats);
-  Status TEST_Mkfle(const User& who, const char* pathname, const Stat& stat,
-                    FilesystemDbStats* stats);
-  Status TEST_Lstat(const User& who, const LookupStat& parent,
+  Status TEST_Mkfle(FilesystemCliCtx* ctx, const char* pathname,
+                    const Stat& stat, FilesystemDbStats* stats);
+  Status TEST_Lstat(FilesystemCliCtx* ctx, const LookupStat& parent,
                     const Slice& fname, Stat* stat, FilesystemDbStats* stats);
-  Status TEST_Lstat(const User& who, const char* pathname, Stat* stat,
+  Status TEST_Lstat(FilesystemCliCtx* ctx, const char* pathname, Stat* stat,
                     FilesystemDbStats* stats);
   uint32_t TEST_TotalLeasesAtPartition(const DirId& dir_id, int ix);
   Status TEST_ProbePartition(const DirId& dir_id, int ix);
@@ -116,47 +124,50 @@ class FilesystemCli {
   // called instead of it. When the input filesystem path points to the root
   // directory, the root directory itself is returned as the parent directory
   // and the name of the last component of the path is set to empty.
-  Status Resolu(const User& who, const AT* at, const char* pathname,
+  Status Resolu(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                 Lease** parent_dir, Slice* last_component,
                 bool* has_tailing_slashes);
   // Resolve a filesystem path down to the last component of the path. On
   // success, return the name of the last component and a lease on its parent
   // directory. Return a non-OK status on error. Path following (not including)
   // the erroneous directory is returned as well to assist debugging.
-  Status Resolv(const User& who, Lease* relative_root, const char* pathname,
-                Lease** parent_dir, Slice* last_component,
+  Status Resolv(FilesystemCliCtx* ctx, Lease* relative_root,
+                const char* pathname, Lease** parent_dir, Slice* last_component,
                 const char** remaining_path);
 
-  Status Lokup(const User& who, const LookupStat& parent, const Slice& name,
-               LokupMode mode, Lease** stat);
-  Status CreateBatch(const User& who, const LookupStat& parent,
+  Status Lokup(FilesystemCliCtx* ctx, const LookupStat& parent,
+               const Slice& name, LokupMode mode, Lease** stat);
+  Status CreateBatch(FilesystemCliCtx* ctx, const LookupStat& parent,
                      BatchedCreates**);
-  Status AcquireAndFetch(const User& who, const LookupStat& parent,
-                         const Slice& name, Dir**, int*);
+  Status AcquireAndFetch(FilesystemCliCtx* ctx, const LookupStat& parent,
+                         const Slice& name, Dir**, int* idx);
 
-  Status Fetch1(const User& who, const LookupStat& parent, const Slice& name,
-                Dir* dir, int*);
-  Status Lokup1(const User& who, const LookupStat& parent, const Slice& name,
-                LokupMode mode, Partition* part, Lease** stat);
-  Status Mkfls1(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t mode, bool force_flush, int i, WriBuf* buf);
-  Status Mkfle1(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t mode, Stat* stat);
-  Status Mkdir1(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t mode, Stat* stat);
-  Status Lstat1(const User& who, const LookupStat& parent, const Slice& name,
-                Stat* stat);
+  Status Fetch1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, Dir* dir, int*);
+  Status Lokup1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, LokupMode mode, Partition* part,
+                Lease** stat);
+  Status Mkfls1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t mode, bool force_flush, int idx,
+                WriBuf* buf);
+  Status Mkfle1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t mode, Stat* stat);
+  Status Mkdir1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t mode, Stat* stat);
+  Status Lstat1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, Stat* stat);
 
-  Status Lokup2(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t hash, LokupMode mode, Partition* part, Lease** stat);
-  Status Mkfls2(const User& who, const LookupStat& parent, const Slice& namearr,
-                uint32_t n, uint32_t mode, int i);
-  Status Mkfle2(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t mode, int i, Stat* stat);
-  Status Mkdir2(const User& who, const LookupStat& parent, const Slice& name,
-                uint32_t mode, int i, Stat* stat);
-  Status Lstat2(const User& who, const LookupStat& parent, const Slice& name,
-                int i, Stat* stat);
+  Status Lokup2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t hash, LokupMode mode,
+                Partition* part, Lease** stat);
+  Status Mkfls2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& namearr, uint32_t n, uint32_t mode, int idx);
+  Status Mkfle2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t mode, int i, Stat* stat);
+  Status Mkdir2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, uint32_t mode, int i, Stat* stat);
+  Status Lstat2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const Slice& name, int i, Stat* stat);
 
   // No copying allowed
   void operator=(const FilesystemCli& cli);
@@ -168,7 +179,7 @@ class FilesystemCli {
     uint32_t n;
   };
   struct BatchedCreates {
-    User who;
+    FilesystemCliCtx* ctx;
     uint32_t mode;
     uint32_t refs;
     port::Mutex mu;
@@ -286,7 +297,7 @@ class FilesystemCli {
   Filesystem* fs_;  // This is a weak reference; fs_ is not owned by us
   // The following is set when running in the
   // traditional client-server mode
-  rpc::If** stubs_;
+  const char** srv_uris_;  // Not owned by us
   int ports_per_srv_;
   int srvs_;
 };
