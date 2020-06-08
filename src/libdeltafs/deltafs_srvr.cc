@@ -39,6 +39,7 @@
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
 
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
@@ -410,25 +411,29 @@ class Server {
       svrs_.push_back(svr);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    std::string info;
-    if (FLAGS_rank != 0) {  // Send addr info to rank 0
+    // A svr map consists of a port map, an ip map, and a footer specifying the
+    // total number of svrs and the number of ports per svr.
+    std::string svr_map;
+    if (FLAGS_rank != 0) {  // Non-roots send their addr info to the root
       MPI_Gather(&myports[0], np, MPI_UNSIGNED_SHORT, NULL, np,
                  MPI_UNSIGNED_SHORT, 0, MPI_COMM_WORLD);
       MPI_Gather(&myip, 1, MPI_UNSIGNED, NULL, 1, MPI_UNSIGNED, 0,
                  MPI_COMM_WORLD);
-    } else {
+    } else {  // Root gathers info from non-roots and starts the info svr
       size_t size_per_rank = 2 * np + 4;
-      info.resize(size_per_rank * FLAGS_comm_size);
+      svr_map.resize(size_per_rank * FLAGS_comm_size + 8);
+      EncodeFixed32(&svr_map[svr_map.size() - 8], FLAGS_comm_size);
+      EncodeFixed32(&svr_map[svr_map.size() - 4], np);
       unsigned short* const port_info =
-          reinterpret_cast<unsigned short*>(&info[0]);
+          reinterpret_cast<unsigned short*>(&svr_map[0]);
       unsigned* const ip_info =
-          reinterpret_cast<unsigned*>(&info[2 * np * FLAGS_comm_size]);
+          reinterpret_cast<unsigned*>(&svr_map[2 * np * FLAGS_comm_size]);
       MPI_Gather(&myports[0], np, MPI_UNSIGNED_SHORT, port_info, np,
                  MPI_UNSIGNED_SHORT, 0, MPI_COMM_WORLD);
       MPI_Gather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED, 0,
                  MPI_COMM_WORLD);
       infosvr_ = OpenInfoPort(ip_str);
-      infosvr_->SetInfo(0, info);
+      infosvr_->SetInfo(0, svr_map);
       if (FLAGS_print_ips) {
         struct in_addr tmp_addr;
         puts("Dumping fs uri(s) >>>");
