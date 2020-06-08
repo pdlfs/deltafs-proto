@@ -972,8 +972,9 @@ rpc::If* FilesystemCli::PrepareStub(  ///
   if (!ctx->stubs_) {
     ctx->stubs_ = new rpc::If*[srvs_ * ports_per_srv_];
     memset(ctx->stubs_, 0, sizeof(rpc::If*) * srvs_ * ports_per_srv_);
+    ctx->n = srvs_ * ports_per_srv_;
   }
-  int i = srv_idx * ports_per_srv_;
+  const int i = srv_idx * ports_per_srv_;
   if (!ctx->stubs_[i]) {
     ctx->stubs_[i] = rpc_->OpenStubFor(srv_uris_[i]);
   }
@@ -1290,7 +1291,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   rtlease_.batch = NULL;
 }
 
-FilesystemCliCtx::FilesystemCliCtx() : stubs_(NULL) {}
+FilesystemCliCtx::FilesystemCliCtx() : stubs_(NULL), n(0) {}
 
 FilesystemCliOptions::FilesystemCliOptions()
     : per_partition_lease_lru_size(4096),
@@ -1308,6 +1309,15 @@ void FilesystemCli::RegisterFsSrvUris(  ///
 
 void FilesystemCli::SetLocalFs(Filesystem* fs) {
   fs_ = fs;  // This is a weak reference; fs_ is not owned by us
+}
+
+FilesystemCliCtx::~FilesystemCliCtx() {
+  if (stubs_) {
+    for (int i = 0; i < n; i++) {
+      delete stubs_[i];
+    }
+  }
+  delete[] stubs_;
 }
 
 FilesystemCli::~FilesystemCli() {

@@ -52,8 +52,10 @@ class DirIndex;
 // Client context to make filesystem calls.
 struct FilesystemCliCtx {
   FilesystemCliCtx();
-  rpc::If** stubs_;
+  ~FilesystemCliCtx();
   User who;
+  rpc::If** stubs_;
+  int n;
 };
 
 struct FilesystemCliOptions {
