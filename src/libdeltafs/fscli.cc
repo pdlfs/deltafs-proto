@@ -972,7 +972,7 @@ rpc::If* FilesystemCli::PrepareStub(  ///
   if (!ctx->stubs_) {
     ctx->stubs_ = new rpc::If*[srvs_ * ports_per_srv_];
     memset(ctx->stubs_, 0, sizeof(rpc::If*) * srvs_ * ports_per_srv_);
-    ctx->n = srvs_ * ports_per_srv_;
+    ctx->n_ = srvs_ * ports_per_srv_;
   }
   const int i = srv_idx * ports_per_srv_;
   if (!ctx->stubs_[i]) {

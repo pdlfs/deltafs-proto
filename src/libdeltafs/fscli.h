@@ -53,15 +53,15 @@ class DirIndex;
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
  public:
-  FilesystemCliCtx() : stubs_(NULL), n(0) {}
+  FilesystemCliCtx() : stubs_(NULL), n_(0) {}
 
   ~FilesystemCliCtx() {
     if (stubs_) {
-      for (int i = 0; i < n; i++) {
+      for (int i = 0; i < n_; i++) {
         delete stubs_[i];
       }
-      delete[] stubs_;
     }
+    delete[] stubs_;
   }
 
   User who;
@@ -69,7 +69,7 @@ class FilesystemCliCtx {
  private:
   friend class FilesystemCli;
   rpc::If** stubs_;
-  int n;
+  int n_;
 };
 
 struct FilesystemCliOptions {
