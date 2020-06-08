@@ -51,7 +51,7 @@ class DirIndex;
 
 // Client context to make filesystem calls.
 struct FilesystemCliCtx {
-  FilesystemCliCtx() {}  // Not initialized for performance
+  FilesystemCliCtx();
   rpc::If** stubs_;
   User who;
 };
@@ -69,7 +69,8 @@ struct FilesystemCliOptions {
 class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
-  void RegisterFsSrvUris(const char** uris, int srvs, int ports_per_srv = 1);
+  void RegisterFsSrvUris(RPC* rpc, const char** uris, int srvs,
+                         int ports_per_srv = 1);
   void SetLocalFs(Filesystem* fs);
   ~FilesystemCli();
 
@@ -148,7 +149,7 @@ class FilesystemCli {
                 const Slice& name, LokupMode mode, Partition* part,
                 Lease** stat);
   Status Mkfls1(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const Slice& name, uint32_t mode, bool force_flush, int idx,
+                const Slice& name, uint32_t mode, bool force_flush, int srv_idx,
                 WriBuf* buf);
   Status Mkfle1(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& name, uint32_t mode, Stat* stat);
@@ -161,13 +162,15 @@ class FilesystemCli {
                 const Slice& name, uint32_t hash, LokupMode mode,
                 Partition* part, Lease** stat);
   Status Mkfls2(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const Slice& namearr, uint32_t n, uint32_t mode, int idx);
+                const Slice& namearr, uint32_t n, uint32_t mode, int srv_idx);
   Status Mkfle2(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const Slice& name, uint32_t mode, int i, Stat* stat);
+                const Slice& name, uint32_t mode, int srv_idx, Stat* stat);
   Status Mkdir2(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const Slice& name, uint32_t mode, int i, Stat* stat);
+                const Slice& name, uint32_t mode, int srv_idx, Stat* stat);
   Status Lstat2(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const Slice& name, int i, Stat* stat);
+                const Slice& name, int srv_idx, Stat* stat);
+
+  rpc::If* PrepareStub(FilesystemCliCtx* ctx, int srv_idx);
 
   // No copying allowed
   void operator=(const FilesystemCli& cli);
@@ -300,6 +303,7 @@ class FilesystemCli {
   const char** srv_uris_;  // Not owned by us
   int ports_per_srv_;
   int srvs_;
+  RPC* rpc_;  // Not owned by us
 };
 
 }  // namespace pdlfs

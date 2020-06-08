@@ -810,14 +810,15 @@ Status FilesystemCli::Lokup2(  ///
     LookupStat* tmp = new LookupStat;
     if (fs_ != NULL) {
       s = fs_->Lokup(ctx->who, p, name, tmp);
-    } else if (srv_uris_ != NULL) {
+    } else if (rpc_ != NULL) {
       LokupOptions opts;
       opts.parent = &p;
       opts.name = name;
       opts.me = ctx->who;
       LokupRet ret;
       ret.stat = tmp;
-      s = rpc::LokupCli(ctx->stubs_[part->index])(opts, &ret);
+      rpc::If* const stub = PrepareStub(ctx, part->index);
+      s = rpc::LokupCli(stub)(opts, &ret);
     } else {
       s = Nofs();
     }
@@ -874,7 +875,7 @@ Status FilesystemCli::Mkfls2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkfls(ctx->who, p, namearr, mode, &n);
-  } else if (srv_uris_ != NULL) {
+  } else if (rpc_ != NULL) {
     MkflsOptions opts;
     opts.parent = &p;
     opts.namearr = namearr;
@@ -882,7 +883,8 @@ Status FilesystemCli::Mkfls2(  ///
     opts.n = n;
     opts.me = ctx->who;
     MkflsRet ret;
-    s = rpc::MkflsCli(ctx->stubs_[i])(opts, &ret);
+    rpc::If* const stub = PrepareStub(ctx, i);
+    s = rpc::MkflsCli(stub)(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -898,7 +900,7 @@ Status FilesystemCli::Mkfle2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkfle(ctx->who, p, name, mode, stat);
-  } else if (srv_uris_ != NULL) {
+  } else if (rpc_ != NULL) {
     MkfleOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -906,7 +908,8 @@ Status FilesystemCli::Mkfle2(  ///
     opts.me = ctx->who;
     MkfleRet ret;
     ret.stat = stat;
-    s = rpc::MkfleCli(ctx->stubs_[i])(opts, &ret);
+    rpc::If* const stub = PrepareStub(ctx, i);
+    s = rpc::MkfleCli(stub)(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -922,7 +925,7 @@ Status FilesystemCli::Mkdir2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkdir(ctx->who, p, name, mode, stat);
-  } else if (srv_uris_ != NULL) {
+  } else if (rpc_ != NULL) {
     MkdirOptions opts;
     opts.parent = &p;
     opts.name = name;
@@ -930,7 +933,8 @@ Status FilesystemCli::Mkdir2(  ///
     opts.me = ctx->who;
     MkdirRet ret;
     ret.stat = stat;
-    s = rpc::MkdirCli(ctx->stubs_[i])(opts, &ret);
+    rpc::If* const stub = PrepareStub(ctx, i);
+    s = rpc::MkdirCli(stub)(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -946,19 +950,34 @@ Status FilesystemCli::Lstat2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Lstat(ctx->who, p, name, stat);
-  } else if (srv_uris_ != NULL) {
+  } else if (rpc_ != NULL) {
     LstatOptions opts;
     opts.parent = &p;
     opts.name = name;
     opts.me = ctx->who;
     LstatRet ret;
     ret.stat = stat;
-    s = rpc::LstatCli(ctx->stubs_[i])(opts, &ret);
+    rpc::If* const stub = PrepareStub(ctx, i);
+    s = rpc::LstatCli(stub)(opts, &ret);
   } else {
     s = Nofs();
   }
 
   return s;
+}
+
+rpc::If* FilesystemCli::PrepareStub(  ///
+    FilesystemCliCtx* const ctx, const int srv_idx) {
+  assert(srv_idx < srvs_);
+  if (!ctx->stubs_) {
+    ctx->stubs_ = new rpc::If*[srvs_ * ports_per_srv_];
+    memset(ctx->stubs_, 0, sizeof(rpc::If*) * srvs_ * ports_per_srv_);
+  }
+  int i = srv_idx * ports_per_srv_;
+  if (!ctx->stubs_[i]) {
+    ctx->stubs_[i] = rpc_->OpenStubFor(srv_uris_[i]);
+  }
+  return ctx->stubs_[i];
 }
 
 // This function is called when the last reference to a directory lease is
@@ -1255,7 +1274,8 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
       fs_(NULL),
       srv_uris_(NULL),
       ports_per_srv_(1),
-      srvs_(1) {
+      srvs_(1),
+      rpc_(NULL) {
   dirs_ = new HashTable<Dir>;
   dirlist_.next = &dirlist_;
   dirlist_.prev = &dirlist_;
@@ -1270,6 +1290,8 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   rtlease_.batch = NULL;
 }
 
+FilesystemCliCtx::FilesystemCliCtx() : stubs_(NULL) {}
+
 FilesystemCliOptions::FilesystemCliOptions()
     : per_partition_lease_lru_size(4096),
       partition_lru_size(4096),
@@ -1277,7 +1299,8 @@ FilesystemCliOptions::FilesystemCliOptions()
       skip_perm_checks(false) {}
 
 void FilesystemCli::RegisterFsSrvUris(  ///
-    const char** uris, int srvs, int ports_per_srv) {
+    RPC* rpc, const char** uris, int srvs, int ports_per_srv) {
+  rpc_ = rpc;
   srv_uris_ = uris;
   ports_per_srv_ = ports_per_srv;
   srvs_ = srvs;
