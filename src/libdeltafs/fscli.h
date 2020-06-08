@@ -46,14 +46,28 @@ struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
 
+class FilesystemCli;
 class Filesystem;
 class DirIndex;
 
 // Client context to make filesystem calls.
-struct FilesystemCliCtx {
-  FilesystemCliCtx();
-  ~FilesystemCliCtx();
+class FilesystemCliCtx {
+ public:
+  FilesystemCliCtx() : stubs_(NULL), n(0) {}
+
+  ~FilesystemCliCtx() {
+    if (stubs_) {
+      for (int i = 0; i < n; i++) {
+        delete stubs_[i];
+      }
+      delete[] stubs_;
+    }
+  }
+
   User who;
+
+ private:
+  friend class FilesystemCli;
   rpc::If** stubs_;
   int n;
 };

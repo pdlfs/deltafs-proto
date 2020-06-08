@@ -1291,8 +1291,6 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
   rtlease_.batch = NULL;
 }
 
-FilesystemCliCtx::FilesystemCliCtx() : stubs_(NULL), n(0) {}
-
 FilesystemCliOptions::FilesystemCliOptions()
     : per_partition_lease_lru_size(4096),
       partition_lru_size(4096),
@@ -1309,15 +1307,6 @@ void FilesystemCli::RegisterFsSrvUris(  ///
 
 void FilesystemCli::SetLocalFs(Filesystem* fs) {
   fs_ = fs;  // This is a weak reference; fs_ is not owned by us
-}
-
-FilesystemCliCtx::~FilesystemCliCtx() {
-  if (stubs_) {
-    for (int i = 0; i < n; i++) {
-      delete stubs_[i];
-    }
-  }
-  delete[] stubs_;
 }
 
 FilesystemCli::~FilesystemCli() {
