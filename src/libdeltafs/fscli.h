@@ -62,6 +62,7 @@ struct FilesystemCliOptions {
 class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
+  void SetFsSrvs(rpc::If** stubs, int srvs, int ports_per_srv = 1);
   void SetLocalFs(Filesystem* fs);
   ~FilesystemCli();
 
@@ -285,7 +286,7 @@ class FilesystemCli {
   Filesystem* fs_;  // This is a weak reference; fs_ is not owned by us
   // The following is set when running in the
   // traditional client-server mode
-  rpc::If** stub_;
+  rpc::If** stubs_;
   int ports_per_srv_;
   int srvs_;
 };

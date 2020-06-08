@@ -806,7 +806,7 @@ Status FilesystemCli::Lokup2(  ///
     LookupStat* tmp = new LookupStat;
     if (fs_ != NULL) {
       s = fs_->Lokup(who, p, name, tmp);
-    } else if (stub_ != NULL) {
+    } else if (stubs_ != NULL) {
       assert(part->index < srvs_);
       LokupOptions opts;
       opts.parent = &p;
@@ -814,7 +814,7 @@ Status FilesystemCli::Lokup2(  ///
       opts.me = who;
       LokupRet ret;
       ret.stat = tmp;
-      s = rpc::LokupCli(stub_[part->index])(opts, &ret);
+      s = rpc::LokupCli(stubs_[part->index])(opts, &ret);
     } else {
       s = Nofs();
     }
@@ -871,7 +871,7 @@ Status FilesystemCli::Mkfls2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkfls(who, p, namearr, mode, &n);
-  } else if (stub_ != NULL) {
+  } else if (stubs_ != NULL) {
     assert(i < srvs_);
     MkflsOptions opts;
     opts.parent = &p;
@@ -880,7 +880,7 @@ Status FilesystemCli::Mkfls2(  ///
     opts.n = n;
     opts.me = who;
     MkflsRet ret;
-    s = rpc::MkflsCli(stub_[i])(opts, &ret);
+    s = rpc::MkflsCli(stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -896,7 +896,7 @@ Status FilesystemCli::Mkfle2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkfle(who, p, name, mode, stat);
-  } else if (stub_ != NULL) {
+  } else if (stubs_ != NULL) {
     assert(i < srvs_);
     MkfleOptions opts;
     opts.parent = &p;
@@ -905,7 +905,7 @@ Status FilesystemCli::Mkfle2(  ///
     opts.me = who;
     MkfleRet ret;
     ret.stat = stat;
-    s = rpc::MkfleCli(stub_[i])(opts, &ret);
+    s = rpc::MkfleCli(stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -921,7 +921,7 @@ Status FilesystemCli::Mkdir2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Mkdir(who, p, name, mode, stat);
-  } else if (stub_ != NULL) {
+  } else if (stubs_ != NULL) {
     assert(i < srvs_);
     MkdirOptions opts;
     opts.parent = &p;
@@ -930,7 +930,7 @@ Status FilesystemCli::Mkdir2(  ///
     opts.me = who;
     MkdirRet ret;
     ret.stat = stat;
-    s = rpc::MkdirCli(stub_[i])(opts, &ret);
+    s = rpc::MkdirCli(stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -946,7 +946,7 @@ Status FilesystemCli::Lstat2(  ///
   Status s;
   if (fs_ != NULL) {
     s = fs_->Lstat(who, p, name, stat);
-  } else if (stub_ != NULL) {
+  } else if (stubs_ != NULL) {
     assert(i < srvs_);
     LstatOptions opts;
     opts.parent = &p;
@@ -954,7 +954,7 @@ Status FilesystemCli::Lstat2(  ///
     opts.me = who;
     LstatRet ret;
     ret.stat = stat;
-    s = rpc::LstatCli(stub_[i])(opts, &ret);
+    s = rpc::LstatCli(stubs_[i])(opts, &ret);
   } else {
     s = Nofs();
   }
@@ -1254,7 +1254,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
       pars_(NULL),
       options_(options),
       fs_(NULL),
-      stub_(NULL),
+      stubs_(NULL),
       ports_per_srv_(1),
       srvs_(1) {
   dirs_ = new HashTable<Dir>;
@@ -1277,6 +1277,15 @@ FilesystemCliOptions::FilesystemCliOptions()
       batch_size(16),
       skip_perm_checks(false) {}
 
+void FilesystemCli::SetFsSrvs(rpc::If** stubs, int srvs, int ports_per_srv) {
+  stubs_ = stubs;
+  ports_per_srv_ = ports_per_srv;
+  srvs_ = srvs;
+  for (int i = 0; i < (srvs_ * ports_per_srv_); i++) {
+    assert(stubs_[i]);
+  }
+}
+
 void FilesystemCli::SetLocalFs(Filesystem* fs) {
   fs_ = fs;  // This is a weak reference; fs_ is not owned by us
 }
@@ -1289,12 +1298,12 @@ FilesystemCli::~FilesystemCli() {
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
   delete dirs_;
-  if (stub_) {
+  if (stubs_) {
     for (int i = 0; i < (srvs_ * ports_per_srv_); i++) {
-      delete stub_[i];
+      delete stubs_[i];
     }
   }
-  delete[] stub_;
+  delete[] stubs_;
 }
 
 }  // namespace pdlfs
