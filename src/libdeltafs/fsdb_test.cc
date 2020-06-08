@@ -770,6 +770,8 @@ class Benchmark {
   void DoWrite(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
+    FilesystemCliCtx ctx;
+    ctx.who = me_;
     char tmp[20];
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
@@ -781,12 +783,12 @@ class Benchmark {
           std::string* const p = &thread->pathname;
           p->resize(thread->prefix_length);
           p->append(fname.data(), fname.size());
-          s = fscli_->TEST_Mkfle(me_, p->c_str(), thread->stat, &stats);
+          s = fscli_->TEST_Mkfle(&ctx, p->c_str(), thread->stat, &stats);
           break;
         }
         case kFsCliApi:
-          s = fscli_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
-                                 &stats);
+          s = fscli_->TEST_Mkfle(&ctx, thread->parent_lstat, fname,
+                                 thread->stat, &stats);
           break;
         case kFsApi:
           s = fs_->TEST_Mkfle(me_, thread->parent_lstat, fname, thread->stat,
@@ -843,6 +845,8 @@ class Benchmark {
   void DoRead(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
+    FilesystemCliCtx ctx;
+    ctx.who = me_;
     char tmp[20];
     Stat buf;
     int found = 0;
@@ -855,11 +859,11 @@ class Benchmark {
           std::string* const p = &thread->pathname;
           p->resize(thread->prefix_length);
           p->append(fname.data(), fname.size());
-          s = fscli_->TEST_Lstat(me_, p->c_str(), &buf, &stats);
+          s = fscli_->TEST_Lstat(&ctx, p->c_str(), &buf, &stats);
           break;
         }
         case kFsCliApi:
-          s = fscli_->TEST_Lstat(me_, thread->parent_lstat, fname, &buf,
+          s = fscli_->TEST_Lstat(&ctx, thread->parent_lstat, fname, &buf,
                                  &stats);
           break;
         case kFsApi:

@@ -55,6 +55,7 @@ class FilesystemCliTest {
         fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
+    myctx_.who = me_;
   }
 
   Status OpenFilesystemCli() {
@@ -76,23 +77,23 @@ class FilesystemCliTest {
   }
 
   Status Atdir(const char* path, AT** result, const AT* at = NULL) {
-    return fscli_->Atdir(me_, at, path, result);
+    return fscli_->Atdir(&myctx_, at, path, result);
   }
 
   Status Creat(const char* path, const AT* at = NULL) {
-    return fscli_->Mkfle(me_, at, path, 0660, &tmp_);
+    return fscli_->Mkfle(&myctx_, at, path, 0660, &tmp_);
   }
 
   Status Mkdir(const char* path, const AT* at = NULL) {
-    return fscli_->Mkdir(me_, at, path, 0770, &tmp_);
+    return fscli_->Mkdir(&myctx_, at, path, 0770, &tmp_);
   }
 
   Status Exist(const char* path, const AT* at = NULL) {
-    return fscli_->Lstat(me_, at, path, &tmp_);
+    return fscli_->Lstat(&myctx_, at, path, &tmp_);
   }
 
   Status BatchStart(const char* path, BATCH** result, const AT* at = NULL) {
-    return fscli_->BatchStart(me_, at, path, result);
+    return fscli_->BatchStart(&myctx_, at, path, result);
   }
 
   Status BatchInsert(const char* name, BATCH* batch) {
@@ -114,6 +115,7 @@ class FilesystemCliTest {
   Filesystem* fs_;
   FilesystemCliOptions fscliopts_;
   FilesystemCli* fscli_;
+  FilesystemCliCtx myctx_;
   std::string fsloc_;
   User me_;
 };
