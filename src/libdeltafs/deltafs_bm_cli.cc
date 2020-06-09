@@ -66,12 +66,14 @@ class Benchmark {
           &svr_map[2 * num_ports_per_svr_ * num_svrs_]);
     }
 
-    virtual std::string GetUri(int srv_idx, int port_idx) const {
+    virtual std::string GetUri(int svr_idx, int port_idx) const {
+      assert(svr_idx < num_svrs_);
+      assert(port_idx < num_ports_per_svr_);
       char tmp[50];
       struct in_addr tmp_addr;
-      tmp_addr.s_addr = ip_map_[srv_idx];
+      tmp_addr.s_addr = ip_map_[svr_idx];
       snprintf(tmp, sizeof(tmp), "udp://%s:%hu", inet_ntoa(tmp_addr),
-               port_map_[srv_idx * num_ports_per_svr_ + port_idx]);
+               port_map_[svr_idx * num_ports_per_svr_ + port_idx]);
       return tmp;
     }
 
@@ -144,13 +146,18 @@ class Benchmark {
         fflush(stdout);
       }
     }
-
     FilesystemCliOptions cliopts;
+    cliopts.skip_perm_checks = false;
     fscli_ = new FilesystemCli(cliopts);
+    fscli_->RegisterFsSrvUris(rpc_, uri_mapper_, num_svrs, num_ports_per_svr);
+  }
+
+  void DoWork() {
+    //
   }
 
  public:
-  Benchmark() : fscli_(NULL), rpc_(NULL) {}
+  Benchmark() : fscli_(NULL), uri_mapper_(NULL), rpc_(NULL) {}
 
   ~Benchmark() {
     delete fscli_;
@@ -183,6 +190,7 @@ class Benchmark {
       exit(1);
     }
     Open(num_svrs, num_ports_per_svr);
+    DoWork();
   }
 };
 
