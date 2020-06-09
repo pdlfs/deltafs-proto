@@ -486,6 +486,8 @@ void HandleSig(const int sig) {
 }
 
 void Doit(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_dbopts.enable_io_monitoring = true;
+  pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
 
