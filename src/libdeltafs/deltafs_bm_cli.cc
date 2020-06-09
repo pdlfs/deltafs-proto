@@ -281,11 +281,81 @@ class Benchmark {
   RPC* rpc_;
 
   static void PrintHeader() {
+    PrintWarnings();
+    PrintEnvironment();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info svr:        %s\n", FLAGS_info_svr_uri);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
     fprintf(stdout, "------------------------------------------------\n");
+  }
+
+  static void PrintWarnings() {
+#if defined(__GNUC__) && !defined(__OPTIMIZE__)
+    fprintf(stdout, "WARNING: C++ optimization disabled\n");
+#endif
+#ifndef NDEBUG
+    fprintf(stdout, "WARNING: C++ assertions are on\n");
+#endif
+
+    // See if snappy is working by attempting to compress a compressible string
+    const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+    std::string compressed;
+    if (!port::Snappy_Compress(text, sizeof(text), &compressed)) {
+      fprintf(stdout, "WARNING: Snappy compression is not enabled\n");
+    } else if (compressed.size() >= sizeof(text)) {
+      fprintf(stdout, "WARNING: Snappy compression is not effective\n");
+    }
+  }
+
+#if defined(PDLFS_OS_LINUX)
+  static Slice TrimSpace(Slice s) {
+    size_t start = 0;
+    while (start < s.size() && isspace(s[start])) {
+      start++;
+    }
+    size_t limit = s.size();
+    while (limit > start && isspace(s[limit - 1])) {
+      limit--;
+    }
+
+    Slice r = s;
+    r.remove_suffix(s.size() - limit);
+    r.remove_prefix(start);
+    return r;
+  }
+#endif
+
+  static void PrintEnvironment() {
+#if defined(PDLFS_OS_LINUX)
+    time_t now = time(NULL);
+    fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
+
+    FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
+    if (cpuinfo != NULL) {
+      char line[1000];
+      int num_cpus = 0;
+      std::string cpu_type;
+      std::string cache_size;
+      while (fgets(line, sizeof(line), cpuinfo) != NULL) {
+        const char* sep = strchr(line, ':');
+        if (sep == NULL) {
+          continue;
+        }
+        Slice key = TrimSpace(Slice(line, sep - 1 - line));
+        Slice val = TrimSpace(Slice(sep + 1));
+        if (key == "model name") {
+          ++num_cpus;
+          cpu_type = val.ToString();
+        } else if (key == "cache size") {
+          cache_size = val.ToString();
+        }
+      }
+      fclose(cpuinfo);
+      fprintf(stderr, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
+      fprintf(stderr, "CPUCache:   %s\n", cache_size.c_str());
+    }
+#endif
   }
 
   static bool ParseMapData(  ///
