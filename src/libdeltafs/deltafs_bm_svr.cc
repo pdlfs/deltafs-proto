@@ -143,9 +143,35 @@ class Server {
     PrintWarnings();
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
-    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "FS info port:       %d\n", FLAGS_info_port);
+    fprintf(stdout, "FS skip checks:     %d\n", FLAGS_skip_fs_checks);
+    fprintf(stdout, "IP:                 %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
+    fprintf(stdout, "BLK cache size:     %d MB\n",
+            int(FLAGS_dbopts.block_cache_size >> 20));
+    fprintf(stdout, "BLK size:           %d KB\n",
+            int(FLAGS_dbopts.block_size >> 10));
+    fprintf(stdout, "Bloom bits:         %d\n",
+            int(FLAGS_dbopts.filter_bits_per_key));
+    fprintf(stdout, "Max open tables:    %d\n",
+            int(FLAGS_dbopts.table_cache_size));
+    fprintf(stdout, "Io monitoring:      %d\n",
+            FLAGS_dbopts.enable_io_monitoring);
+    fprintf(stdout, "WAL off:            %d\n",
+            FLAGS_dbopts.disable_write_ahead_logging);
+    fprintf(stdout, "WAL write buffer:   %d KB\n",
+            int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
+    fprintf(stdout, "Lsm compaction off: %d\n",
+            FLAGS_dbopts.disable_compaction);
+    fprintf(stdout, "MEMTABLE size:      %d MB\n",
+            int(FLAGS_dbopts.memtable_size >> 20));
+    fprintf(stdout, "SST size:           %d MB\n",
+            int(FLAGS_dbopts.table_size >> 20));
+    fprintf(stdout, "SST write buffer:   %d KB\n",
+            int(FLAGS_dbopts.table_buffer >> 10));
+    fprintf(stdout, "Level factor:       %d\n", FLAGS_dbopts.level_factor);
+    fprintf(stdout, "L1 trigger:         %d\n",
+            FLAGS_dbopts.l1_compaction_trigger);
 #if defined(PDLFS_RADOS)
     fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
     if (FLAGS_env_use_rados) PrintRadosSettings();
@@ -513,6 +539,10 @@ void Doit(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_use_existing_db = n;
+    } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dbopts.disable_compaction = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
