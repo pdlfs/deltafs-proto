@@ -84,7 +84,7 @@ int FLAGS_uid = 1;
 // Group id.
 int FLAGS_gid = 1;
 
-// Performance stats.
+// Per-rank performance stats.
 struct Stats {
 #if defined(PDLFS_OS_LINUX)
   struct rusage start_rusage_;
@@ -124,7 +124,7 @@ struct Stats {
     seconds_ = (finish_ - start_) * 1e-6;
   }
 
-  void FinishedSingleOp() {
+  void FinishedSingleOp(int total) {
     done_++;
     if (FLAGS_rank == 0 && done_ >= next_report_) {
       if (next_report_ < 1000)
@@ -142,20 +142,17 @@ struct Stats {
       else
         next_report_ += 100000;
       fprintf(stdout, "%d: Finished %d ops (%.0f%%)%30s\r", FLAGS_rank, done_,
-              100.0 * done_ / FLAGS_num, "");
+              100.0 * done_ / total, "");
       fflush(stdout);
     }
   }
 
-  void Report(const Slice& name) {
+  void Report() {
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
-
-    // Per-op latency is computed on the sum of per-thread elapsed times, not
-    // the actual elapsed time.
-    fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops\n",
-            name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_));
+    fprintf(stdout, "%d: %16.3f micros/op, %12d ops\n", FLAGS_rank,
+            seconds_ * 1e6 / done_, done_);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
             (TimevalToMicros(&rusage_.ru_utime) -
@@ -166,6 +163,36 @@ struct Stats {
                 1e-6,
             (finish_ - start_) * 1e-6);
 #endif
+    fflush(stdout);
+  }
+};
+
+// Global performance stats.
+struct GlobalStats {
+  double start_;
+  double finish_;
+  double seconds_;  // Total seconds of all ranks
+  long done_;       // Total ops done
+
+  void Reduce(const Stats* my) {
+    long done = my->done_;
+    MPI_Reduce(&done, &done_, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&my->seconds_, &seconds_, 1, MPI_DOUBLE, MPI_SUM, 0,
+               MPI_COMM_WORLD);
+    MPI_Reduce(&my->start_, &start_, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&my->finish_, &finish_, 1, MPI_DOUBLE, MPI_MAX, 0,
+               MPI_COMM_WORLD);
+  }
+
+  void Report(const char* name) {
+    // Pretend at least one op was done in case we are running a benchmark
+    // that does not call FinishedSingleOp().
+    if (done_ < 1) done_ = 1;
+
+    // Per-op latency is computed on the sum of per-thread elapsed times, not
+    // the actual elapsed time.
+    fprintf(stdout, "==%-12s : %16.3f micros/op, %12ld ops\n", name,
+            seconds_ * 1e6 / done_, done_);
     fflush(stdout);
   }
 };
@@ -335,20 +362,29 @@ class Benchmark {
         MPI_Finalize();
         exit(1);
       }
-      state->stats.FinishedSingleOp();
+      state->stats.FinishedSingleOp(FLAGS_num);
     }
+  }
+
+  void RunStep(const char* name, RankState* const state,
+               void (Benchmark::*method)(RankState*)) {
+    MPI_Barrier(MPI_COMM_WORLD);
+    GlobalStats stats;
+    Stats* per_rank_stats = &state->stats;
+    per_rank_stats->Start();
+    (this->*method)(state);
+    per_rank_stats->Stop();
+    if (FLAGS_rank == 0) {
+      per_rank_stats->Report();
+    }
+    stats.Reduce(per_rank_stats);
+    stats.Report(name);
   }
 
   void RunBenchmarks() {
     RankState state;
     PrepareWrite(&state);
-    MPI_Barrier(MPI_COMM_WORLD);
-    state.stats.Start();
-    DoWrite(&state);
-    state.stats.Stop();
-    if (FLAGS_rank == 0) {
-      state.stats.Report("write");
-    }
+    RunStep("write", &state, &Benchmark::DoWrite);
   }
 
  public:
