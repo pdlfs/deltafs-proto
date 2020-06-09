@@ -66,6 +66,9 @@ const char* FLAGS_info_svr_uri = "tcp://127.0.0.1:10086";
 // Print the ip addresses of all servers for debugging.
 bool FLAGS_print_ips = true;
 
+// Print the performance stats of each rank.
+bool FLAGS_print_per_rank_stats = true;
+
 // Skip fs checks.
 bool FLAGS_skip_fs_checks = true;
 
@@ -151,7 +154,7 @@ struct Stats {
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
-    fprintf(stdout, "%d: %16.3f micros/op, %12d ops\n", FLAGS_rank,
+    fprintf(stdout, "%-12d: %16.3f micros/op, %12d ops\n", FLAGS_rank,
             seconds_ * 1e6 / done_, done_);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
@@ -191,7 +194,7 @@ struct GlobalStats {
 
     // Per-op latency is computed on the sum of per-thread elapsed times, not
     // the actual elapsed time.
-    fprintf(stdout, "==%-12s : %16.3f micros/op, %12ld ops\n", name,
+    fprintf(stdout, "==%-10s: %16.3f micros/op, %12ld ops\n", name,
             seconds_ * 1e6 / done_, done_);
     fflush(stdout);
   }
@@ -368,17 +371,17 @@ class Benchmark {
 
   void RunStep(const char* name, RankState* const state,
                void (Benchmark::*method)(RankState*)) {
-    MPI_Barrier(MPI_COMM_WORLD);
     GlobalStats stats;
+    MPI_Barrier(MPI_COMM_WORLD);
     Stats* per_rank_stats = &state->stats;
     per_rank_stats->Start();
     (this->*method)(state);
     per_rank_stats->Stop();
-    if (FLAGS_rank == 0) {
-      per_rank_stats->Report();
-    }
     stats.Reduce(per_rank_stats);
     stats.Report(name);
+    if (FLAGS_print_per_rank_stats) {
+      per_rank_stats->Report();
+    }
   }
 
   void RunBenchmarks() {
@@ -435,6 +438,9 @@ void Doit(int* const argc, char*** const argv) {
     char junk;
     if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_print_ips = n;
+    } else if (sscanf((*argv)[i], "--print_per_rank_stats=%d%c", &n, &junk) ==
+               1) {
+      pdlfs::FLAGS_print_per_rank_stats = n;
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
