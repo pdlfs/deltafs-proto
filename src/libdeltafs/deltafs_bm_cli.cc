@@ -143,8 +143,8 @@ class Benchmark {
         for (int j = 0; j < num_ports_per_svr; j++) {
           fprintf(stdout, "%s\n", uri_mapper_->GetUri(i, j).c_str());
         }
-        fflush(stdout);
       }
+      fflush(stdout);
     }
     FilesystemCliOptions cliopts;
     cliopts.skip_perm_checks = false;
