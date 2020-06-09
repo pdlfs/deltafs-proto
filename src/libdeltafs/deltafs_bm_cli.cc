@@ -78,6 +78,11 @@ int FLAGS_uid = 1;
 // Group id.
 int FLAGS_gid = 1;
 
+// Performance stats.
+struct Stats {
+  //
+};
+
 // A wrapper over our own random object.
 struct STLRand {
   STLRand(int seed) : rnd(seed) {}
@@ -107,11 +112,14 @@ struct RankState {
     pathbuf += Base64Enc(tmp, FLAGS_share_dir ? 0 : FLAGS_rank).ToString();
     pathbuf += "/";
     prefix_length = pathbuf.size();
-    ctx.who.uid = FLAGS_uid;
-    ctx.who.gid = FLAGS_gid;
+    User* const who = &ctx.who;
+    who->uid = FLAGS_uid;
+    who->gid = FLAGS_gid;
   }
 };
 
+// Dynamically construct uri strings based on a compact numeric server address
+// representation.
 class CompactUriMapper : public FilesystemCli::UriMapper {
  public:
   CompactUriMapper(const Slice& svr_map, int num_svrs, int num_ports_per_svr)
