@@ -52,8 +52,11 @@ int FLAGS_rank = 0;
 // Uri for the information server.
 const char* FLAGS_info_svr_uri = "tcp://127.0.0.1:10086";
 
-// Print the svr map for debugging purposes.
-bool FLAGS_print_svr_map = true;
+// Print the ip addresses of all servers for debugging.
+bool FLAGS_print_ips = true;
+
+// Skip fs checks.
+bool FLAGS_skip_fs_checks = true;
 
 class Benchmark {
  private:
@@ -90,7 +93,9 @@ class Benchmark {
   RPC* rpc_;
 
   static void PrintHeader() {
-    //
+    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Fs info svr:        %s\n", FLAGS_info_svr_uri);
+    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
   }
 
   static bool ParseMapData(  ///
@@ -137,7 +142,7 @@ class Benchmark {
     rpcopts.uri = "udp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
     uri_mapper_ = new CompactUriMapper(svr_map_, num_svrs, num_ports_per_svr);
-    if (FLAGS_rank == 0 && FLAGS_print_svr_map) {
+    if (FLAGS_rank == 0 && FLAGS_print_ips) {
       puts("Dumping fs uri(s) >>>");
       for (int i = 0; i < num_svrs; i++) {
         for (int j = 0; j < num_ports_per_svr; j++) {
@@ -199,6 +204,23 @@ class Benchmark {
 
 namespace {
 void Doit(int* const argc, char*** const argv) {
+  for (int i = 1; i < (*argc); i++) {
+    int n;
+    char junk;
+    if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_print_ips = n;
+    } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_skip_fs_checks = n;
+    } else {
+      if (pdlfs::FLAGS_rank == 0) {
+        fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
+      }
+      MPI_Finalize();
+      exit(1);
+    }
+  }
+
   pdlfs::Benchmark bench;
   bench.Run();
 }

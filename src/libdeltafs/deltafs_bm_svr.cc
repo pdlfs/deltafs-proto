@@ -144,6 +144,7 @@ class Server {
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
+    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
 #if defined(PDLFS_RADOS)
     fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
