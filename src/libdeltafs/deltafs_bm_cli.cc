@@ -81,6 +81,9 @@ bool FLAGS_share_dir = false;
 // Number of files to insert per rank.
 int FLAGS_num = 8;
 
+// Number of files to stat per rank.
+int FLAGS_reads = -1;
+
 // User id for the bench.
 int FLAGS_uid = 1;
 
@@ -452,7 +455,7 @@ class Benchmark {
   void DoRead(RankState* const state) {
     const uint64_t pid = uint64_t(FLAGS_rank) << 32;
     char tmp[30];
-    for (int i = 0; i < FLAGS_num; i++) {
+    for (int i = 0; i < FLAGS_reads; i++) {
       Slice fname = Base64Enc(tmp, pid | state->fids[i]);
       state->pathbuf.resize(state->prefix_length);
       state->pathbuf.append(fname.data(), fname.size());
@@ -464,7 +467,7 @@ class Benchmark {
         MPI_Finalize();
         exit(1);
       }
-      state->stats.FinishedSingleOp(FLAGS_num);
+      state->stats.FinishedSingleOp(FLAGS_reads);
     }
   }
 
@@ -550,6 +553,10 @@ void Doit(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--share_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_share_dir = n;
+    } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_num = n;
+    } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_reads = n;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
@@ -557,6 +564,10 @@ void Doit(int* const argc, char*** const argv) {
       MPI_Finalize();
       exit(1);
     }
+  }
+
+  if (pdlfs::FLAGS_reads == -1 || pdlfs::FLAGS_reads > pdlfs::FLAGS_num) {
+    pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
   pdlfs::Benchmark bench;
