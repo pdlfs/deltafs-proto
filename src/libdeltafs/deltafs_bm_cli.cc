@@ -42,6 +42,7 @@
 #include <arpa/inet.h>
 #include <mpi.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <vector>
 
@@ -86,10 +87,11 @@ struct STLRand {
 
 // Per-rank work state.
 struct RankState {
+  FilesystemCliCtx ctx;
   std::vector<uint32_t> fids;
   std::string::size_type prefix_length;
   std::string pathbuf;
-  User me;
+  Stat tmp;
 
   RankState() {
     fids.reserve(FLAGS_num);
@@ -105,8 +107,8 @@ struct RankState {
     pathbuf += Base64Enc(tmp, FLAGS_share_dir ? 0 : FLAGS_rank).ToString();
     pathbuf += "/";
     prefix_length = pathbuf.size();
-    me.uid = FLAGS_uid;
-    me.gid = FLAGS_gid;
+    ctx.who.uid = FLAGS_uid;
+    ctx.who.gid = FLAGS_gid;
   }
 };
 
@@ -209,8 +211,42 @@ class Benchmark {
     fscli_->RegisterFsSrvUris(rpc_, uri_mapper_, num_svrs, num_ports_per_svr);
   }
 
-  void DoWork() {
-    //
+  void PrepareWrite(RankState* const state) {
+    if (!FLAGS_share_dir || FLAGS_rank == 0) {
+      Status s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
+                               &state->tmp);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Fail to mkdir: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+    }
+  }
+
+  void DoWrite(RankState* const state) {
+    const uint64_t pid = uint64_t(FLAGS_rank) << 32;
+    char tmp[30];
+    for (int i = 0; i < FLAGS_num; i++) {
+      Slice fname = Base64Enc(tmp, pid | state->fids[i]);
+      state->pathbuf.resize(state->prefix_length);
+      state->pathbuf.append(fname.data(), fname.size());
+      Status s = fscli_->Mkfle(&state->ctx, NULL, state->pathbuf.c_str(), 0644,
+                               &state->tmp);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+    }
+  }
+
+  void RunBenchmarks() {
+    RankState state;
+    PrepareWrite(&state);
+    MPI_Barrier(MPI_COMM_WORLD);
+    DoWrite(&state);
   }
 
  public:
@@ -247,7 +283,7 @@ class Benchmark {
       exit(1);
     }
     Open(num_svrs, num_ports_per_svr);
-    DoWork();
+    RunBenchmarks();
   }
 };
 

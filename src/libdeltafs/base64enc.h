@@ -36,6 +36,8 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/slice.h"
 
+#include <stdint.h>
+
 namespace pdlfs {
 namespace {
 // Transform a 64-bit (8-byte) integer into a 12-byte filename.
