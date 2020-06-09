@@ -48,6 +48,8 @@ Status Nofs() {  ///
 }
 }  // namespace
 
+FilesystemCli::UriMapper::~UriMapper() {}
+
 Status FilesystemCli::TEST_Mkfle(  ///
     FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& fname,
     const Stat& stat, FilesystemDbStats* const stats) {

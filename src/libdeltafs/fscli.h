@@ -90,7 +90,7 @@ class FilesystemCli {
     UriMapper() {}
     virtual ~UriMapper();
 
-    virtual const char* GetUri(int srv_idx, int port_idx) const = 0;
+    virtual std::string GetUri(int srv_idx, int port_idx) const = 0;
 
    private:
     void operator=(const UriMapper& other);

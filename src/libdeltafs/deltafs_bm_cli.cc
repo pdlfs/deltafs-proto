@@ -57,7 +57,34 @@ bool FLAGS_print_svr_map = true;
 
 class Benchmark {
  private:
+  class CompactUriMapper : public FilesystemCli::UriMapper {
+   public:
+    CompactUriMapper(const Slice& svr_map, int num_svrs, int num_ports_per_svr)
+        : num_ports_per_svr_(num_ports_per_svr), num_svrs_(num_svrs) {
+      port_map_ = reinterpret_cast<const unsigned short*>(&svr_map[0]);
+      ip_map_ = reinterpret_cast<const unsigned*>(
+          &svr_map[2 * num_ports_per_svr_ * num_svrs_]);
+    }
+
+    virtual std::string GetUri(int srv_idx, int port_idx) const {
+      char tmp[50];
+      struct in_addr tmp_addr;
+      tmp_addr.s_addr = ip_map_[srv_idx];
+      snprintf(tmp, sizeof(tmp), "udp://%s:%hu", inet_ntoa(tmp_addr),
+               port_map_[srv_idx * num_ports_per_svr_ + port_idx]);
+      return tmp;
+    }
+
+   private:
+    const unsigned short* port_map_;
+    const unsigned* ip_map_;
+    int num_ports_per_svr_;
+    int num_svrs_;
+  };
+
   FilesystemCli* fscli_;
+  CompactUriMapper* uri_mapper_;
+  std::string svr_map_;
   RPC* rpc_;
 
   static void PrintHeader() {
@@ -101,30 +128,25 @@ class Benchmark {
     delete rpc;
   }
 
-  void Open(const Slice& svr_map, int num_svrs, int num_ports_per_svr) {
+  void Open(int num_svrs, int num_ports_per_svr) {
     using namespace rpc;
     RPCOptions rpcopts;
     rpcopts.mode = kClientOnly;
     rpcopts.uri = "udp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
-    FilesystemCliOptions cliopts;
-    fscli_ = new FilesystemCli(cliopts);
-    const unsigned short* const port_info =
-        reinterpret_cast<const unsigned short*>(&svr_map[0]);
-    const unsigned* const ip_info = reinterpret_cast<const unsigned*>(
-        &svr_map[2 * num_ports_per_svr * num_svrs]);
+    uri_mapper_ = new CompactUriMapper(svr_map_, num_svrs, num_ports_per_svr);
     if (FLAGS_rank == 0 && FLAGS_print_svr_map) {
-      struct in_addr tmp_addr;
       puts("Dumping fs uri(s) >>>");
       for (int i = 0; i < num_svrs; i++) {
-        tmp_addr.s_addr = ip_info[i];
         for (int j = 0; j < num_ports_per_svr; j++) {
-          fprintf(stdout, "%s:%hu\n", inet_ntoa(tmp_addr),
-                  port_info[j + i * num_ports_per_svr]);
+          fprintf(stdout, "%s\n", uri_mapper_->GetUri(i, j).c_str());
         }
         fflush(stdout);
       }
     }
+
+    FilesystemCliOptions cliopts;
+    fscli_ = new FilesystemCli(cliopts);
   }
 
  public:
@@ -132,6 +154,7 @@ class Benchmark {
 
   ~Benchmark() {
     delete fscli_;
+    delete uri_mapper_;
     delete rpc_;
   }
 
@@ -140,27 +163,26 @@ class Benchmark {
       PrintHeader();
     }
     uint32_t svr_map_size;
-    std::string svr_map;
     if (FLAGS_rank != 0) {  // Non-roots get data from the root
       MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-      svr_map.resize(svr_map_size);
-      MPI_Bcast(&svr_map[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
+      svr_map_.resize(svr_map_size);
+      MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
     } else {  // Root fetches data from remote and broadcasts it to non-roots
-      ObtainSvrMap(&svr_map);
-      svr_map_size = svr_map.size();
+      ObtainSvrMap(&svr_map_);
+      svr_map_size = svr_map_.size();
       MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-      MPI_Bcast(&svr_map[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
     }
     int num_ports_per_svr;
     int num_svrs;
-    if (!ParseMapData(svr_map, &num_svrs, &num_ports_per_svr)) {
+    if (!ParseMapData(svr_map_, &num_svrs, &num_ports_per_svr)) {
       if (FLAGS_rank == 0) {
         fprintf(stderr, "Cannot parse svr map\n");
       }
       MPI_Finalize();
       exit(1);
     }
-    Open(svr_map, num_svrs, num_ports_per_svr);
+    Open(num_svrs, num_ports_per_svr);
   }
 };
 
