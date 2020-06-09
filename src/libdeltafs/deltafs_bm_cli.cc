@@ -45,6 +45,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
+#if defined(PDLFS_OS_LINUX)
+#include <ctype.h>
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <time.h>
+#endif
 
 namespace pdlfs {
 namespace {
@@ -80,7 +86,88 @@ int FLAGS_gid = 1;
 
 // Performance stats.
 struct Stats {
-  //
+#if defined(PDLFS_OS_LINUX)
+  struct rusage start_rusage_;
+  struct rusage rusage_;
+#endif
+  double start_;
+  double finish_;
+  double seconds_;
+  int done_;
+  int next_report_;
+
+#if defined(PDLFS_OS_LINUX)
+  static uint64_t TimevalToMicros(const struct timeval* tv) {
+    uint64_t t;
+    t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
+    t += tv->tv_usec;
+    return t;
+  }
+#endif
+
+  void Start() {
+    next_report_ = 100;
+    done_ = 0;
+    seconds_ = 0;
+    start_ = CurrentMicros();
+    finish_ = start_;
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &start_rusage_);
+#endif
+  }
+
+  void Stop() {
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &rusage_);
+#endif
+    finish_ = CurrentMicros();
+    seconds_ = (finish_ - start_) * 1e-6;
+  }
+
+  void FinishedSingleOp() {
+    done_++;
+    if (FLAGS_rank == 0 && done_ >= next_report_) {
+      if (next_report_ < 1000)
+        next_report_ += 100;
+      else if (next_report_ < 5000)
+        next_report_ += 500;
+      else if (next_report_ < 10000)
+        next_report_ += 1000;
+      else if (next_report_ < 50000)
+        next_report_ += 5000;
+      else if (next_report_ < 100000)
+        next_report_ += 10000;
+      else if (next_report_ < 500000)
+        next_report_ += 50000;
+      else
+        next_report_ += 100000;
+      fprintf(stdout, "%d: Finished %d ops (%.0f%%)%30s\r", FLAGS_rank, done_,
+              100.0 * done_ / FLAGS_num, "");
+      fflush(stdout);
+    }
+  }
+
+  void Report(const Slice& name) {
+    // Pretend at least one op was done in case we are running a benchmark
+    // that does not call FinishedSingleOp().
+    if (done_ < 1) done_ = 1;
+
+    // Per-op latency is computed on the sum of per-thread elapsed times, not
+    // the actual elapsed time.
+    fprintf(stdout, "==%-12s : %16.3f micros/op, %12.0f ops\n",
+            name.ToString().c_str(), seconds_ * 1e6 / done_, double(done_));
+#if defined(PDLFS_OS_LINUX)
+    fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
+            (TimevalToMicros(&rusage_.ru_utime) -
+             TimevalToMicros(&start_rusage_.ru_utime)) *
+                1e-6,
+            (TimevalToMicros(&rusage_.ru_stime) -
+             TimevalToMicros(&start_rusage_.ru_stime)) *
+                1e-6,
+            (finish_ - start_) * 1e-6);
+#endif
+    fflush(stdout);
+  }
 };
 
 // A wrapper over our own random object.
@@ -92,6 +179,7 @@ struct STLRand {
 
 // Per-rank work state.
 struct RankState {
+  Stats stats;
   FilesystemCliCtx ctx;
   std::vector<uint32_t> fids;
   std::string::size_type prefix_length;
@@ -247,6 +335,7 @@ class Benchmark {
         MPI_Finalize();
         exit(1);
       }
+      state->stats.FinishedSingleOp();
     }
   }
 
@@ -254,7 +343,12 @@ class Benchmark {
     RankState state;
     PrepareWrite(&state);
     MPI_Barrier(MPI_COMM_WORLD);
+    state.stats.Start();
     DoWrite(&state);
+    state.stats.Stop();
+    if (FLAGS_rank == 0) {
+      state.stats.Report("write");
+    }
   }
 
  public:
