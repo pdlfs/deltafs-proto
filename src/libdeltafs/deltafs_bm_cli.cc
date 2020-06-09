@@ -36,6 +36,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/random.h"
 
@@ -500,11 +501,76 @@ class Benchmark {
     }
   }
 
+  struct MonitorArg {
+    Stats* stats;
+    port::Mutex mutex;
+    port::CondVar cv;
+    bool is_mon_running;
+    bool done;
+
+    explicit MonitorArg(Stats* s)
+        : stats(s), cv(&mutex), is_mon_running(false), done(false) {}
+  };
+
+  static void Send(UDPSocket* sock, Stats* stats) {
+    char msg[100];
+    snprintf(msg, sizeof(msg), "%s %10d %d rank=%d\n", FLAGS_mon_metric_name,
+             int(time(NULL)), stats->done_, FLAGS_rank);
+    Status s = sock->Send(msg);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Fail to send mon stats: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+    }
+  }
+
+  static void MonitorBody(void* v) {
+    MonitorArg* const arg = reinterpret_cast<MonitorArg*>(v);
+    Stats* stats = arg->stats;
+    UDPSocket* const sock = CreateUDPSocket();
+    Status s = sock->Connect(FLAGS_mon_destination_uri);
+    if (!s.ok()) {
+      fprintf(stderr, "Cannot open mon socket: %s\n", s.ToString().c_str());
+      delete sock;
+      return;
+    }
+
+    MutexLock ml(&arg->mutex);
+    arg->is_mon_running = true;
+    arg->cv.SignalAll();
+    while (!arg->done) {
+      arg->mutex.Unlock();
+      Send(sock, stats);
+      SleepForMicroseconds(FLAGS_mon_interval);
+      arg->mutex.Lock();
+    }
+
+    Send(sock, stats);
+    arg->is_mon_running = false;
+    arg->cv.SignalAll();
+    delete sock;
+  }
+
   void RunBenchmarks() {
     RankState state;
     PrepareRun(&state);
+    MonitorArg mon_arg(&state.stats);
+    if (FLAGS_mon_destination_uri) {
+      Env::Default()->StartThread(MonitorBody, &mon_arg);
+      MutexLock ml(&mon_arg.mutex);
+      while (!mon_arg.is_mon_running) {
+        mon_arg.cv.Wait();
+      }
+    }
     RunStep("insert", &state, &Benchmark::DoWrite);
+    SleepForMicroseconds(5 * 1000 * 1000);
     RunStep("fstats", &state, &Benchmark::DoRead);
+    if (FLAGS_mon_destination_uri) {
+      MutexLock ml(&mon_arg.mutex);
+      mon_arg.done = true;
+      while (mon_arg.is_mon_running) {
+        mon_arg.cv.Wait();
+      }
+    }
   }
 
  public:
