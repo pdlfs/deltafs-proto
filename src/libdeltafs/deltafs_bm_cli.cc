@@ -91,7 +91,7 @@ struct RankState {
   std::vector<uint32_t> fids;
   std::string::size_type prefix_length;
   std::string pathbuf;
-  Stat tmp;
+  Stat stbuf;
 
   RankState() {
     fids.reserve(FLAGS_num);
@@ -214,7 +214,7 @@ class Benchmark {
   void PrepareWrite(RankState* const state) {
     if (!FLAGS_share_dir || FLAGS_rank == 0) {
       Status s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
-                               &state->tmp);
+                               &state->stbuf);
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkdir: %s\n", FLAGS_rank,
                 s.ToString().c_str());
@@ -232,7 +232,7 @@ class Benchmark {
       state->pathbuf.resize(state->prefix_length);
       state->pathbuf.append(fname.data(), fname.size());
       Status s = fscli_->Mkfle(&state->ctx, NULL, state->pathbuf.c_str(), 0644,
-                               &state->tmp);
+                               &state->stbuf);
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
                 s.ToString().c_str());
