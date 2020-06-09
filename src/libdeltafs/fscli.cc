@@ -1273,7 +1273,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
       pars_(NULL),
       options_(options),
       fs_(NULL),
-      srv_uris_(NULL),
+      uri_mapper_(NULL),
       ports_per_srv_(1),
       srvs_(1),
       rpc_(NULL) {
