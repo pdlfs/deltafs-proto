@@ -629,6 +629,9 @@ void Doit(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
+    } else if (sscanf((*argv)[i], "--random_order=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_random_order = n;
     } else if (sscanf((*argv)[i], "--share_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_share_dir = n;
@@ -636,6 +639,10 @@ void Doit(int* const argc, char*** const argv) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
+    } else if (sscanf((*argv)[i], "--mon_interval=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_mon_interval = n;
+    } else if (strncmp((*argv)[i], "--mon=", 6) == 0) {
+      pdlfs::FLAGS_mon_destination_uri = (*argv)[i] + 6;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
