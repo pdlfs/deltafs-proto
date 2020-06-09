@@ -110,35 +110,35 @@ struct RankState {
   }
 };
 
+class CompactUriMapper : public FilesystemCli::UriMapper {
+ public:
+  CompactUriMapper(const Slice& svr_map, int num_svrs, int num_ports_per_svr)
+      : num_ports_per_svr_(num_ports_per_svr), num_svrs_(num_svrs) {
+    port_map_ = reinterpret_cast<const unsigned short*>(&svr_map[0]);
+    ip_map_ = reinterpret_cast<const unsigned*>(
+        &svr_map[2 * num_ports_per_svr_ * num_svrs_]);
+  }
+
+  virtual std::string GetUri(int svr_idx, int port_idx) const {
+    assert(svr_idx < num_svrs_);
+    assert(port_idx < num_ports_per_svr_);
+    char tmp[50];
+    struct in_addr tmp_addr;
+    tmp_addr.s_addr = ip_map_[svr_idx];
+    snprintf(tmp, sizeof(tmp), "udp://%s:%hu", inet_ntoa(tmp_addr),
+             port_map_[svr_idx * num_ports_per_svr_ + port_idx]);
+    return tmp;
+  }
+
+ private:
+  const unsigned short* port_map_;
+  const unsigned* ip_map_;
+  int num_ports_per_svr_;
+  int num_svrs_;
+};
+
 class Benchmark {
  private:
-  class CompactUriMapper : public FilesystemCli::UriMapper {
-   public:
-    CompactUriMapper(const Slice& svr_map, int num_svrs, int num_ports_per_svr)
-        : num_ports_per_svr_(num_ports_per_svr), num_svrs_(num_svrs) {
-      port_map_ = reinterpret_cast<const unsigned short*>(&svr_map[0]);
-      ip_map_ = reinterpret_cast<const unsigned*>(
-          &svr_map[2 * num_ports_per_svr_ * num_svrs_]);
-    }
-
-    virtual std::string GetUri(int svr_idx, int port_idx) const {
-      assert(svr_idx < num_svrs_);
-      assert(port_idx < num_ports_per_svr_);
-      char tmp[50];
-      struct in_addr tmp_addr;
-      tmp_addr.s_addr = ip_map_[svr_idx];
-      snprintf(tmp, sizeof(tmp), "udp://%s:%hu", inet_ntoa(tmp_addr),
-               port_map_[svr_idx * num_ports_per_svr_ + port_idx]);
-      return tmp;
-    }
-
-   private:
-    const unsigned short* port_map_;
-    const unsigned* ip_map_;
-    int num_ports_per_svr_;
-    int num_svrs_;
-  };
-
   FilesystemCli* fscli_;
   CompactUriMapper* uri_mapper_;
   std::string svr_map_;
