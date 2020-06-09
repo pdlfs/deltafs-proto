@@ -284,6 +284,8 @@ class Benchmark {
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info svr:        %s\n", FLAGS_info_svr_uri);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
+    fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
+    fprintf(stdout, "------------------------------------------------\n");
   }
 
   static bool ParseMapData(  ///
@@ -475,6 +477,9 @@ void Doit(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
+    } else if (sscanf((*argv)[i], "--share_dir=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_share_dir = n;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
