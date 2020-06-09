@@ -412,7 +412,7 @@ class Benchmark {
       fflush(stdout);
     }
     FilesystemCliOptions cliopts;
-    cliopts.skip_perm_checks = false;
+    cliopts.skip_perm_checks = FLAGS_skip_fs_checks;
     fscli_ = new FilesystemCli(cliopts);
     fscli_->RegisterFsSrvUris(rpc_, uri_mapper_, num_svrs, num_ports_per_svr);
   }
