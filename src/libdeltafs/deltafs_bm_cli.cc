@@ -31,15 +31,19 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "base64enc.h"
 #include "fscli.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/random.h"
 
+#include <algorithm>
 #include <arpa/inet.h>
 #include <mpi.h>
 #include <netinet/in.h>
 #include <stdlib.h>
+#include <vector>
 
 namespace pdlfs {
 namespace {
@@ -57,6 +61,54 @@ bool FLAGS_print_ips = true;
 
 // Skip fs checks.
 bool FLAGS_skip_fs_checks = true;
+
+// Insert keys in random order.
+bool FLAGS_random_order = true;
+
+// Force all ranks to share a single parent directory.
+bool FLAGS_share_dir = false;
+
+// Number of files to insert per rank.
+int FLAGS_num = 8;
+
+// User id for the bench.
+int FLAGS_uid = 1;
+
+// Group id.
+int FLAGS_gid = 1;
+
+// A wrapper over our own random object.
+struct STLRand {
+  STLRand(int seed) : rnd(seed) {}
+  int operator()(int i) { return rnd.Next() % i; }
+  Random rnd;
+};
+
+// Per-rank work state.
+struct RankState {
+  std::vector<uint32_t> fids;
+  std::string::size_type prefix_length;
+  std::string pathbuf;
+  User me;
+
+  RankState() {
+    fids.reserve(FLAGS_num);
+    for (int i = 0; i < FLAGS_num; i++) {
+      fids.push_back(i);
+    }
+    if (FLAGS_random_order) {
+      std::random_shuffle(fids.begin(), fids.end(), STLRand(1000 * FLAGS_rank));
+    }
+    char tmp[30];
+    pathbuf.reserve(100);
+    pathbuf += "/";
+    pathbuf += Base64Enc(tmp, FLAGS_share_dir ? 0 : FLAGS_rank).ToString();
+    pathbuf += "/";
+    prefix_length = pathbuf.size();
+    me.uid = FLAGS_uid;
+    me.gid = FLAGS_gid;
+  }
+};
 
 class Benchmark {
  private:
