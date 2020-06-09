@@ -641,8 +641,10 @@ void Doit(int* const argc, char*** const argv) {
       pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--mon_interval=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_mon_interval = n;
-    } else if (strncmp((*argv)[i], "--mon=", 6) == 0) {
-      pdlfs::FLAGS_mon_destination_uri = (*argv)[i] + 6;
+    } else if (strncmp((*argv)[i], "--mon_uri=", 10) == 0) {
+      pdlfs::FLAGS_mon_destination_uri = (*argv)[i] + 10;
+    } else if (strncmp((*argv)[i], "--info_svr_uri=", 15) == 0) {
+      pdlfs::FLAGS_info_svr_uri = (*argv)[i] + 15;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
