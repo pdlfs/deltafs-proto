@@ -35,6 +35,7 @@
 #include "fscli.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/random.h"
 
@@ -60,20 +61,30 @@ int FLAGS_comm_size = 1;
 // My rank number.
 int FLAGS_rank = 0;
 
+// If not NULL, will start a monitoring thread periodically sending perf stats
+// to a local TSDB service at the specified uri.
+const char* FLAGS_mon_destination_uri = NULL;
+
+// Name for the time series data.
+const char* FLAGS_mon_metric_name = "myfs.ops";
+
+// Number of seconds for sending the next stats packet.
+int FLAGS_mon_interval = 1;
+
 // Uri for the information server.
 const char* FLAGS_info_svr_uri = "tcp://127.0.0.1:10086";
 
 // Print the ip addresses of all servers for debugging.
-bool FLAGS_print_ips = true;
+bool FLAGS_print_ips = false;
 
 // Print the performance stats of each rank.
-bool FLAGS_print_per_rank_stats = true;
+bool FLAGS_print_per_rank_stats = false;
 
 // Skip fs checks.
-bool FLAGS_skip_fs_checks = true;
+bool FLAGS_skip_fs_checks = false;
 
 // Insert keys in random order.
-bool FLAGS_random_order = true;
+bool FLAGS_random_order = false;
 
 // Force all ranks to share a single parent directory.
 bool FLAGS_share_dir = false;
@@ -539,6 +550,8 @@ class Benchmark {
 
 namespace {
 void Doit(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_skip_fs_checks = pdlfs::FLAGS_random_order = true;
+
   for (int i = 1; i < (*argc); i++) {
     int n;
     char junk;
