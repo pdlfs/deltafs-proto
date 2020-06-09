@@ -33,6 +33,7 @@
  */
 #include "fsdb.h"
 
+#include "base64enc.h"
 #include "env_wrapper.h"
 #include "fs.h"
 #include "fscli.h"
@@ -86,43 +87,6 @@ class FilesystemDbTest {
 
 TEST(FilesystemDbTest, OpenAndClose) {  ///
   ASSERT_OK(OpenDb());
-}
-
-namespace {
-// Transform a 64-bit (8-byte) integer into a 12-byte filename.
-const char base64_table[] =
-    "+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-Slice Base64Encoding(char* const dst, uint64_t input) {
-  input = htobe64(input);
-  const unsigned char* in = reinterpret_cast<unsigned char*>(&input);
-  char* p = dst;
-  *p++ = base64_table[in[0] >> 2];
-  *p++ = base64_table[((in[0] & 0x03) << 4) | (in[1] >> 4)];
-  *p++ = base64_table[((in[1] & 0x0f) << 2) | (in[2] >> 6)];
-  *p++ = base64_table[in[2] & 0x3f];
-
-  *p++ = base64_table[in[3] >> 2];
-  *p++ = base64_table[((in[3] & 0x03) << 4) | (in[4] >> 4)];
-  *p++ = base64_table[((in[4] & 0x0f) << 2) | (in[5] >> 6)];
-  *p++ = base64_table[in[5] & 0x3f];
-
-  *p++ = base64_table[in[6] >> 2];
-  *p++ = base64_table[((in[6] & 0x03) << 4) | (in[7] >> 4)];
-  *p++ = base64_table[(in[7] & 0x0f) << 2];
-  *p++ = '+';
-  assert(p - dst == 12);
-  return Slice(dst, p - dst);
-}
-}  // namespace
-
-TEST(FilesystemDbTest, Base64) {
-  char tmp[20];
-  std::string prev;
-  for (uint64_t i = 0; i < 1024 * 1024; i += 1024) {
-    Slice r = Base64Encoding(tmp, i);
-    ASSERT_TRUE(r.compare(prev) > 0);
-    prev = r.ToString();
-  }
 }
 
 namespace {  // Db benchmark
@@ -437,7 +401,7 @@ struct ThreadState {
     char tmp[30];
     pathname.reserve(100);
     pathname += "/";
-    pathname += Base64Encoding(tmp, parent_dir.ino).ToString();
+    pathname += Base64Enc(tmp, parent_dir.ino).ToString();
     pathname += "/";
     prefix_length = pathname.size();
     parent_lstat.CopyFrom(parent_stat);
@@ -775,7 +739,7 @@ class Benchmark {
     char tmp[20];
     for (int i = 0; i < FLAGS_num; i++) {
       const uint64_t fid = tid | thread->fids[i];
-      Slice fname = Base64Encoding(tmp, fid);
+      Slice fname = Base64Enc(tmp, fid);
       thread->stat.SetInodeNo(fid);
       Status s;
       switch (m) {
@@ -852,7 +816,7 @@ class Benchmark {
     int found = 0;
     for (int i = 0; i < FLAGS_reads; i++) {
       const uint64_t fid = tid | thread->fids[i];
-      Slice fname = Base64Encoding(tmp, fid);
+      Slice fname = Base64Enc(tmp, fid);
       Status s;
       switch (m) {
         case kFsFullCliApi: {
