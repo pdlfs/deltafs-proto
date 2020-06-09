@@ -377,10 +377,13 @@ class Benchmark {
     per_rank_stats->Start();
     (this->*method)(state);
     per_rank_stats->Stop();
-    stats.Reduce(per_rank_stats);
-    stats.Report(name);
     if (FLAGS_print_per_rank_stats) {
       per_rank_stats->Report();
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    stats.Reduce(per_rank_stats);
+    if (FLAGS_rank == 0) {
+      stats.Report(name);
     }
   }
 
