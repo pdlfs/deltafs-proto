@@ -161,7 +161,7 @@ class Server {
             FLAGS_dbopts.disable_write_ahead_logging);
     fprintf(stdout, "WAL write buffer:   %d KB\n",
             int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "Lsm compaction off: %d\n",
+    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
             FLAGS_dbopts.disable_compaction);
     fprintf(stdout, "MEMTABLE size:      %d MB\n",
             int(FLAGS_dbopts.memtable_size >> 20));
