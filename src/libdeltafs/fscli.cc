@@ -974,9 +974,9 @@ rpc::If* FilesystemCli::PrepareStub(  ///
     memset(ctx->stubs_, 0, sizeof(rpc::If*) * srvs_ * ports_per_srv_);
     ctx->n_ = srvs_ * ports_per_srv_;
   }
-  const int i = srv_idx * ports_per_srv_;
+  const int i = srv_idx * ports_per_srv_ + 0;
   if (!ctx->stubs_[i]) {
-    ctx->stubs_[i] = rpc_->OpenStubFor(srv_uris_[i]);
+    ctx->stubs_[i] = rpc_->OpenStubFor(uri_mapper_->GetUri(i, 0));
   }
   return ctx->stubs_[i];
 }
@@ -1298,9 +1298,9 @@ FilesystemCliOptions::FilesystemCliOptions()
       skip_perm_checks(false) {}
 
 void FilesystemCli::RegisterFsSrvUris(  ///
-    RPC* rpc, const char** uris, int srvs, int ports_per_srv) {
+    RPC* rpc, const UriMapper* uri_mapper, int srvs, int ports_per_srv) {
   rpc_ = rpc;
-  srv_uris_ = uris;
+  uri_mapper_ = uri_mapper;
   ports_per_srv_ = ports_per_srv;
   srvs_ = srvs;
 }

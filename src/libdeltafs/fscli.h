@@ -85,7 +85,18 @@ struct FilesystemCliOptions {
 class FilesystemCli {
  public:
   explicit FilesystemCli(const FilesystemCliOptions& options);
-  void RegisterFsSrvUris(RPC* rpc, const char** uris, int srvs,
+  class UriMapper {
+   public:
+    UriMapper() {}
+    virtual ~UriMapper();
+
+    virtual const char* GetUri(int srv_idx, int port_idx) const = 0;
+
+   private:
+    void operator=(const UriMapper& other);
+    UriMapper(const UriMapper&);
+  };
+  void RegisterFsSrvUris(RPC* rpc, const UriMapper* uri_mapper, int srvs,
                          int ports_per_srv = 1);
   void SetLocalFs(Filesystem* fs);
   ~FilesystemCli();
@@ -316,7 +327,7 @@ class FilesystemCli {
   Filesystem* fs_;  // This is a weak reference; fs_ is not owned by us
   // The following is set when running in the
   // traditional client-server mode
-  const char** srv_uris_;  // Not owned by us
+  const UriMapper* uri_mapper_;  // Not owned by us
   int ports_per_srv_;
   int srvs_;
   RPC* rpc_;  // Not owned by us
