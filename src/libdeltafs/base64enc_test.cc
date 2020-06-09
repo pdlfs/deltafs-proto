@@ -37,7 +37,7 @@
 
 namespace pdlfs {
 class EncTest {};
-
+// Ensure that when i < j, Base64Enc(i) < Base64Enc(j)
 TEST(EncTest, Base64) {
   char tmp[20];
   std::string prev;
