@@ -154,8 +154,13 @@ struct Stats {
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
-    fprintf(stdout, "%-12d: %16.3f micros/op, %12d ops\n", FLAGS_rank,
-            seconds_ * 1e6 / done_, done_);
+    // Rate is computed on actual elapsed time, not the sum of per-rank
+    // elapsed times. On the other hand, per-op latency is computed on the sum
+    // of per-rank elapsed times, not the actual elapsed time.
+    double elapsed = (finish_ - start_) * 1e-6;
+    fprintf(stdout, "%-12d: %9.3f micros/op, %9.3f Kop/s, %9d ops\n",
+            FLAGS_rank, seconds_ * 1e6 / done_, done_ / 1000.0 / elapsed,
+            done_);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
             (TimevalToMicros(&rusage_.ru_utime) -
@@ -191,11 +196,12 @@ struct GlobalStats {
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
-
-    // Per-op latency is computed on the sum of per-thread elapsed times, not
-    // the actual elapsed time.
-    fprintf(stdout, "==%-10s: %16.3f micros/op, %12ld ops\n", name,
-            seconds_ * 1e6 / done_, done_);
+    // Rate is computed on actual elapsed time, not the sum of per-rank
+    // elapsed times. On the other hand, per-op latency is computed on the sum
+    // of per-rank elapsed times, not the actual elapsed time.
+    double elapsed = (finish_ - start_) * 1e-6;
+    fprintf(stdout, "==%-10s: %9.3f micros/op, %9.3f Kop/s, %9ld ops\n", name,
+            seconds_ * 1e6 / done_, done_ / 1000.0 / elapsed, done_);
     fflush(stdout);
   }
 };
