@@ -345,7 +345,7 @@ class Benchmark {
     fscli_->RegisterFsSrvUris(rpc_, uri_mapper_, num_svrs, num_ports_per_svr);
   }
 
-  void PrepareWrite(RankState* const state) {
+  void PrepareRun(RankState* const state) {
     if (!FLAGS_share_dir || FLAGS_rank == 0) {
       Status s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
                                &state->stbuf);
@@ -377,6 +377,25 @@ class Benchmark {
     }
   }
 
+  void DoRead(RankState* const state) {
+    const uint64_t pid = uint64_t(FLAGS_rank) << 32;
+    char tmp[30];
+    for (int i = 0; i < FLAGS_num; i++) {
+      Slice fname = Base64Enc(tmp, pid | state->fids[i]);
+      state->pathbuf.resize(state->prefix_length);
+      state->pathbuf.append(fname.data(), fname.size());
+      Status s = fscli_->Lstat(&state->ctx, NULL, state->pathbuf.c_str(),
+                               &state->stbuf);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Fail to lstat: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      state->stats.FinishedSingleOp(FLAGS_num);
+    }
+  }
+
   void RunStep(const char* name, RankState* const state,
                void (Benchmark::*method)(RankState*)) {
     GlobalStats stats;
@@ -397,8 +416,9 @@ class Benchmark {
 
   void RunBenchmarks() {
     RankState state;
-    PrepareWrite(&state);
-    RunStep("write", &state, &Benchmark::DoWrite);
+    PrepareRun(&state);
+    RunStep("insert", &state, &Benchmark::DoWrite);
+    RunStep("fstats", &state, &Benchmark::DoRead);
   }
 
  public:
