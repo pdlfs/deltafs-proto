@@ -318,7 +318,7 @@ void BM_Main(int* const argc, char*** const argv) {
     pdlfs::FLAGS_db = default_db_path.c_str();
   }
   if (!pdlfs::FLAGS_srv_uri) {
-    default_uri = ":10086";
+    default_uri = "udp://:10086";
     pdlfs::FLAGS_srv_uri = default_uri.c_str();
   }
 
