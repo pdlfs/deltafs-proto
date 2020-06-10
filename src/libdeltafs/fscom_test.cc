@@ -200,7 +200,7 @@ int FLAGS_uid = 1;
 int FLAGS_gid = 1;
 
 // Comma-separated server locations.
-const char* FLAGS_srv_uris = NULL;
+const char* FLAGS_svr_uris = NULL;
 
 // Performance stats.
 class Stats {
@@ -368,7 +368,7 @@ struct ThreadState {
 class Benchmark {
  private:
   RPC* rpc_;
-  std::vector<std::string> srvs_;
+  std::vector<std::string> svr_uris_;
   LookupStat parent_lstat_;
   User me_;
 
@@ -526,13 +526,13 @@ class Benchmark {
     Stat stat;
     MkfleRet ret;
     ret.stat = &stat;
-    const int n = srvs_.size();
+    const int n = svr_uris_.size();
     if (n == 0) {
       return;
     }
     rpc::If** const clis = new rpc::If*[n];
     for (int i = 0; i < n; i++) {
-      clis[i] = rpc_->OpenStubFor(srvs_[i]);
+      clis[i] = rpc_->OpenStubFor(svr_uris_[i]);
     }
     Stats* const stats = &thread->stats;
     Random rnd(1000 + thread->tid);
@@ -582,7 +582,7 @@ class Benchmark {
       fprintf(stderr, "Cannot open rpc: %s\n", s.ToString().c_str());
       exit(1);
     }
-    const char* p = FLAGS_srv_uris;
+    const char* p = FLAGS_svr_uris;
     while (p != NULL) {
       const char* sep = strchr(p, ',');
       Slice uri;
@@ -593,8 +593,8 @@ class Benchmark {
         uri = Slice(p, sep - p);
         p = sep + 1;
       }
-      srvs_.push_back(uri.ToString());
-      fprintf(stdout, "Add srv: '%s'\n", srvs_.back().c_str());
+      svr_uris_.push_back(uri.ToString());
+      fprintf(stdout, "Add svr uri: '%s'\n", svr_uris_.back().c_str());
     }
     fflush(stdout);
 
@@ -613,7 +613,7 @@ void BM_Main(const int* const argc, char*** const argv) {
     int n;
     char junk;
     if (strncmp((*argv)[i], "--uris=", 7) == 0) {
-      pdlfs::FLAGS_srv_uris = (*argv)[i] + 7;
+      pdlfs::FLAGS_svr_uris = (*argv)[i] + 7;
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
@@ -627,9 +627,9 @@ void BM_Main(const int* const argc, char*** const argv) {
     }
   }
 
-  if (!pdlfs::FLAGS_srv_uris) {
-    default_uri = ":10086";
-    pdlfs::FLAGS_srv_uris = default_uri.c_str();
+  if (!pdlfs::FLAGS_svr_uris) {
+    default_uri = "udp://127.0.0.1:10086";
+    pdlfs::FLAGS_svr_uris = default_uri.c_str();
   }
 
   pdlfs::Benchmark benchmark;
