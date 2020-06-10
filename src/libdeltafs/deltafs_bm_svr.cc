@@ -143,9 +143,9 @@ class Server {
     PrintWarnings();
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "FS info port:       %d\n", FLAGS_info_port);
-    fprintf(stdout, "FS skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "IP:                 %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
+    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
+    fprintf(stdout, "Ip:                 %s*\n", FLAGS_ip_prefix);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
     fprintf(stdout, "BLK cache size:     %d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));

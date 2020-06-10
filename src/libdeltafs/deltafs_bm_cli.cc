@@ -301,6 +301,14 @@ class Benchmark {
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info svr:        %s\n", FLAGS_info_svr_uri);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
+    fprintf(stdout, "Num (rd/wr):        %d/%d per rank\n", FLAGS_reads,
+            FLAGS_num);
+    char mon_info[100];
+    snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
+             FLAGS_mon_destination_uri, FLAGS_mon_interval);
+    fprintf(stdout, "Mon:                %s\n",
+            FLAGS_mon_destination_uri ? mon_info : "OFF");
+    fprintf(stdout, "Random key order:   %d\n", FLAGS_random_order);
     fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
     fprintf(stdout, "------------------------------------------------\n");
   }
