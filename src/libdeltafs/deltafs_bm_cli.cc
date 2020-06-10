@@ -623,7 +623,7 @@ class Benchmark {
 }  // namespace pdlfs
 
 namespace {
-void Doit(int* const argc, char*** const argv) {
+void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_skip_fs_checks = pdlfs::FLAGS_random_order = true;
 
   for (int i = 1; i < (*argc); i++) {
@@ -679,7 +679,7 @@ int main(int argc, char* argv[]) {
   }
   MPI_Comm_size(MPI_COMM_WORLD, &pdlfs::FLAGS_comm_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &pdlfs::FLAGS_rank);
-  Doit(&argc, &argv);
+  BM_Main(&argc, &argv);
   MPI_Finalize();
   return 0;
 }

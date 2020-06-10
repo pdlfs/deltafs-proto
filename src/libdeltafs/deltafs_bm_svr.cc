@@ -511,7 +511,7 @@ void HandleSig(const int sig) {
   }
 }
 
-void Doit(int* const argc, char*** const argv) {
+void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_skip_fs_checks = true;
   pdlfs::FLAGS_dbopts.enable_io_monitoring = true;
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
@@ -580,7 +580,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Comm_size(MPI_COMM_WORLD, &pdlfs::FLAGS_comm_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &pdlfs::FLAGS_rank);
-  Doit(&argc, &argv);
+  BM_Main(&argc, &argv);
   MPI_Finalize();
   return 0;
 }
