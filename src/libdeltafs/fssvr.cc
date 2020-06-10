@@ -111,7 +111,7 @@ Status FilesystemServer::OpenServer() {
   Status status = rpc_->Start();
   if (status.ok()) {
 #if VERBOSE >= 2
-    Log(options_.info_log, 2, "Filesystem m server is up: %s",
+    Log(options_.info_log, 2, "Filesystem server is up: %s",
         rpc_->GetUri().c_str());
 #endif
   }
