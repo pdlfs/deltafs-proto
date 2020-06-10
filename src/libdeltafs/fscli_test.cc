@@ -288,7 +288,7 @@ TEST(FilesystemCliTest, BatchCreats) {
 }
 
 namespace {  // Filesystem rpc performance bench (the client part of it)...
-// Number of concurrent threads to run.
+// Number of threads to run.
 int FLAGS_threads = 1;
 
 // Number of rpc operations to perform per thread.
@@ -296,6 +296,9 @@ int FLAGS_num = 8;
 
 // Print histogram of timings.
 bool FLAGS_histogram = false;
+
+// Generate file names in random order.
+bool FLAGS_random_order = false;
 
 // User id for the bench.
 int FLAGS_uid = 1;
@@ -455,33 +458,60 @@ struct SharedState {
   int num_initialized;
   int num_done;
   bool start;
+  LookupStat parent_lstat;
+  User me;
 
-  explicit SharedState(int total)
-      : cv(&mu), total(total), num_initialized(0), num_done(0), start(false) {}
+  SharedState(int total)
+      : cv(&mu), total(total), num_initialized(0), num_done(0), start(false) {
+    parent_lstat.SetDnodeNo(0);
+    parent_lstat.SetInodeNo(0);
+    parent_lstat.SetDirMode(0770 | S_IFDIR);
+    parent_lstat.SetUserId(FLAGS_uid);
+    parent_lstat.SetGroupId(FLAGS_gid);
+    parent_lstat.SetZerothServer(0);
+    parent_lstat.SetLeaseDue(-1);
+    parent_lstat.AssertAllSet();
+    me.uid = FLAGS_uid;
+    me.gid = FLAGS_gid;
+  }
+};
+
+// A wrapper over our own random object.
+struct STLRand {
+  STLRand(int seed) : rnd(seed) {}
+  int operator()(int i) { return rnd.Next() % i; }
+  Random rnd;
 };
 
 // Per-thread state for concurrent executions of the same benchmark.
 struct ThreadState {
   int tid;  // 0..n-1 when running in n threads
+  std::vector<uint32_t> fids;
   SharedState* shared;
   Stats stats;
 
-  explicit ThreadState(int tid) : tid(tid), shared(NULL) {}
+  ThreadState(int tid) : tid(tid), shared(NULL) {
+    fids.reserve(FLAGS_num);
+    for (int i = 0; i < FLAGS_num; i++) {
+      fids.push_back(i);
+    }
+    if (FLAGS_random_order) {
+      std::random_shuffle(fids.begin(), fids.end(), STLRand(1000 * tid));
+    }
+  }
 };
 
 class Benchmark {
  private:
-  RPC* rpc_;
   std::vector<std::string> svr_uris_;
-  LookupStat parent_lstat_;
-  User me_;
+  RPC* rpc_;
 
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
-    fprintf(stdout, "Number requests:    %d per thread\n", FLAGS_num);
-    fprintf(stdout, "Histogram:          %d\n", FLAGS_histogram);
+    fprintf(stdout, "Num sends:          %d per thread\n", FLAGS_num);
+    fprintf(stdout, "Random key order:   %d\n", FLAGS_random_order);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -623,10 +653,14 @@ class Benchmark {
   }
 
   void SendAndReceive(ThreadState* const thread) {
+    SharedState* shared = thread->shared;
+    Stats* stats = &thread->stats;
+    const uint64_t tid = uint64_t(thread->tid) << 32;
+    Random rnd(1000 + thread->tid);
     MkfleOptions options;
-    options.parent = &parent_lstat_;
+    options.parent = &shared->parent_lstat;
     options.mode = 0660;
-    options.me = me_;
+    options.me = shared->me;
     Stat stat;
     MkfleRet ret;
     ret.stat = &stat;
@@ -638,11 +672,9 @@ class Benchmark {
     for (int i = 0; i < n; i++) {
       clis[i] = rpc_->OpenStubFor(svr_uris_[i]);
     }
-    Stats* const stats = &thread->stats;
-    Random rnd(1000 + thread->tid);
     char tmp[30];
     for (int i = 0; i < FLAGS_num; i++) {
-      options.name = Base64Enc(tmp, i);
+      options.name = Base64Enc(tmp, tid | thread->fids[i]);
       Status s = rpc::MkfleCli(clis[rnd.Next() % n])(options, &ret);
       if (!s.ok()) {
         fprintf(stderr, "Cannot send/recv: %s\n", s.ToString().c_str());
@@ -657,27 +689,19 @@ class Benchmark {
   }
 
  public:
-  Benchmark() : rpc_(NULL) {
-    parent_lstat_.SetDnodeNo(0);
-    parent_lstat_.SetInodeNo(0);
-    parent_lstat_.SetDirMode(0770 | S_IFDIR);
-    parent_lstat_.SetUserId(FLAGS_uid);
-    parent_lstat_.SetGroupId(FLAGS_gid);
-    parent_lstat_.SetZerothServer(0);
-    parent_lstat_.SetLeaseDue(-1);
-    parent_lstat_.AssertAllSet();
-    me_.uid = FLAGS_uid;
-    me_.gid = FLAGS_gid;
-  }
+  Benchmark() : rpc_(NULL) {}
 
-  ~Benchmark() {  ///
+  ~Benchmark() {
+    if (rpc_) {
+      rpc_->Stop();
+    }
     delete rpc_;
   }
 
   void Run() {
     PrintHeader();
     RPCOptions opts;
-    opts.uri = ":";  // Any non-empty string works
+    opts.uri = "udp://-1:-1";
     opts.mode = rpc::kClientOnly;
     rpc_ = RPC::Open(opts);
     Status s = rpc_->status();
