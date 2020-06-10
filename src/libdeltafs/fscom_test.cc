@@ -33,20 +33,22 @@
  */
 #include "fscom.h"
 
+#include "base64enc.h"
+
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/testharness.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <time.h>
 #if defined(PDLFS_OS_LINUX)
+#include <ctype.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <time.h>
 #endif
 
 #if __cplusplus >= 201103L
@@ -183,7 +185,7 @@ TEST(MkflsTest, MkflsCall) {
   ASSERT_EQ(ret.n, n_);
 }
 
-namespace {  // RPC performance bench (the client part of it)...
+namespace {  // Filesystem rpc performance bench (the client part of it)...
 // Number of concurrent threads to run.
 int FLAGS_threads = 1;
 
@@ -511,7 +513,7 @@ class Benchmark {
     for (int i = 1; i < n; i++) {
       arg[0].thread->stats.Merge(arg[i].thread->stats);
     }
-    arg[0].thread->stats.Report("send&recieve");
+    arg[0].thread->stats.Report("send/recv");
     for (int i = 0; i < n; i++) {
       delete arg[i].thread;
     }
@@ -536,10 +538,9 @@ class Benchmark {
     }
     Stats* const stats = &thread->stats;
     Random rnd(1000 + thread->tid);
-    char tmp[20];
+    char tmp[30];
     for (int i = 0; i < FLAGS_num; i++) {
-      snprintf(tmp, sizeof(tmp), "%012d", i);
-      options.name = Slice(tmp, 12);
+      options.name = Base64Enc(tmp, i);
       Status s = rpc::MkfleCli(clis[rnd.Next() % n])(options, &ret);
       if (!s.ok()) {
         fprintf(stderr, "Cannot send/recv: %s\n", s.ToString().c_str());
