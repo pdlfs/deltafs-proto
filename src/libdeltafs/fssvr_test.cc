@@ -43,11 +43,13 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
-#include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(PDLFS_OX_LINUX)
+#include <ctype.h>
 #include <time.h>
+#endif
 
 #if __cplusplus >= 201103L
 #define OVERRIDE override
@@ -58,13 +60,13 @@ namespace pdlfs {
 class FilesystemServerTest {
  public:
   FilesystemServerTest()  ///
-      : srv_(new FilesystemServer(options_)) {}
+      : svr_(new FilesystemServer(options_)) {}
   virtual ~FilesystemServerTest() {  ///
-    delete srv_;
+    delete svr_;
   }
 
   FilesystemServerOptions options_;
-  FilesystemServer* srv_;
+  FilesystemServer* svr_;
 };
 
 Status TEST_Handler(FilesystemIf*, rpc::If::Message& in,
@@ -75,14 +77,14 @@ Status TEST_Handler(FilesystemIf*, rpc::If::Message& in,
 }
 
 TEST(FilesystemServerTest, StartAndStop) {
-  ASSERT_OK(srv_->OpenServer());
-  ASSERT_OK(srv_->Close());
+  ASSERT_OK(svr_->OpenServer());
+  ASSERT_OK(svr_->Close());
 }
 
 TEST(FilesystemServerTest, OpRoute) {
-  ASSERT_OK(srv_->OpenServer());
-  srv_->TEST_Remap(0, TEST_Handler);
-  rpc::If* cli = srv_->TEST_CreateSelfCli();
+  ASSERT_OK(svr_->OpenServer());
+  svr_->TEST_Remap(0, TEST_Handler);
+  rpc::If* cli = svr_->TEST_CreateSelfCli();
   rpc::If::Message in, out;
   uint32_t salt = 12345;
   PutFixed32(&in.extra_buf, 0);
@@ -91,7 +93,7 @@ TEST(FilesystemServerTest, OpRoute) {
   ASSERT_OK(cli->Call(in, out));
   ASSERT_EQ(out.contents.size(), 4);
   ASSERT_EQ(DecodeFixed32(&out.contents[0]), salt);
-  ASSERT_OK(srv_->Close());
+  ASSERT_OK(svr_->Close());
 }
 
 namespace {  // RPC performance bench (the srvr part of it)...
@@ -108,14 +110,14 @@ bool FLAGS_use_existing_db = false;
 const char* FLAGS_db = NULL;
 
 // Start the server at the following address.
-const char* FLAGS_srv_uri = NULL;
+const char* FLAGS_svr_uri = NULL;
 
 class Benchmark : public FilesystemWrapper {
  private:
   port::Mutex mu_;
   bool shutting_down_;
   port::CondVar cv_;
-  FilesystemServer* fsrpcsrv_;
+  FilesystemServer* fsrpcsvr_;
   Filesystem* fs_;
   FilesystemDb* db_;
 
@@ -123,7 +125,7 @@ class Benchmark : public FilesystemWrapper {
     PrintEnvironment();
     PrintWarnings();
     fprintf(stdout, "Threads:            %d\n", FLAGS_threads);
-    fprintf(stdout, "Uri:                %s\n", FLAGS_srv_uri);
+    fprintf(stdout, "Uri:                %s\n", FLAGS_svr_uri);
     fprintf(stdout, "Real fs w/ db:      %d\n", FLAGS_with_db);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s\n", FLAGS_db);
@@ -223,13 +225,13 @@ class Benchmark : public FilesystemWrapper {
   }
 
   void Open() {
-    FilesystemServerOptions srvopts;
-    srvopts.num_rpc_threads = FLAGS_threads;
-    srvopts.uri = FLAGS_srv_uri;
-    fsrpcsrv_ = new FilesystemServer(srvopts);
+    FilesystemServerOptions svropts;
+    svropts.num_rpc_threads = FLAGS_threads;
+    svropts.uri = FLAGS_svr_uri;
+    fsrpcsvr_ = new FilesystemServer(svropts);
     FilesystemIf* const fs = !FLAGS_with_db ? this : OpenFilesystem();
-    fsrpcsrv_->SetFs(fs);
-    Status s = fsrpcsrv_->OpenServer();
+    fsrpcsvr_->SetFs(fs);
+    Status s = fsrpcsvr_->OpenServer();
     if (!s.ok()) {
       fprintf(stderr, "Cannot open rpc: %s\n", s.ToString().c_str());
       exit(1);
@@ -240,7 +242,7 @@ class Benchmark : public FilesystemWrapper {
   Benchmark()
       : shutting_down_(false),
         cv_(&mu_),
-        fsrpcsrv_(NULL),
+        fsrpcsvr_(NULL),
         fs_(NULL),
         db_(NULL) {
     if (FLAGS_with_db && !FLAGS_use_existing_db) {
@@ -249,7 +251,7 @@ class Benchmark : public FilesystemWrapper {
   }
 
   ~Benchmark() {
-    delete fsrpcsrv_;
+    delete fsrpcsvr_;
     delete fs_;
     delete db_;
   }
@@ -303,7 +305,7 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_threads = n;
     } else if (strncmp((*argv)[i], "--uri=", 6) == 0) {
-      pdlfs::FLAGS_srv_uri = (*argv)[i] + 6;
+      pdlfs::FLAGS_svr_uri = (*argv)[i] + 6;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db = (*argv)[i] + 5;
     } else {
@@ -314,12 +316,12 @@ void BM_Main(int* const argc, char*** const argv) {
 
   // Choose a location for the test database if none given with --db=<path>
   if (!pdlfs::FLAGS_db) {
-    default_db_path = pdlfs::test::TmpDir() + "/fsrpcsrv_bench";
+    default_db_path = pdlfs::test::TmpDir() + "/fssvr_bench";
     pdlfs::FLAGS_db = default_db_path.c_str();
   }
-  if (!pdlfs::FLAGS_srv_uri) {
+  if (!pdlfs::FLAGS_svr_uri) {
     default_uri = "udp://:10086";
-    pdlfs::FLAGS_srv_uri = default_uri.c_str();
+    pdlfs::FLAGS_svr_uri = default_uri.c_str();
   }
 
   pdlfs::Benchmark benchmark;
