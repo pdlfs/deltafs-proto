@@ -16,10 +16,11 @@
  */
 #pragma once
 
-#include "pdlfs-common/cache.h"
 #include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
+
+#include "pdlfs-common/cache.h"
 #include "pdlfs-common/port.h"
 
 #include <stdint.h>
@@ -58,8 +59,8 @@ class TableCache {
   void Evict(uint64_t file_number);
 
  private:
-  Status LoadTable(uint64_t file_number, uint64_t file_size, Table**,
-                   RandomAccessFile**);
+  Status OpenTable(uint64_t fnum, uint64_t fsize, Table** table,
+                   RandomAccessFile** file);
 
   // Load the table for the specified file number.  Bind the
   // given sequence offset to the table.

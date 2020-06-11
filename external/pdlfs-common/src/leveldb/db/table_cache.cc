@@ -58,7 +58,7 @@ TableCache::TableCache(const std::string& dbname, const Options* options,
 
 TableCache::~TableCache() {}
 
-Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
+Status TableCache::OpenTable(uint64_t fnum, uint64_t fsize, Table** table,
                              RandomAccessFile** file) {
   Status s;
   std::string fname = TableFileName(dbname_, fnum);
@@ -71,6 +71,10 @@ Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
       }
     }
   }
+#if VERBOSE >= 2
+  Log(options_->info_log, 2, "Opening table %s: %s", fname.c_str(),
+      s.ToString().c_str());
+#endif
 
   if (s.ok()) {
     s = Table::Open(*options_, *file, fsize, table);
@@ -97,7 +101,7 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     // Load table from storage
     RandomAccessFile* file = NULL;
     Table* table = NULL;
-    s = LoadTable(fnum, fsize, &table, &file);
+    s = OpenTable(fnum, fsize, &table, &file);
     if (s.ok()) {
       TableAndFile* tf = new TableAndFile;
       tf->off = off;
