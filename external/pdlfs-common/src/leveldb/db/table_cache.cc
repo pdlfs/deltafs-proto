@@ -24,10 +24,10 @@
 #include "pdlfs-common/env.h"
 
 namespace pdlfs {
-namespace config {  // If ".sst" table extension should be checked in addition
-                    // to ".ldb"
+namespace config {
+// If ".sst" table extension should be checked in addition to ".ldb"
 static const bool kCheckOldTableName = false;
-}
+}  // namespace config
 
 struct TableAndFile {
   SequenceOff off;
@@ -35,22 +35,20 @@ struct TableAndFile {
   Table* table;
 };
 
-static inline TableAndFile* FetchTableAndFile(Cache* c, Cache::Handle* h) {
-  return reinterpret_cast<TableAndFile*>(c->Value(h));
-}
-
-static void DeleteEntry(const Slice& key, void* value) {
+namespace {
+void DeleteEntry(const Slice& key, void* value) {
   TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
   delete tf->table;
   delete tf->file;
   delete tf;
 }
 
-static void UnrefEntry(void* arg1, void* arg2) {
+void UnrefEntry(void* arg1, void* arg2) {
   Cache* cache = reinterpret_cast<Cache*>(arg1);
   Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
   cache->Release(h);
 }
+}  // namespace
 
 TableCache::TableCache(const std::string& dbname, const Options* options,
                        Cache* cache)
@@ -110,7 +108,8 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     }
   } else {
     // Fetch table from cache
-    TableAndFile* tf = FetchTableAndFile(cache_, *handle);
+    TableAndFile* const tf =
+        reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
     if (tf->off != off) {
       if (tf->off == 0) {
         // Apply the given offset to this table.
@@ -234,7 +233,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options, uint64_t fnum,
     return NewErrorIterator(s);
   }
 
-  Table* table = FetchTableAndFile(cache_, handle)->table;
+  Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
   Iterator* result = table->NewIterator(options);
   result->RegisterCleanup(&UnrefEntry, cache_, handle);
   if (off != 0) {
@@ -256,9 +255,7 @@ struct Wrapper {
   void* arg;
 };
 
-}  // namespace
-
-static void ApplyOffset(void* arg, const Slice& key, const Slice& value) {
+void ApplyOffset(void* arg, const Slice& key, const Slice& value) {
   Wrapper* wp = reinterpret_cast<Wrapper*>(arg);
   char sp[64];
   std::string buf;
@@ -283,6 +280,7 @@ static void ApplyOffset(void* arg, const Slice& key, const Slice& value) {
   // k maybe empty, which indicates an error.
   (*wp->saver)(wp->arg, k, value);
 }
+}  // namespace
 
 Status TableCache::Get(const ReadOptions& options, uint64_t fnum,
                        uint64_t fsize, SequenceOff off, const Slice& key,
@@ -293,7 +291,7 @@ Status TableCache::Get(const ReadOptions& options, uint64_t fnum,
     return s;
   }
 
-  Table* t = FetchTableAndFile(cache_, handle)->table;
+  Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
   if (off == 0) {
     s = t->InternalGet(options, key, arg, saver);
     cache_->Release(handle);
