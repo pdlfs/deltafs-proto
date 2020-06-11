@@ -675,7 +675,8 @@ class Benchmark {
     char tmp[30];
     for (int i = 0; i < FLAGS_num; i++) {
       options.name = Base64Enc(tmp, tid | thread->fids[i]);
-      Status s = rpc::MkfleCli(clis[rnd.Next() % n])(options, &ret);
+      Status s =
+          rpc::MkfleCli(clis[(n == 1) ? 0 : rnd.Next() % n])(options, &ret);
       if (!s.ok()) {
         fprintf(stderr, "Cannot send/recv: %s\n", s.ToString().c_str());
         exit(1);
