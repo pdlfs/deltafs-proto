@@ -736,6 +736,7 @@ class Benchmark {
 
 namespace {
 void BM_Main(const int* const argc, char*** const argv) {
+  pdlfs::FLAGS_random_order = true;
   std::string default_uri;
 
   for (int i = 2; i < *argc; i++) {
@@ -743,11 +744,14 @@ void BM_Main(const int* const argc, char*** const argv) {
     char junk;
     if (strncmp((*argv)[i], "--uris=", 7) == 0) {
       pdlfs::FLAGS_svr_uris = (*argv)[i] + 7;
-    } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_threads = n;
+    } else if (sscanf((*argv)[i], "--random_order=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_random_order = n;
     } else if (sscanf((*argv)[i], "--histogram=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_histogram = n;
+    } else if (sscanf((*argv)[i], "--threads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_threads = n;
     } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_num = n;
     } else {
