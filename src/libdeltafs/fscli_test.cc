@@ -46,9 +46,11 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <vector>
 #if defined(PDLFS_OS_LINUX)
 #include <ctype.h>
 #include <sys/resource.h>
