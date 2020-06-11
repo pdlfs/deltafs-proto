@@ -45,47 +45,71 @@ struct FilesystemDbOptions {
   FilesystemDbOptions();
   // Read options from env.
   void ReadFromEnv();
-  // Write buffer size for db write ahead log files. Set 0 to disable.
+  // Write buffer size for db write ahead log files.
+  // Set 0 to disable.
+  // Default: 4KB
   uint64_t write_ahead_log_buffer;
-  // Write buffer size for db manifest files. Set 0 to disable.
+  // Write buffer size for db manifest files.
+  // Set 0 to disable.
+  // Default: 4KB
   uint64_t manifest_buffer;
-  // Write buffer size for db table files. Set 0 to disable.
+  // Write buffer size for db table files.
+  // Set 0 to disable.
+  // Default: 64KB
   uint64_t table_buffer;
   // Max size for a MemTable.
+  // Default: 64MB
   size_t memtable_size;
   // Planned size for each on-disk table file.
+  // Default: 32MB
   size_t table_size;
   // Size for a table block.
+  // Default: 64KB
   size_t block_size;
   // Max number of table files we open.
-  // Use 0 will disable caching effectively.
+  // Setting to 0 disables caching effectively.
+  // Default: 1000
   size_t table_cache_size;
-  // Bloom filter bits per key. Use 0 to disable filters altogether.
+  // Bloom filter bits per key.
+  // Use 0 to disable filters altogether.
+  // Default: 14
   size_t filter_bits_per_key;
   // Block cache size.
-  // Use 0 will disable caching effectively.
+  // Setting to 0 disables caching effectively.
+  // Default: 0
   size_t block_cache_size;
   // Number of keys between restart points for delta encoding of keys.
+  // Default: 16
   int block_restart_interval;
   // The size ratio between two levels.
+  // Default: 4
   int level_factor;
   // Planned number of files for level 1.
+  // Default: 4
   int l1_compaction_trigger;
-  // Number of files in level-0 until compaction starts.
+  // Number of files in Level-0 until compaction starts.
+  // Default: 4
   int l0_compaction_trigger;
-  // Number of files in level-0 until writes are slowed down.
+  // Number of files in Level-0 until writes are slowed down.
+  // Default: 8
   int l0_soft_limit;
-  // Number of files in level-0 until writes are entirely stalled.
+  // Number of files in Level-0 until writes are entirely stalled.
+  // Default: 12
   int l0_hard_limit;
   // Collect performance stats for db table files.
+  // Default: false
   bool enable_io_monitoring;
   // Log to stderr.
+  // Default: false
   bool use_default_logger;
   // Disable write ahead logging.
+  // Default: false
   bool disable_write_ahead_logging;
   // Disable background table compaction.
+  // Default: false
   bool disable_compaction;
   // Enable snappy compression.
+  // Default: false
   bool compression;
 };
 
