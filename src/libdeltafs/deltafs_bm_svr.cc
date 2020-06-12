@@ -147,9 +147,9 @@ class Server {
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Ip:                 %s*\n", FLAGS_ip_prefix);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
-    fprintf(stdout, "BLK cache size:     %d MB\n",
+    fprintf(stdout, "Blk cache size:     %-3d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));
-    fprintf(stdout, "BLK size:           %d KB\n",
+    fprintf(stdout, "Blk size:           %-3d KB\n",
             int(FLAGS_dbopts.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dbopts.filter_bits_per_key));
@@ -157,19 +157,23 @@ class Server {
             int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_dbopts.enable_io_monitoring);
-    fprintf(stdout, "WAL off:            %d\n",
+    fprintf(stdout, "Wal off:            %d\n",
             FLAGS_dbopts.disable_write_ahead_logging);
-    fprintf(stdout, "WAL write buffer:   %d KB\n",
+    fprintf(stdout, "Wal write size:     %-3d KB\n",
             int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
     fprintf(stdout, "LSM COMPACTION OFF: %d\n",
             FLAGS_dbopts.disable_compaction);
-    fprintf(stdout, "MEMTABLE size:      %d MB\n",
+    fprintf(stdout, "Memtable size:      %-3d MB\n",
             int(FLAGS_dbopts.memtable_size >> 20));
-    fprintf(stdout, "SST size:           %d MB\n",
+    fprintf(stdout, "Tbl size:           %-3d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
-    fprintf(stdout, "SST write buffer:   %d KB\n",
+    fprintf(stdout, "Tbl write size:     %-3d KB\n",
             int(FLAGS_dbopts.table_buffer >> 10));
-    fprintf(stdout, "Level factor:       %d\n", FLAGS_dbopts.level_factor);
+    fprintf(stdout, "Tbl bulk read size: %-3d KB\n",
+            int(FLAGS_dbopts.table_bulk_read_size >> 10));
+    fprintf(stdout, "Prefetch compaction input: %d\n",
+            FLAGS_dbopts.prefetch_compaction_input);
+    fprintf(stdout, "Db level factor:    %d\n", FLAGS_dbopts.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dbopts.l1_compaction_trigger);
 #if defined(PDLFS_RADOS)
