@@ -196,6 +196,10 @@ struct DBOptions {
   // Default: false
   bool disable_seek_compaction;
 
+  // Do not verify table by immediately opening it after it is built.
+  // Default: false
+  bool table_builder_skip_verification;
+
   // The targeted size of each Table file before compression.
   // Default: 2MB
   size_t table_file_size;

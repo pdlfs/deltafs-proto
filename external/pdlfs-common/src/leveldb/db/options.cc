@@ -14,8 +14,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-
 #include "pdlfs-common/leveldb/options.h"
+
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/internal_types.h"
@@ -48,6 +48,7 @@ DBOptions::DBOptions()
       disable_write_ahead_log(false),
       disable_compaction(false),
       disable_seek_compaction(false),
+      table_builder_skip_verification(false),
       table_file_size(2 * 1048576),
       level_factor(10),
       l1_compaction_trigger(5),
