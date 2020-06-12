@@ -460,17 +460,21 @@ class Benchmark {
             FLAGS_dboptions.enable_io_monitoring);
     fprintf(stdout, "WAL off:            %d\n",
             FLAGS_dboptions.disable_write_ahead_logging);
-    fprintf(stdout, "WAL write buffer:   %d KB\n",
+    fprintf(stdout, "WAL write size:     %d KB\n",
             int(FLAGS_dboptions.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "Lsm compaction off: %d\n",
+    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
             FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "MEMTABLE size:      %d MB\n",
             int(FLAGS_dboptions.memtable_size >> 20));
     fprintf(stdout, "SST size:           %d MB\n",
             int(FLAGS_dboptions.table_size >> 20));
-    fprintf(stdout, "SST write buffer:   %d KB\n",
+    fprintf(stdout, "SST write size:     %d KB\n",
             int(FLAGS_dboptions.table_buffer >> 10));
-    fprintf(stdout, "Level factor:       %d\n", FLAGS_dboptions.level_factor);
+    fprintf(stdout, "SST bulk read size: %d KB\n",
+            int(FLAGS_dboptions.table_bulk_read_size >> 10));
+    fprintf(stdout, "Prefetch compaction input: %d\n",
+            FLAGS_dboptions.prefetch_compaction_input);
+    fprintf(stdout, "LSM level factor:   %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
     fprintf(stdout, "Api:\n");
