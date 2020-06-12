@@ -518,6 +518,7 @@ void HandleSig(const int sig) {
 void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_skip_fs_checks = true;
   pdlfs::FLAGS_dbopts.enable_io_monitoring = true;
+  pdlfs::FLAGS_dbopts.prefetch_compaction_input = true;
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
@@ -548,6 +549,10 @@ void BM_Main(int* const argc, char*** const argv) {
                    1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dbopts.disable_compaction = n;
+    } else if (sscanf((*argv)[i], "--prefetch_compaction_input=%d%c", &n,
+                      &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
