@@ -38,16 +38,21 @@ class TableCache {
   TableCache(const std::string& dbname, const Options* options, Cache* cache);
   ~TableCache();
 
-  // Return an iterator for the specified file number (the corresponding
-  // file length must be exactly "file_size" bytes).  If "tableptr" is
-  // non-NULL, also sets "*tableptr" to point to the Table object
-  // underlying the returned iterator, or NULL if no Table object underlies
-  // the returned iterator.  The returned "*tableptr" object is owned by
-  // the cache and should not be deleted, and is valid for as long as the
-  // returned iterator is live.
+  // Return an iterator for the specified file number (the corresponding file
+  // length must be exactly "file_size" bytes). If "tableptr" is non-NULL, also
+  // sets "*tableptr" to point to the Table object underlying the returned
+  // iterator, or NULL if no Table object underlies the returned iterator. The
+  // returned "*tableptr" object is owned by the cache and should not be
+  // deleted, and is valid for as long as the returned iterator is live.
   Iterator* NewIterator(const ReadOptions& options, uint64_t file_number,
                         uint64_t file_size, SequenceOff seq_off,
                         Table** tableptr = NULL);
+  // This one is similar to the one above except that it bypasses the cache and
+  // has the table backed by a fully in-memory cached file. It is designed for
+  // the use in compaction.
+  Iterator* NewDirectIterator(const ReadOptions& options, uint64_t file_number,
+                              uint64_t file_size, SequenceOff seq_off,
+                              Table** tableptr = NULL);
 
   // If a seek to internal key "k" in specified file finds an entry,
   // call (*handle_result)(arg, found_key, found_value).
@@ -59,11 +64,14 @@ class TableCache {
   void Evict(uint64_t file_number);
 
  private:
-  Status OpenTable(uint64_t fnum, uint64_t fsize, Table** table,
-                   RandomAccessFile** file);
+  // Fetch table from storage. By default, only table header and metadata blocks
+  // are fetched. If prefetch is true, will read the entire table into memory so
+  // all subsequent table reads will hit the cache.
+  Status FetchTable(uint64_t file_number, uint64_t file_size, Table** table,
+                    RandomAccessFile** file, bool prefetch);
 
-  // Load the table for the specified file number.  Bind the
-  // given sequence offset to the table.
+  // Load the table for the specified file number. Bind the given sequence
+  // offset to the table.
   Status FindTable(uint64_t file_number, uint64_t file_size,
                    SequenceOff seq_off, Cache::Handle**);
 

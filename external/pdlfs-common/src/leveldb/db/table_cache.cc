@@ -22,32 +22,15 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/env_files.h"
 
 namespace pdlfs {
-namespace config {
-// If ".sst" table extension should be checked in addition to ".ldb"
-static const bool kCheckOldTableName = false;
-}  // namespace config
-
+namespace {
 struct TableAndFile {
   SequenceOff off;
   RandomAccessFile* file;
   Table* table;
 };
-
-namespace {
-void DeleteEntry(const Slice& key, void* value) {
-  TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
-  delete tf->table;
-  delete tf->file;
-  delete tf;
-}
-
-void UnrefEntry(void* arg1, void* arg2) {
-  Cache* cache = reinterpret_cast<Cache*>(arg1);
-  Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
-  cache->Release(h);
-}
 }  // namespace
 
 TableCache::TableCache(const std::string& dbname, const Options* options,
@@ -58,35 +41,55 @@ TableCache::TableCache(const std::string& dbname, const Options* options,
 
 TableCache::~TableCache() {}
 
-Status TableCache::OpenTable(uint64_t fnum, uint64_t fsize, Table** table,
-                             RandomAccessFile** file) {
+Status TableCache::FetchTable(uint64_t file_number, uint64_t file_size,
+                              Table** table, RandomAccessFile** file,
+                              bool prefetch) {
   Status s;
-  std::string fname = TableFileName(dbname_, fnum);
-  s = env_->NewRandomAccessFile(fname.c_str(), file);
-  if (s.IsNotFound()) {
-    if (config::kCheckOldTableName) {
-      std::string old_fname = SSTTableFileName(dbname_, fnum);
-      if (env_->NewRandomAccessFile(old_fname.c_str(), file).ok()) {
-        s = Status::OK();
+  std::string fname = TableFileName(dbname_, file_number);
+  if (!prefetch) {
+    s = env_->NewRandomAccessFile(fname.c_str(), file);
+  } else {
+    SequentialFile* base;
+    s = env_->NewSequentialFile(fname.c_str(), &base);
+    if (s.ok()) {
+      WholeFileBufferedRandomAccessFile* f =
+          new WholeFileBufferedRandomAccessFile(base, file_size, 256 << 10);
+      s = f->Load();
+      if (s.ok()) {
+        *file = f;
+      } else {
+        delete f;
       }
     }
   }
-#if VERBOSE >= 2
-  Log(options_->info_log, 2, "Opening table %s: %s", fname.c_str(),
-      s.ToString().c_str());
-#endif
 
   if (s.ok()) {
-    s = Table::Open(*options_, *file, fsize, table);
+    s = Table::Open(*options_, *file, file_size, table);
     if (!s.ok()) {
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
-      assert(*table == NULL);
       delete *file;
     }
   }
+
+  if (s.ok() && prefetch) {
+#if VERBOSE >= 3
+    Log(options_->info_log, 3,
+        "Pre-fetched table #%d from storage => %lld bytes", file_number,
+        static_cast<unsigned long long>(file_size));
+#endif
+  }
   return s;
 }
+
+namespace {
+void DeleteEntry(const Slice& key, void* value) {
+  TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
+  delete tf->table;
+  delete tf->file;
+  delete tf;
+}
+}  // namespace
 
 Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
                              Cache::Handle** handle) {
@@ -101,7 +104,7 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     // Load table from storage
     RandomAccessFile* file = NULL;
     Table* table = NULL;
-    s = OpenTable(fnum, fsize, &table, &file);
+    s = FetchTable(fnum, fsize, &table, &file, false);
     if (s.ok()) {
       TableAndFile* tf = new TableAndFile;
       tf->off = off;
@@ -126,12 +129,10 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     }
   }
 
-  if (!s.ok()) {
-    assert(*handle == NULL);
-  }
   return s;
 }
 
+namespace {
 // A helper class that applies an offset to the sequence numbers of all the
 // internal keys that it sees.
 class SequenceOffsetter : public Iterator {
@@ -225,11 +226,18 @@ class SequenceOffsetter : public Iterator {
   Iterator* const iter_;
 };
 
-Iterator* TableCache::NewIterator(const ReadOptions& options, uint64_t fnum,
-                                  uint64_t fsize, SequenceOff off,
-                                  Table** tableptr) {
+void UnrefEntry(void* arg1, void* arg2) {
+  Cache* cache = reinterpret_cast<Cache*>(arg1);
+  Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
+  cache->Release(h);
+}
+}  // namespace
+
+Iterator* TableCache::NewIterator(const ReadOptions& options,
+                                  uint64_t file_number, uint64_t file_size,
+                                  SequenceOff seq_off, Table** tableptr) {
   Cache::Handle* handle = NULL;
-  Status s = FindTable(fnum, fsize, off, &handle);
+  Status s = FindTable(file_number, file_size, seq_off, &handle);
   if (!s.ok()) {
     if (tableptr != NULL) {
       *tableptr = NULL;
@@ -240,9 +248,49 @@ Iterator* TableCache::NewIterator(const ReadOptions& options, uint64_t fnum,
   Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
   Iterator* result = table->NewIterator(options);
   result->RegisterCleanup(&UnrefEntry, cache_, handle);
-  if (off != 0) {
-    result = new SequenceOffsetter(off, result);
+  if (seq_off != 0) {
+    result = new SequenceOffsetter(seq_off, result);
   }
+  if (tableptr != NULL) {
+    *tableptr = table;
+  }
+  return result;
+}
+
+namespace {
+// Delete the table and the file underlying an iterator.
+void DeleteTableAndFile(void* arg1, void* arg2) {
+  TableAndFile* tf = reinterpret_cast<TableAndFile*>(arg1);
+  delete tf->table;
+  delete tf->file;
+  delete tf;
+}
+}  // namespace
+
+Iterator* TableCache::NewDirectIterator(const ReadOptions& options,
+                                        uint64_t file_number,
+                                        uint64_t file_size, SequenceOff seq_off,
+                                        Table** tableptr) {
+  RandomAccessFile* file = NULL;
+  Table* table = NULL;
+  Status s = FetchTable(file_number, file_size, &table, &file, true);
+  if (!s.ok()) {
+    if (tableptr != NULL) {
+      *tableptr = NULL;
+    }
+    return NewErrorIterator(s);
+  }
+
+  TableAndFile* tf = new TableAndFile;
+  tf->off = seq_off;
+  tf->table = table;
+  tf->file = file;
+  Iterator* result = table->NewIterator(options);
+  result->RegisterCleanup(&DeleteTableAndFile, tf, NULL);
+  if (seq_off != 0) {
+    result = new SequenceOffsetter(seq_off, result);
+  }
+
   if (tableptr != NULL) {
     *tableptr = table;
   }
@@ -325,8 +373,8 @@ Status TableCache::Get(const ReadOptions& options, uint64_t fnum,
       }
 
       assert(parsed.sequence <= kMaxSequenceNumber);
-      // Prefer to use the static buffer if possible.
-      // Use heap space for large keys which we don't expect to see frequently.
+      // Prefer to use the static buffer if possible. Use heap space for large
+      // keys which we don't expect to see frequently.
       if (key.size() <= sizeof(sp)) {
         _key = AppendInternalKeyPtr(sp, parsed);
       } else {
