@@ -1019,6 +1019,7 @@ class Benchmark {
 
 namespace {
 void BM_Main(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_dboptions.prefetch_compaction_input = true;
   pdlfs::FLAGS_dboptions.use_default_logger = true;
   pdlfs::FLAGS_dboptions.ReadFromEnv();
 
@@ -1078,6 +1079,10 @@ void BM_Main(int* const argc, char*** const argv) {
                    1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dboptions.disable_compaction = n;
+    } else if (sscanf((*argv)[i], "--prefetch_compaction_input=%d%c", &n,
+                      &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dboptions.prefetch_compaction_input = n;
     } else if (sscanf((*argv)[i], "--shared_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_shared_dir = n;
