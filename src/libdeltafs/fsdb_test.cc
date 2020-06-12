@@ -452,7 +452,7 @@ class Benchmark {
             int(FLAGS_dboptions.block_cache_size >> 20));
     fprintf(stdout, "BLK size:           %-3d KB\n",
             int(FLAGS_dboptions.block_size >> 10));
-    fprintf(stdout, "BLOOM bits:         %d\n",
+    fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dboptions.filter_bits_per_key));
     fprintf(stdout, "Max open tables:    %d\n",
             int(FLAGS_dboptions.table_cache_size));
@@ -462,7 +462,7 @@ class Benchmark {
             FLAGS_dboptions.disable_write_ahead_logging);
     fprintf(stdout, "WAL write size:     %-3d KB\n",
             int(FLAGS_dboptions.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "MEMTABLE size:      %-3d MB\n",
+    fprintf(stdout, "Memtable size:      %-3d MB\n",
             int(FLAGS_dboptions.memtable_size >> 20));
     fprintf(stdout, "SST size:           %-3d MB\n",
             int(FLAGS_dboptions.table_size >> 20));
@@ -474,7 +474,7 @@ class Benchmark {
             FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dboptions.prefetch_compaction_input);
-    fprintf(stdout, "LSM level factor:   %d\n", FLAGS_dboptions.level_factor);
+    fprintf(stdout, "DB level factor:    %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
     fprintf(stdout, "Api:\n");
