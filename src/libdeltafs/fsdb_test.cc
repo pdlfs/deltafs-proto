@@ -443,6 +443,8 @@ class Benchmark {
     char mon_info[100];
     snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
              FLAGS_mon_destination_uri, FLAGS_mon_interval);
+    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
+            FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Mon:                %s\n",
             FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
@@ -470,8 +472,6 @@ class Benchmark {
             int(FLAGS_dboptions.table_buffer >> 10));
     fprintf(stdout, "Tbl bulk read size: %-3d KB\n",
             int(FLAGS_dboptions.table_bulk_read_size >> 10));
-    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
-            FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dboptions.prefetch_compaction_input);
     fprintf(stdout, "Db level factor:    %d\n", FLAGS_dboptions.level_factor);
