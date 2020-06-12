@@ -70,8 +70,9 @@ class TableCache {
   Status FetchTable(uint64_t file_number, uint64_t file_size, Table** table,
                     RandomAccessFile** file, bool prefetch);
 
-  // Load the table for the specified file number. Bind the given sequence
-  // offset to the table.
+  // Find the table for the specified file number from cache. If table is not
+  // yet cached, it will be loaded from storage and assigned the given sequence
+  // offset.
   Status FindTable(uint64_t file_number, uint64_t file_size,
                    SequenceOff seq_off, Cache::Handle**);
 
