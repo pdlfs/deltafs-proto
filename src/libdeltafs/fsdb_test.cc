@@ -443,8 +443,6 @@ class Benchmark {
     char mon_info[100];
     snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
              FLAGS_mon_destination_uri, FLAGS_mon_interval);
-    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
-            FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Mon:                %s\n",
             FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
@@ -464,6 +462,8 @@ class Benchmark {
             FLAGS_dboptions.disable_write_ahead_logging);
     fprintf(stdout, "Wal write size:     %-3d KB\n",
             int(FLAGS_dboptions.write_ahead_log_buffer >> 10));
+    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
+            FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Memtable size:      %-3d MB\n",
             int(FLAGS_dboptions.memtable_size >> 20));
     fprintf(stdout, "Tbl size:           %-3d MB\n",
