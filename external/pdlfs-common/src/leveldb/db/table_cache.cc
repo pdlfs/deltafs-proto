@@ -73,9 +73,9 @@ Status TableCache::FetchTable(uint64_t file_number, uint64_t file_size,
   }
 
   if (s.ok() && prefetch) {
-#if VERBOSE >= 3
-    Log(options_->info_log, 3,
-        "Pre-fetched table #%d from storage => %lld bytes", file_number,
+#if VERBOSE >= 2
+    Log(options_->info_log, 2, "Read table #%llu from storage => %llu bytes",
+        static_cast<unsigned long long>(file_number),
         static_cast<unsigned long long>(file_size));
 #endif
   }
