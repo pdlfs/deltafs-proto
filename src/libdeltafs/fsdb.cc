@@ -141,6 +141,7 @@ void FilesystemDbOptions::ReadFromEnv() {
 Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions dbopts;
   dbopts.create_if_missing = true;
+  dbopts.table_builder_skip_verification = true;
   dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
   dbopts.disable_compaction = options_.disable_compaction;
   dbopts.disable_seek_compaction = true;
