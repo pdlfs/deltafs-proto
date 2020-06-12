@@ -59,22 +59,24 @@ class FilesystemDbEnvWrapper : public EnvWrapper {
                                      RandomAccessFile** r) OVERRIDE;
   virtual Status NewWritableFile(const char* f, WritableFile** r) OVERRIDE;
 
-  // Total number of read operations performed on db table files.
-  uint64_t TotalDbReadOps();
-  // Total number of db table files opened for read. A db may be configured to
-  // cache table file handles in memory reducing physical file opens.
-  size_t TotalTableFilesOpenedForRead();
-  // Total amount of data read from db table files. This includes both data read
-  // for background db compaction and data read for foreground db queries. A db
-  // may be configured to cache data in memory reducing physical data reads.
-  uint64_t TotalDbBytesRead();
+  // Total number of random read operations performed on db table files.
+  uint64_t TotalRndTblReads();
+  // Total amount of data read randomly from db table files. This could include
+  // both data read for background compaction (when compaction input
+  // pre-fetching is turned off) and data read for foreground db queries. A db
+  // may also be configured to cache data in memory reducing physical random
+  // data reads.
+  uint64_t TotalRndTblBytesRead();
+  // Total number of sequential reads performed on db table files.
+  uint64_t TotalSeqTblReads();
+  // Total amount of data read sequentially from db table files for background
+  // compaction (when compaction input pre-fetching is ON).
+  uint64_t TotalSeqTblBytesRead();
   // Total number of write operations performed on db table files.
-  uint64_t TotalDbWriteOps();
-  // Total number of db table files opened for write.
-  size_t TotalTableFilesOpenedForWrite();
+  uint64_t TotalTblWrites();
   // Total amount of data written to db table files. Data written to db
   // write-ahead log files, manifest files, or info log files are not counted.
-  uint64_t TotalDbBytesWritten();
+  uint64_t TotalTblBytesWritten();
 
   void SetDbLoc(const std::string& dbloc);
   // Clear performance stats.

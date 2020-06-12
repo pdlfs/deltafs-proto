@@ -697,18 +697,25 @@ class Benchmark {
     }
     arg[0].thread->stats.Report(name);
     if (FLAGS_dboptions.enable_io_monitoring) {
+      fprintf(
+          stdout, "Total random reads: %llu ",
+          static_cast<unsigned long long>(db_->GetDbEnv()->TotalRndTblReads()));
+      fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
+              1.0 * db_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
+                  db_->GetDbEnv()->TotalRndTblReads(),
+              db_->GetDbEnv()->TotalRndTblBytesRead());
+      fprintf(stdout, "Total sequential bytes read: %llu ",
+              static_cast<unsigned long long>(
+                  db_->GetDbEnv()->TotalSeqTblBytesRead()));
+      fprintf(stdout, "(Avg read size: %.1fK)\n",
+              1.0 * db_->GetDbEnv()->TotalSeqTblBytesRead() / 1024.0 /
+                  db_->GetDbEnv()->TotalSeqTblReads());
       fprintf(stdout, "Total bytes written: %llu ",
               static_cast<unsigned long long>(
-                  db_->GetDbEnv()->TotalDbBytesWritten()));
+                  db_->GetDbEnv()->TotalTblBytesWritten()));
       fprintf(stdout, "(Avg write size: %.1fK)\n",
-              1.0 * db_->GetDbEnv()->TotalDbBytesWritten() / 1024.0 /
-                  db_->GetDbEnv()->TotalDbWriteOps());
-      fprintf(
-          stdout, "Total bytes read: %llu ",
-          static_cast<unsigned long long>(db_->GetDbEnv()->TotalDbBytesRead()));
-      fprintf(stdout, "(Avg read size: %.1fK)\n",
-              1.0 * db_->GetDbEnv()->TotalDbBytesRead() / 1024.0 /
-                  db_->GetDbEnv()->TotalDbReadOps());
+              1.0 * db_->GetDbEnv()->TotalTblBytesWritten() / 1024.0 /
+                  db_->GetDbEnv()->TotalTblWrites());
     }
     fprintf(stdout, " - Db stats: >>>\n%s\n", db_->GetDbStats().c_str());
     fprintf(stdout, " - L0 stats: >>>\n%s\n", db_->GetDbLevel0Events().c_str());

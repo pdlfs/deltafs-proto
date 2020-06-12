@@ -89,34 +89,34 @@ inline uint64_t SumUpOps(const std::list<T*>* v) {
 
 }  // namespace
 
-uint64_t FilesystemDbEnvWrapper::TotalDbWriteOps() {
+uint64_t FilesystemDbEnvWrapper::TotalTblWrites() {
   MutexLock l(&mu_);
   return SumUpOps(&writablefile_repo_);
 }
 
-size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForWrite() {
-  MutexLock l(&mu_);
-  return writablefile_repo_.size();
-}
-
-uint64_t FilesystemDbEnvWrapper::TotalDbBytesWritten() {
+uint64_t FilesystemDbEnvWrapper::TotalTblBytesWritten() {
   MutexLock l(&mu_);
   return SumUpBytes(&writablefile_repo_);
 }
 
-uint64_t FilesystemDbEnvWrapper::TotalDbReadOps() {
+uint64_t FilesystemDbEnvWrapper::TotalRndTblReads() {
   MutexLock l(&mu_);
   return SumUpOps(&randomaccessfile_repo_);
 }
 
-size_t FilesystemDbEnvWrapper::TotalTableFilesOpenedForRead() {
-  MutexLock l(&mu_);
-  return randomaccessfile_repo_.size();
-}
-
-uint64_t FilesystemDbEnvWrapper::TotalDbBytesRead() {
+uint64_t FilesystemDbEnvWrapper::TotalRndTblBytesRead() {
   MutexLock l(&mu_);
   return SumUpBytes(&randomaccessfile_repo_);
+}
+
+uint64_t FilesystemDbEnvWrapper::TotalSeqTblReads() {
+  MutexLock l(&mu_);
+  return SumUpOps(&sequentialfile_repo_);
+}
+
+uint64_t FilesystemDbEnvWrapper::TotalSeqTblBytesRead() {
+  MutexLock l(&mu_);
+  return SumUpBytes(&sequentialfile_repo_);
 }
 
 void FilesystemDbEnvWrapper::SetDbLoc(const std::string& dbloc) {
