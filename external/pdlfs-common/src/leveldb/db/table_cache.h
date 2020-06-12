@@ -66,7 +66,7 @@ class TableCache {
  private:
   // Fetch table from storage. By default, only table header and metadata blocks
   // are fetched. If prefetch is true, will read the entire table into memory so
-  // all subsequent table reads will hit the cache.
+  // all subsequent table reads will hit the memory.
   Status FetchTable(uint64_t file_number, uint64_t file_size, Table** table,
                     RandomAccessFile** file, bool prefetch);
 
