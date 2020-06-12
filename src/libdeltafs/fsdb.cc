@@ -68,16 +68,17 @@ void FilesystemDbStats::Merge(const FilesystemDbStats& other) {
 FilesystemDbOptions::FilesystemDbOptions()
     : write_ahead_log_buffer(4 << 10),
       manifest_buffer(4 << 10),
-      table_buffer(64 << 10),
-      memtable_size(64 << 20),
-      table_size(32 << 20),
-      block_size(64 << 10),
-      table_cache_size(1000),
+      table_buffer(256 << 10),
+      table_bulk_read_size(256 << 10),
+      memtable_size(8 << 20),
+      table_size(4 << 20),
+      block_size(4 << 10),
+      table_cache_size(2500),
       filter_bits_per_key(14),
       block_cache_size(0),
       block_restart_interval(16),
-      level_factor(4),
-      l1_compaction_trigger(4),
+      level_factor(8),
+      l1_compaction_trigger(5),
       l0_compaction_trigger(4),
       l0_soft_limit(8),
       l0_hard_limit(12),
@@ -143,6 +144,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.create_if_missing = true;
   dbopts.table_builder_skip_verification = true;
   dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
+  dbopts.prefetch_compaction_input = options_.prefetch_compaction_input;
   dbopts.disable_compaction = options_.disable_compaction;
   dbopts.disable_seek_compaction = true;
   dbopts.rotating_manifest = true;
@@ -150,6 +152,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.table_cache = table_cache_;
   dbopts.block_cache = block_cache_;
   dbopts.filter_policy = filter_;
+  dbopts.table_bulk_read_size = options_.table_bulk_read_size;
   dbopts.write_buffer_size = options_.memtable_size;
   dbopts.table_file_size = options_.table_size;
   dbopts.block_size = options_.block_size;

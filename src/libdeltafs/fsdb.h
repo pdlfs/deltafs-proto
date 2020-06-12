@@ -55,20 +55,23 @@ struct FilesystemDbOptions {
   uint64_t manifest_buffer;
   // Write buffer size for db table files.
   // Set 0 to disable.
-  // Default: 64KB
+  // Default: 256KB
   uint64_t table_buffer;
+  // Read size when bulk reading a table into memory.
+  // Default: 256KB
+  size_t table_bulk_read_size;
   // Max size for a MemTable.
-  // Default: 64MB
+  // Default: 8MB
   size_t memtable_size;
   // Planned size for each on-disk table file.
-  // Default: 32MB
+  // Default: 4MB
   size_t table_size;
   // Size for a table block.
-  // Default: 64KB
+  // Default: 4KB
   size_t block_size;
   // Max number of table files we open.
   // Setting to 0 disables caching effectively.
-  // Default: 1000
+  // Default: 2500
   size_t table_cache_size;
   // Bloom filter bits per key.
   // Use 0 to disable filters altogether.
@@ -82,10 +85,10 @@ struct FilesystemDbOptions {
   // Default: 16
   int block_restart_interval;
   // The size ratio between two levels.
-  // Default: 4
+  // Default: 8
   int level_factor;
   // Planned number of files for level 1.
-  // Default: 4
+  // Default: 5
   int l1_compaction_trigger;
   // Number of files in Level-0 until compaction starts.
   // Default: 4
@@ -105,6 +108,9 @@ struct FilesystemDbOptions {
   // Disable write ahead logging.
   // Default: false
   bool disable_write_ahead_logging;
+  // Prefetch compaction input table files.
+  // Default: false
+  bool prefetch_compaction_input;
   // Disable background table compaction.
   // Default: false
   bool disable_compaction;
