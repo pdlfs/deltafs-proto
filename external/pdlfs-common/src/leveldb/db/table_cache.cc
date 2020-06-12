@@ -41,9 +41,9 @@ TableCache::TableCache(const std::string& dbname, const Options* options,
 
 TableCache::~TableCache() {}
 
-Status TableCache::FetchTable(uint64_t file_number, uint64_t file_size,
-                              Table** table, RandomAccessFile** file,
-                              bool prefetch) {
+Status TableCache::OpenTable(uint64_t file_number, uint64_t file_size,
+                             Table** table, RandomAccessFile** file,
+                             bool prefetch) {
   Status s;
   std::string fname = TableFileName(dbname_, file_number);
   if (!prefetch) {
@@ -53,7 +53,8 @@ Status TableCache::FetchTable(uint64_t file_number, uint64_t file_size,
     s = env_->NewSequentialFile(fname.c_str(), &base);
     if (s.ok()) {
       WholeFileBufferedRandomAccessFile* f =
-          new WholeFileBufferedRandomAccessFile(base, file_size, 256 << 10);
+          new WholeFileBufferedRandomAccessFile(base, file_size,
+                                                options_->table_bulk_read_size);
       s = f->Load();
       if (s.ok()) {
         *file = f;
@@ -91,12 +92,12 @@ void DeleteEntry(const Slice& key, void* value) {
 }
 }  // namespace
 
-Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
-                             Cache::Handle** handle) {
+Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
+                             SequenceOff seq_off, Cache::Handle** handle) {
   Status s;
   char buf[16];
   EncodeFixed64(buf, id_);
-  EncodeFixed64(buf + 8, fnum);
+  EncodeFixed64(buf + 8, file_number);
   Slice key(buf, 16);
 
   *handle = cache_->Lookup(key);
@@ -104,10 +105,10 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     // Load table from storage
     RandomAccessFile* file = NULL;
     Table* table = NULL;
-    s = FetchTable(fnum, fsize, &table, &file, false);
+    s = OpenTable(file_number, file_size, &table, &file, false);
     if (s.ok()) {
       TableAndFile* tf = new TableAndFile;
-      tf->off = off;
+      tf->off = seq_off;
       tf->file = file;
       tf->table = table;
 
@@ -117,10 +118,10 @@ Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
     // Fetch table from cache
     TableAndFile* const tf =
         reinterpret_cast<TableAndFile*>(cache_->Value(*handle));
-    if (tf->off != off) {
+    if (tf->off != seq_off) {
       if (tf->off == 0) {
         // Apply the given offset to this table.
-        tf->off = off;
+        tf->off = seq_off;
       } else {
         s = Status::Corruption("Changing table sequence number offset");
         cache_->Release(*handle);
@@ -268,12 +269,13 @@ void DeleteTableAndFile(void* arg1, void* arg2) {
 }  // namespace
 
 Iterator* TableCache::NewDirectIterator(const ReadOptions& options,
+                                        bool prefetch_table,
                                         uint64_t file_number,
                                         uint64_t file_size, SequenceOff seq_off,
                                         Table** tableptr) {
   RandomAccessFile* file = NULL;
   Table* table = NULL;
-  Status s = FetchTable(file_number, file_size, &table, &file, true);
+  Status s = OpenTable(file_number, file_size, &table, &file, prefetch_table);
   if (!s.ok()) {
     if (tableptr != NULL) {
       *tableptr = NULL;
@@ -290,7 +292,6 @@ Iterator* TableCache::NewDirectIterator(const ReadOptions& options,
   if (seq_off != 0) {
     result = new SequenceOffsetter(seq_off, result);
   }
-
   if (tableptr != NULL) {
     *tableptr = table;
   }

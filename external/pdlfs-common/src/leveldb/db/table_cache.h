@@ -47,12 +47,12 @@ class TableCache {
   Iterator* NewIterator(const ReadOptions& options, uint64_t file_number,
                         uint64_t file_size, SequenceOff seq_off,
                         Table** tableptr = NULL);
-  // This one is similar to the one above except that it bypasses the cache and
-  // has the table backed by a fully in-memory cached file. It is designed for
-  // the use in compaction.
-  Iterator* NewDirectIterator(const ReadOptions& options, uint64_t file_number,
-                              uint64_t file_size, SequenceOff seq_off,
-                              Table** tableptr = NULL);
+  // This one is similar to the one above except that it will bypass the cache.
+  // In addition, if prefetch_table is true the entire table will be read into
+  // memory absorbing subsequent random reads to the table.
+  Iterator* NewDirectIterator(const ReadOptions& options, bool prefetch_table,
+                              uint64_t file_number, uint64_t file_size,
+                              SequenceOff seq_off, Table** tableptr = NULL);
 
   // If a seek to internal key "k" in specified file finds an entry,
   // call (*handle_result)(arg, found_key, found_value).
@@ -67,8 +67,8 @@ class TableCache {
   // Fetch table from storage. By default, only table header and metadata blocks
   // are fetched. If prefetch is true, will read the entire table into memory so
   // all subsequent table reads will hit the memory.
-  Status FetchTable(uint64_t file_number, uint64_t file_size, Table** table,
-                    RandomAccessFile** file, bool prefetch);
+  Status OpenTable(uint64_t file_number, uint64_t file_size, Table** table,
+                   RandomAccessFile** file, bool prefetch);
 
   // Find the table for the specified file number from cache. If table is not
   // yet cached, it will be loaded from storage and assigned the given sequence
