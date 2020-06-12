@@ -448,9 +448,9 @@ class Benchmark {
     fprintf(stdout, "Skip fs checks:     %d\n", FLAGS_fs_skip_checks);
     fprintf(stdout, "Shared dir:         %d\n", FLAGS_shared_dir);
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dboptions.compression);
-    fprintf(stdout, "BLK cache size:     %-3d MB\n",
+    fprintf(stdout, "Blk cache size:     %-3d MB\n",
             int(FLAGS_dboptions.block_cache_size >> 20));
-    fprintf(stdout, "BLK size:           %-3d KB\n",
+    fprintf(stdout, "Blk size:           %-3d KB\n",
             int(FLAGS_dboptions.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dboptions.filter_bits_per_key));
@@ -458,23 +458,23 @@ class Benchmark {
             int(FLAGS_dboptions.table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_dboptions.enable_io_monitoring);
-    fprintf(stdout, "WAL off:            %d\n",
+    fprintf(stdout, "Wal off:            %d\n",
             FLAGS_dboptions.disable_write_ahead_logging);
-    fprintf(stdout, "WAL write size:     %-3d KB\n",
+    fprintf(stdout, "Wal write size:     %-3d KB\n",
             int(FLAGS_dboptions.write_ahead_log_buffer >> 10));
     fprintf(stdout, "Memtable size:      %-3d MB\n",
             int(FLAGS_dboptions.memtable_size >> 20));
-    fprintf(stdout, "SST size:           %-3d MB\n",
+    fprintf(stdout, "Tbl size:           %-3d MB\n",
             int(FLAGS_dboptions.table_size >> 20));
-    fprintf(stdout, "SST write size:     %-3d KB\n",
+    fprintf(stdout, "Tbl write size:     %-3d KB\n",
             int(FLAGS_dboptions.table_buffer >> 10));
-    fprintf(stdout, "SST bulk read size: %-3d KB\n",
+    fprintf(stdout, "Tbl bulk read size: %-3d KB\n",
             int(FLAGS_dboptions.table_bulk_read_size >> 10));
     fprintf(stdout, "LSM COMPACTION OFF: %d\n",
             FLAGS_dboptions.disable_compaction);
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dboptions.prefetch_compaction_input);
-    fprintf(stdout, "DB level factor:    %d\n", FLAGS_dboptions.level_factor);
+    fprintf(stdout, "Db level factor:    %d\n", FLAGS_dboptions.level_factor);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dboptions.l1_compaction_trigger);
     fprintf(stdout, "Api:\n");
