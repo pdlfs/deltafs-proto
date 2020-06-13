@@ -703,7 +703,8 @@ class Benchmark {
       fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
               1.0 * db_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
                   db_->GetDbEnv()->TotalRndTblReads(),
-              db_->GetDbEnv()->TotalRndTblBytesRead());
+              static_cast<unsigned long long>(
+                  db_->GetDbEnv()->TotalRndTblBytesRead()));
       fprintf(stdout, "Total sequential bytes read: %llu ",
               static_cast<unsigned long long>(
                   db_->GetDbEnv()->TotalSeqTblBytesRead()));
