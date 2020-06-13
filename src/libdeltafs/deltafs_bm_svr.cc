@@ -114,6 +114,9 @@ bool FLAGS_use_existing_db = false;
 // Use the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
 
+// Number of rpc threads to run.
+int FLAGS_rpc_threads = 1;
+
 class Server {
  private:
   port::Mutex mu_;
@@ -141,6 +144,7 @@ class Server {
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
+    fprintf(stdout, "Num rpc threads:    %d\n", FLAGS_rpc_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
@@ -381,7 +385,7 @@ class Server {
 
   static FilesystemServer* OpenPort(const char* ip, FilesystemIf* const fs) {
     FilesystemServerOptions svropts;
-    svropts.num_rpc_threads = 1;
+    svropts.num_rpc_threads = FLAGS_rpc_threads;
     svropts.uri = "udp://";
     svropts.uri += ip;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
@@ -528,6 +532,8 @@ void BM_Main(int* const argc, char*** const argv) {
     char junk;
     if (sscanf((*argv)[i], "--info_port=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_info_port = n;
+    } else if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_threads = n;
     } else if (sscanf((*argv)[i], "--ports_per_rank=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_ports_per_rank = n;
     } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
