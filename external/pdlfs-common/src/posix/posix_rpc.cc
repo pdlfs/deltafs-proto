@@ -108,12 +108,12 @@ std::string PosixSocketServer::GetUsageInfo() {
   MutexLock ml(&mutex_);
   std::string result;
   char tmp[200];
-  snprintf(tmp, sizeof(tmp), "%10s %10s %10s %10s\n", "Thread", "User(s)",
+  snprintf(tmp, sizeof(tmp), "%6s %9s %9s %9s\n", "Thread", "User(s)",
            "System(s)", "Wall(s)");
   result += tmp;
   result += "-------------------------------------------\n";
   for (size_t i = 0; i < bg_usage_.size(); i++) {
-    snprintf(tmp, sizeof(tmp), "%-10d, %10.0f, %10.0f, %10.0f", int(i),
+    snprintf(tmp, sizeof(tmp), "%-6d %9.0f %9.0f %9.0f", int(i),
              bg_usage_[i].user, bg_usage_[i].system, bg_usage_[i].wall);
     result += tmp;
   }
