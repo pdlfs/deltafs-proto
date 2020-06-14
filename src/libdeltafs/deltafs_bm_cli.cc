@@ -570,8 +570,10 @@ class Benchmark {
       }
     }
     RunStep("insert", &state, &Benchmark::DoWrite);
-    SleepForMicroseconds(5 * 1000 * 1000);
-    RunStep("fstats", &state, &Benchmark::DoRead);
+    if (FLAGS_reads != 0) {
+      SleepForMicroseconds(5 * 1000 * 1000);
+      RunStep("fstats", &state, &Benchmark::DoRead);
+    }
     if (FLAGS_mon_destination_uri) {
       MutexLock ml(&mon_arg.mutex);
       mon_arg.done = true;
