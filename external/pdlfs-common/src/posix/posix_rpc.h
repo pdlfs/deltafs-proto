@@ -17,6 +17,9 @@
 
 #include <netinet/in.h>
 #include <stdlib.h>
+#include <sys/resource.h>
+#include <sys/time.h>
+#include <vector>
 
 namespace pdlfs {
 // Base RPC impl providing infrastructure for background progressing. To be
@@ -55,6 +58,8 @@ class PosixSocketServer {
   int bg_threads_;  // Number of threads currently running
   int bg_id_;
   Status bg_status_;
+  std::vector<struct rusage> bg_start_usage_;
+  std::vector<struct rusage> bg_usage_;
   PosixSocketAddr* actual_addr_;
   PosixSocketAddr* addr_;
   int fd_;

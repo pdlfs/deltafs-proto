@@ -38,12 +38,27 @@ void PosixSocketServer::BGLoopWrapper(void* arg) {
 void PosixSocketServer::BGCall() {
   MutexLock ml(&mutex_);
   int myid = bg_id_++;
+  struct rusage tmp;
+  memset(&tmp, 0, sizeof(struct rusage));
+  bg_start_usage_.push_back(tmp);
+  bg_usage_.push_back(tmp);
   ++bg_threads_;
   if (bg_threads_ == bg_n_) {
     bg_cv_.SignalAll();
   }
   mutex_.Unlock();
-  Status s = BGLoop(myid);  // This transfers ctrl to rpc subclass impl
+#if defined(PDLFS_OS_LINUX)
+  int r = getrusage(RUSAGE_THREAD, &bg_start_usage_[bg_id_]);
+#endif
+  Status s = BGLoop(myid);  // Transfer ctrl to subclass
+#if defined(PDLFS_OS_LINUX)
+  if (r == 0) {
+    r = getrusage(RUSAGE_THREAD, &bg_usage_[bg_id_]);
+  }
+  if (r != 0) {
+    Log(options_.info_log, 0, "Cannot get thread rusage: %s", strerror(errno));
+  }
+#endif
   mutex_.Lock();
   if (!s.ok() && bg_status_.ok()) {
     bg_status_ = s;
