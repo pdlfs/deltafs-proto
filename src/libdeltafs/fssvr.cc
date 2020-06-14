@@ -37,13 +37,18 @@ namespace pdlfs {
 
 FilesystemServerOptions::FilesystemServerOptions()
     : impl(rpc::kSocketRPC),
+      num_rpc_worker_threads(0),
       num_rpc_threads(1),
       uri("udp://0.0.0.0:10086"),
       info_log(NULL) {}
 
 FilesystemServer::FilesystemServer(  ///
     const FilesystemServerOptions& options)
-    : options_(options), fs_(NULL), hmap_(NULL), rpc_(NULL) {
+    : options_(options),
+      fs_(NULL),
+      hmap_(NULL),
+      rpc_workers_(NULL),
+      rpc_(NULL) {
   hmap_ = new RequestHandler[kNumOps];
   memset(hmap_, 0, kNumOps * sizeof(void*));
   hmap_[kLokup] = Lokup;
@@ -91,6 +96,7 @@ void FilesystemServer::TEST_Remap(int i, RequestHandler h) {
 
 FilesystemServer::~FilesystemServer() {
   delete rpc_;
+  delete rpc_workers_;
   delete[] hmap_;
 }
 
@@ -104,6 +110,10 @@ Status FilesystemServer::OpenServer() {
   options.fs = this;
   options.impl = rpc::kSocketRPC;
   options.mode = rpc::kServerClient;
+  if (options_.num_rpc_worker_threads) {
+    rpc_workers_ = ThreadPool::NewFixed(options_.num_rpc_worker_threads);
+  }
+  options.extra_workers = rpc_workers_;
   options.num_rpc_threads = options_.num_rpc_threads;
   options.info_log = options_.info_log;
   options.uri = options_.uri;

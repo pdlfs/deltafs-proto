@@ -41,8 +41,9 @@ namespace pdlfs {
 
 struct FilesystemServerOptions {
   FilesystemServerOptions();
-  rpc::Engine impl;  // RPC impl selector.
-  int num_rpc_threads;
+  rpc::Engine impl;            // RPC impl selector.
+  int num_rpc_worker_threads;  // Default: 0
+  int num_rpc_threads;         // Default: 1
   std::string uri;
   // Logger object for progressing/error information.
   // Default: NULL, which causes Logger::Default() to be used.
@@ -79,8 +80,9 @@ class FilesystemServer : public rpc::If {
   void operator=(const FilesystemServer&);
   FilesystemServer(const FilesystemServer& other);
   FilesystemServerOptions options_;
-  FilesystemIf* fs_;  // fs_ not owned by us
+  FilesystemIf* fs_;  // Not owned by us
   RequestHandler* hmap_;
+  ThreadPool* rpc_workers_;
   RPC* rpc_;
 };
 
