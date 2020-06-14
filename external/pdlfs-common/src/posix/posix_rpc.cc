@@ -15,6 +15,7 @@
 
 #include "pdlfs-common/mutexlock.h"
 
+#include <stdio.h>
 #include <unistd.h>
 
 namespace pdlfs {
@@ -35,12 +36,21 @@ void PosixSocketServer::BGLoopWrapper(void* arg) {
   r->BGCall();
 }
 
+#if defined(PDLFS_OS_LINUX)
+namespace {
+inline double TimevalToDouble(const struct timeval* tv) {
+  double t = tv->tv_sec;
+  t += tv->tv_usec * 1e-6;
+  return t;
+}
+}  // namespace
+#endif
+
 void PosixSocketServer::BGCall() {
   MutexLock ml(&mutex_);
   int myid = bg_id_++;
-  struct rusage tmp;
-  memset(&tmp, 0, sizeof(struct rusage));
-  bg_start_usage_.push_back(tmp);
+  BGUsageInfo tmp;
+  memset(&tmp, 0, sizeof(BGUsageInfo));
   bg_usage_.push_back(tmp);
   ++bg_threads_;
   if (bg_threads_ == bg_n_) {
@@ -48,15 +58,27 @@ void PosixSocketServer::BGCall() {
   }
   mutex_.Unlock();
 #if defined(PDLFS_OS_LINUX)
-  int r = getrusage(RUSAGE_THREAD, &bg_start_usage_[bg_id_]);
+  struct rusage start_usage;
+  memset(&start_usage, 0, sizeof(start_usage));
+  struct rusage usage;
+  memset(&usage, 0, sizeof(usage));
+  int r = getrusage(RUSAGE_THREAD, &start_usage);
+  double start = CurrentMicros() * 1e-6;
 #endif
   Status s = BGLoop(myid);  // Transfer ctrl to subclass
 #if defined(PDLFS_OS_LINUX)
   if (r == 0) {
-    r = getrusage(RUSAGE_THREAD, &bg_usage_[bg_id_]);
+    r = getrusage(RUSAGE_THREAD, &usage);
   }
   if (r != 0) {
     Log(options_.info_log, 0, "Cannot get thread rusage: %s", strerror(errno));
+  } else {
+    BGUsageInfo* info = &bg_usage_[bg_id_];
+    info->system = TimevalToDouble(&usage.ru_stime) -
+                   TimevalToDouble(&start_usage.ru_stime);
+    info->user = TimevalToDouble(&usage.ru_utime) -
+                 TimevalToDouble(&start_usage.ru_utime);
+    info->wall = CurrentMicros() * 1e-6 - start;
   }
 #endif
   mutex_.Lock();
@@ -80,6 +102,22 @@ std::string PosixSocketServer::GetBaseUri() {
   MutexLock ml(&mutex_);
   if (fd_ != -1) return actual_addr_->GetUri();
   return addr_->GetUri();
+}
+
+std::string PosixSocketServer::GetUsageInfo() {
+  MutexLock ml(&mutex_);
+  std::string result;
+  char tmp[200];
+  snprintf(tmp, sizeof(tmp), "%10s %10s %10s %10s\n", "Thread", "User(s)",
+           "System(s)", "Wall(s)");
+  result += tmp;
+  result += "-------------------------------------------\n";
+  for (size_t i = 0; i < bg_usage_.size(); i++) {
+    snprintf(tmp, sizeof(tmp), "%-10d, %10.0f, %10.0f, %10.0f", int(i),
+             bg_usage_[i].user, bg_usage_[i].system, bg_usage_[i].wall);
+    result += tmp;
+  }
+  return result;
 }
 
 Status PosixSocketServer::status() {
@@ -154,12 +192,17 @@ Status PosixRPC::Stop() {
 
 int PosixRPC::GetPort() {
   if (srv_) return srv_->GetPort();
-  return -1;
+  return RPC::GetPort();
 }
 
 std::string PosixRPC::GetUri() {
   if (srv_) return srv_->GetUri();
-  return "-1:-1";
+  return RPC::GetUri();
+}
+
+std::string PosixRPC::GetUsageInfo() {
+  if (srv_) return srv_->GetUsageInfo();
+  return RPC::GetUsageInfo();
 }
 
 Status PosixRPC::status() {

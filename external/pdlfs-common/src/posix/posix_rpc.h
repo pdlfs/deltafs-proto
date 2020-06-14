@@ -38,6 +38,7 @@ class PosixSocketServer {
   // Return base uri of the server. Unlike a full uri, a base uri is not coupled
   // with a protocol (tcp, udp).
   std::string GetBaseUri();
+  std::string GetUsageInfo();
   Status status();
 
  protected:
@@ -48,6 +49,11 @@ class PosixSocketServer {
   static void BGLoopWrapper(void* arg);
   void BGCall();
   virtual Status BGLoop(int myid) = 0;  // To be implemented by subclasses...
+  struct BGUsageInfo {
+    double user;    // user CPU time in seconds
+    double system;  // system CPU time
+    double wall;    // wall time
+  };
 
   const RPCOptions& options_;  // For options_.info_log and options_.fs
   port::Mutex mutex_;
@@ -58,8 +64,7 @@ class PosixSocketServer {
   int bg_threads_;  // Number of threads currently running
   int bg_id_;
   Status bg_status_;
-  std::vector<struct rusage> bg_start_usage_;
-  std::vector<struct rusage> bg_usage_;
+  std::vector<struct BGUsageInfo> bg_usage_;
   PosixSocketAddr* actual_addr_;
   PosixSocketAddr* addr_;
   int fd_;
@@ -77,6 +82,7 @@ class PosixRPC : public RPC {
 
   virtual int GetPort();
   virtual std::string GetUri();
+  virtual std::string GetUsageInfo();
   virtual Status status();
 
  private:
