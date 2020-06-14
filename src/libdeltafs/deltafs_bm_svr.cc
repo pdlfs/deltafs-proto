@@ -115,6 +115,9 @@ bool FLAGS_use_existing_db = false;
 // Use the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
 
+// Number of rpc worker threads to run.
+int FLAGS_rpc_worker_threads = 0;
+
 // Number of rpc threads to run.
 int FLAGS_rpc_threads = 1;
 
@@ -145,7 +148,8 @@ class Server {
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "Num rpc threads:    %d\n", FLAGS_rpc_threads);
+    fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
+            FLAGS_rpc_worker_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
@@ -558,6 +562,9 @@ void BM_Main(int* const argc, char*** const argv) {
     char junk;
     if (sscanf((*argv)[i], "--info_port=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_info_port = n;
+    } else if (sscanf((*argv)[i], "--rpc_worker_threads=%d%c", &n, &junk) ==
+               1) {
+      pdlfs::FLAGS_rpc_worker_threads = n;
     } else if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_rpc_threads = n;
     } else if (sscanf((*argv)[i], "--ports_per_rank=%d%c", &n, &junk) == 1) {
