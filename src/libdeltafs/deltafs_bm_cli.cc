@@ -309,6 +309,11 @@ class Benchmark {
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Num (rd/wr):        %d/%d per rank\n", FLAGS_reads,
             FLAGS_num);
+    char bat_info[100];
+    snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
+             FLAGS_batched_writes, FLAGS_batch_size);
+    fprintf(stdout, "Batched writes:     %s\n",
+            FLAGS_batched_writes ? bat_info : "OFF");
     char mon_info[100];
     snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
              FLAGS_mon_destination_uri, FLAGS_mon_interval);
@@ -686,6 +691,11 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--share_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_share_dir = n;
+    } else if (sscanf((*argv)[i], "--batched_writes=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_batched_writes = n;
+    } else if (sscanf((*argv)[i], "--batch_size=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_batch_size = n;
     } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
