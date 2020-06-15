@@ -111,9 +111,9 @@ std::string PosixSocketServer::GetUsageInfo() {
   snprintf(tmp, sizeof(tmp), "%6s %9s %9s %9s\n", "Thread", "User(s)",
            "System(s)", "Wall(s)");
   result += tmp;
-  result += "-------------------------------------------\n";
+  result += "------------------------------------\n";
   for (size_t i = 0; i < bg_usage_.size(); i++) {
-    snprintf(tmp, sizeof(tmp), "%-6d %9.0f %9.0f %9.0f", int(i),
+    snprintf(tmp, sizeof(tmp), "%-6d %9.1f %9.1f %9.1f\n", int(i),
              bg_usage_[i].user, bg_usage_[i].system, bg_usage_[i].wall);
     result += tmp;
   }
