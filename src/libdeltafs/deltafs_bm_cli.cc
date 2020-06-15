@@ -90,6 +90,12 @@ bool FLAGS_random_order = false;
 // Force all ranks to share a single parent directory.
 bool FLAGS_share_dir = false;
 
+// Combine multiple writes into a single rpc.
+bool FLAGS_batched_writes = false;
+
+// Number of writes per batch.
+int FLAGS_batch_size = 16;
+
 // Number of files to insert per rank.
 int FLAGS_num = 8;
 
@@ -436,6 +442,7 @@ class Benchmark {
     }
     FilesystemCliOptions cliopts;
     cliopts.skip_perm_checks = FLAGS_skip_fs_checks;
+    cliopts.batch_size = FLAGS_batch_size;
     fscli_ = new FilesystemCli(cliopts);
     fscli_->RegisterFsSrvUris(rpc_, uri_mapper_, num_svrs, num_ports_per_svr);
   }
@@ -453,7 +460,35 @@ class Benchmark {
     }
   }
 
-  void DoWrite(RankState* const state) {
+  void DoBatchedWrites(RankState* const state) {
+    const uint64_t pid = uint64_t(FLAGS_rank) << 32;
+    FilesystemCli::BAT* batch = NULL;
+    state->pathbuf.resize(state->prefix_length);
+    fscli_->BatchStart(&state->ctx, NULL, state->pathbuf.c_str(), &batch);
+    char tmp[30];
+    memset(tmp, 0, sizeof(tmp));
+    for (int i = 0; i < FLAGS_num; i++) {
+      Slice fname = Base64Enc(tmp, pid | state->fids[i]);
+      Status s = fscli_->BatchInsert(batch, fname.c_str());
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot insert name into batch: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      state->stats.FinishedSingleOp(FLAGS_num);
+    }
+    Status s = fscli_->BatchCommit(batch);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Fail to commit batch: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Finalize();
+      exit(1);
+    }
+    fscli_->BatchEnd(batch);
+  }
+
+  void DoWrites(RankState* const state) {
     const uint64_t pid = uint64_t(FLAGS_rank) << 32;
     char tmp[30];
     for (int i = 0; i < FLAGS_num; i++) {
@@ -569,7 +604,13 @@ class Benchmark {
         mon_arg.cv.Wait();
       }
     }
-    RunStep("insert", &state, &Benchmark::DoWrite);
+    if (FLAGS_num != 0) {
+      if (FLAGS_batched_writes) {
+        RunStep("insert", &state, &Benchmark::DoBatchedWrites);
+      } else {
+        RunStep("insert", &state, &Benchmark::DoWrites);
+      }
+    }
     if (FLAGS_reads != 0) {
       SleepForMicroseconds(5 * 1000 * 1000);
       RunStep("fstats", &state, &Benchmark::DoRead);
