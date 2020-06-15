@@ -67,8 +67,8 @@ class FilesystemServer : public rpc::If {
   Status OpenServer();
   Status Close();
 
-  // REQUIRES: OpenServer() has been successfully invoked.
-  int GetPort() const { return rpc_->GetPort(); }
+  std::string GetUsageInfo() const;
+  int GetPort() const;
   If* TEST_CreateSelfCli();  // Create a client that connects the server itself
   If* TEST_CreateCli(const std::string& uri);
   typedef Status (*RequestHandler)(FilesystemIf*, Message& in, Message& out);

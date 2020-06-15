@@ -105,6 +105,13 @@ Status FilesystemServer::Close() {
   return Status::OK();
 }
 
+int FilesystemServer::GetPort() const { return rpc_ ? rpc_->GetPort() : -1; }
+
+std::string FilesystemServer::GetUsageInfo() const {
+  if (rpc_) return rpc_->GetUsageInfo();
+  return std::string();
+}
+
 Status FilesystemServer::OpenServer() {
   RPCOptions options;
   options.fs = this;

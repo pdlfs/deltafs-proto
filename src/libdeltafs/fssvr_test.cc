@@ -270,6 +270,14 @@ class Benchmark : public FilesystemWrapper {
     while (!shutting_down_) {
       cv_.Wait();
     }
+    std::string usage_info;
+    Status s = fsrpcsvr_->Close();
+    if (!s.ok()) {
+      fprintf(stderr, "Error closing rpc server: %s\n", s.ToString().c_str());
+    } else {
+      usage_info = fsrpcsvr_->GetUsageInfo();
+      fprintf(stdout, "%s\n", usage_info.c_str());
+    }
     puts("Bye!");
   }
 };
