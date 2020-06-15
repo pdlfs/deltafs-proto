@@ -233,7 +233,7 @@ class Server {
   static void PrintEnvironment() {
 #if defined(PDLFS_OS_LINUX)
     time_t now = time(NULL);
-    fprintf(stderr, "Date:       %s", ctime(&now));  // ctime() adds newline
+    fprintf(stdout, "Date:       %s", ctime(&now));  // ctime() adds newline
 
     FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
     if (cpuinfo != NULL) {
@@ -256,8 +256,8 @@ class Server {
         }
       }
       fclose(cpuinfo);
-      fprintf(stderr, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
-      fprintf(stderr, "CPUCache:   %s\n", cache_size.c_str());
+      fprintf(stdout, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
+      fprintf(stdout, "CPUCache:   %s\n", cache_size.c_str());
     }
 #endif
   }
