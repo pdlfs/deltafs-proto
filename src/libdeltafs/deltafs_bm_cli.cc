@@ -486,8 +486,8 @@ class Client {
 #endif
   }
 
-  static bool ParseMapData(  ///
-      const Slice& svr_map, int* num_svrs, int* num_ports_per_svr) {
+  static bool ParseMapData(const Slice& svr_map, int* num_svrs,
+                           int* num_ports_per_svr) {
     if (svr_map.size() >= 8) {
       *num_svrs = DecodeFixed32(&svr_map[svr_map.size() - 8]);
       *num_ports_per_svr = DecodeFixed32(&svr_map[svr_map.size() - 4]);
