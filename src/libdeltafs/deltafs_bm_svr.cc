@@ -612,10 +612,10 @@ void BM_Main(int* const argc, char*** const argv) {
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
   }
 
-  pdlfs::Server srvr;
-  g_srvr = &srvr;
+  pdlfs::Server svr;
+  g_srvr = &svr;
   signal(SIGINT, &HandleSig);
-  srvr.Run();
+  svr.Run();
 }
 }  // namespace
 
