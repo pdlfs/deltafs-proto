@@ -608,7 +608,7 @@ void BM_Main(int* const argc, char*** const argv) {
   std::string default_db_prefix;
   // Choose a prefix for the test db if none given with --db=<path>
   if (!pdlfs::FLAGS_db_prefix) {
-    default_db_prefix = "/tmp/deltafs_srvr";
+    default_db_prefix = "/tmp/deltafs_bm";
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
   }
 

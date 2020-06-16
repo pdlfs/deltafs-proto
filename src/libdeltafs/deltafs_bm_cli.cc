@@ -32,7 +32,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "base64enc.h"
+#include "env_wrapper.h"
+#include "fs.h"
 #include "fscli.h"
+#include "fsdb.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -47,6 +50,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <vector>
+#if defined(PDLFS_RADOS)
+#include "pdlfs-common/rados/rados_connmgr.h"
+#endif
 #if defined(PDLFS_OS_LINUX)
 #include <ctype.h>
 #include <sys/resource.h>
@@ -56,6 +62,29 @@
 
 namespace pdlfs {
 namespace {
+// Db options.
+FilesystemDbOptions FLAGS_dbopts;
+
+// True iff rados env should be used.
+bool FLAGS_env_use_rados = false;
+
+// True iff rados async io (AIO) should be disabled.
+bool FLAGS_rados_force_syncio = false;
+
+#if defined(PDLFS_RADOS)
+// User name for ceph rados connection.
+const char* FLAGS_rados_cli_name = "client.admin";
+
+// Rados cluster name.
+const char* FLAGS_rados_cluster_name = "ceph";
+
+// Rados storage pool name.
+const char* FLAGS_rados_pool = "test";
+
+// Rados cluster configuration file.
+const char* FLAGS_rados_conf = "/tmp/ceph.conf";
+#endif
+
 // Total number of ranks.
 int FLAGS_comm_size = 1;
 
@@ -90,6 +119,9 @@ bool FLAGS_random_order = false;
 // Force all ranks to share a single parent directory.
 bool FLAGS_share_dir = false;
 
+// Instantiate and use a local fs instead of connecting to a remote one.
+bool FLAGS_fs_use_local = false;
+
 // Combine multiple writes into a single rpc.
 bool FLAGS_batched_writes = false;
 
@@ -101,6 +133,12 @@ int FLAGS_num = 8;
 
 // Number of files to stat per rank.
 int FLAGS_reads = -1;
+
+// If true, do not destroy the existing database.
+bool FLAGS_use_existing_db = false;
+
+// Use the db at the following prefix.
+const char* FLAGS_db_prefix = NULL;
 
 // User id for the bench.
 int FLAGS_uid = 1;
@@ -294,12 +332,18 @@ class CompactUriMapper : public FilesystemCli::UriMapper {
   int num_svrs_;
 };
 
-class Benchmark {
+class Client {
  private:
   FilesystemCli* fscli_;
   CompactUriMapper* uri_mapper_;
   std::string svr_map_;
   RPC* rpc_;
+  Filesystem* fs_;
+  FilesystemDb* fsdb_;
+#if defined(PDLFS_RADOS)
+  rados::RadosConnMgr* mgr_;
+  Env* myenv_;
+#endif
 
   static void PrintHeader() {
     PrintWarnings();
@@ -429,10 +473,84 @@ class Benchmark {
     delete rpc;
   }
 
+  Env* OpenEnv() {
+    if (FLAGS_env_use_rados) {
+#if defined(PDLFS_RADOS)
+      using namespace rados;
+      RadosOptions options;
+      options.force_syncio = FLAGS_rados_force_syncio;
+      RadosConn* conn;
+      Osd* osd;
+      mgr_ = new RadosConnMgr(RadosConnMgrOptions());
+      Status s = mgr_->OpenConn(  ///
+          FLAGS_rados_cluster_name, FLAGS_rados_cli_name, FLAGS_rados_conf,
+          RadosConnOptions(), &conn);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot connect to rados: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      s = mgr_->OpenOsd(conn, FLAGS_rados_pool, options, &osd);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot open rados object pool: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Finalize();
+        exit(1);
+      }
+      myenv_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
+      mgr_->Release(conn);
+      return myenv_;
+#else
+      if (FLAGS_rank == 0) {
+        fprintf(stderr, "Rados not installed\n");
+      }
+      MPI_Finalize();
+      exit(1);
+#endif
+    } else {
+      return Env::Default();
+    }
+  }
+
+  void OpenLocal() {
+    Env* env = OpenEnv();
+    env->CreateDir(FLAGS_db_prefix);
+    fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
+    char dbid[100];
+    snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
+    std::string dbpath = FLAGS_db_prefix;
+    dbpath += dbid;
+    if (!FLAGS_use_existing_db) {
+      FilesystemDb::DestroyDb(dbpath, env);
+    }
+    Status s = fsdb_->Open(dbpath);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Finalize();
+      exit(1);
+    }
+
+    FilesystemOptions opts;
+    opts.skip_partition_checks = opts.skip_perm_checks =
+        opts.skip_lease_due_checks = opts.skip_name_collision_checks =
+            FLAGS_skip_fs_checks;
+    opts.vsrvs = opts.nsrvs = 1;
+    opts.srvid = 0;
+    fs_ = new Filesystem(opts);
+    fs_->SetDb(fsdb_);
+
+    FilesystemCliOptions cliopts;
+    cliopts.skip_perm_checks = FLAGS_skip_fs_checks;
+    cliopts.batch_size = FLAGS_batch_size;
+    fscli_ = new FilesystemCli(cliopts);
+    fscli_->SetLocalFs(fs_);
+  }
+
   void Open(int num_svrs, int num_ports_per_svr) {
-    using namespace rpc;
     RPCOptions rpcopts;
-    rpcopts.mode = kClientOnly;
+    rpcopts.mode = rpc::kClientOnly;
     rpcopts.uri = "udp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
     uri_mapper_ = new CompactUriMapper(svr_map_, num_svrs, num_ports_per_svr);
@@ -512,7 +630,7 @@ class Benchmark {
     }
   }
 
-  void DoRead(RankState* const state) {
+  void DoReads(RankState* const state) {
     const uint64_t pid = uint64_t(FLAGS_rank) << 32;
     char tmp[30];
     for (int i = 0; i < FLAGS_reads; i++) {
@@ -532,7 +650,7 @@ class Benchmark {
   }
 
   void RunStep(const char* name, RankState* const state,
-               void (Benchmark::*method)(RankState*)) {
+               void (Client::*method)(RankState*)) {
     GlobalStats stats;
     MPI_Barrier(MPI_COMM_WORLD);
     Stats* per_rank_stats = &state->stats;
@@ -611,14 +729,14 @@ class Benchmark {
     }
     if (FLAGS_num != 0) {
       if (FLAGS_batched_writes) {
-        RunStep("insert", &state, &Benchmark::DoBatchedWrites);
+        RunStep("insert", &state, &Client::DoBatchedWrites);
       } else {
-        RunStep("insert", &state, &Benchmark::DoWrites);
+        RunStep("insert", &state, &Client::DoWrites);
       }
     }
     if (FLAGS_reads != 0) {
       SleepForMicroseconds(5 * 1000 * 1000);
-      RunStep("fstats", &state, &Benchmark::DoRead);
+      RunStep("fstats", &state, &Client::DoReads);
     }
     if (FLAGS_mon_destination_uri) {
       MutexLock ml(&mon_arg.mutex);
@@ -630,39 +748,55 @@ class Benchmark {
   }
 
  public:
-  Benchmark() : fscli_(NULL), uri_mapper_(NULL), rpc_(NULL) {}
+  Client()
+      : fscli_(NULL), uri_mapper_(NULL), rpc_(NULL), fs_(NULL), fsdb_(NULL) {
+#if defined(PDLFS_RADOS)
+    mgr_ = NULL;
+    myenv_ = NULL;
+#endif
+  }
 
-  ~Benchmark() {
+  ~Client() {
     delete fscli_;
     delete uri_mapper_;
     delete rpc_;
+    delete fs_;
+    delete fsdb_;
+#if defined(PDLFS_RADOS)
+    delete myenv_;
+    delete mgr_;
+#endif
   }
 
   void Run() {
     if (FLAGS_rank == 0) {
       PrintHeader();
     }
-    uint32_t svr_map_size;
-    if (FLAGS_rank != 0) {  // Non-roots get data from the root
-      MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-      svr_map_.resize(svr_map_size);
-      MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
-    } else {  // Root fetches data from remote and broadcasts it to non-roots
-      ObtainSvrMap(&svr_map_);
-      svr_map_size = svr_map_.size();
-      MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
-      MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
-    }
-    int num_ports_per_svr;
-    int num_svrs;
-    if (!ParseMapData(svr_map_, &num_svrs, &num_ports_per_svr)) {
-      if (FLAGS_rank == 0) {
-        fprintf(stderr, "Cannot parse svr map\n");
+    if (!FLAGS_fs_use_local) {
+      uint32_t svr_map_size;
+      if (FLAGS_rank != 0) {  // Non-roots get data from the root
+        MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        svr_map_.resize(svr_map_size);
+        MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
+      } else {  // Root fetches data from remote and broadcasts it to non-roots
+        ObtainSvrMap(&svr_map_);
+        svr_map_size = svr_map_.size();
+        MPI_Bcast(&svr_map_size, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&svr_map_[0], svr_map_size, MPI_CHAR, 0, MPI_COMM_WORLD);
       }
-      MPI_Finalize();
-      exit(1);
+      int num_ports_per_svr;
+      int num_svrs;
+      if (!ParseMapData(svr_map_, &num_svrs, &num_ports_per_svr)) {
+        if (FLAGS_rank == 0) {
+          fprintf(stderr, "Cannot parse svr map\n");
+        }
+        MPI_Finalize();
+        exit(1);
+      }
+      Open(num_svrs, num_ports_per_svr);
+    } else {
+      OpenLocal();
     }
-    Open(num_svrs, num_ports_per_svr);
     RunBenchmarks();
   }
 };
@@ -673,6 +807,11 @@ class Benchmark {
 namespace {
 void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_skip_fs_checks = pdlfs::FLAGS_random_order = true;
+  pdlfs::FLAGS_dbopts.enable_io_monitoring = true;
+  pdlfs::FLAGS_dbopts.prefetch_compaction_input = true;
+  pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
+  pdlfs::FLAGS_dbopts.use_default_logger = true;
+  pdlfs::FLAGS_dbopts.ReadFromEnv();
 
   for (int i = 1; i < (*argc); i++) {
     int n;
@@ -691,6 +830,27 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--share_dir=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_share_dir = n;
+    } else if (sscanf((*argv)[i], "--fs_use_local=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_fs_use_local = n;
+    } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_env_use_rados = n;
+    } else if (sscanf((*argv)[i], "--rados_force_syncio=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_rados_force_syncio = n;
+    } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_use_existing_db = n;
+    } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dbopts.disable_compaction = n;
+    } else if (sscanf((*argv)[i], "--prefetch_compaction_input=%d%c", &n,
+                      &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
     } else if (sscanf((*argv)[i], "--batched_writes=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_batched_writes = n;
@@ -706,6 +866,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_mon_destination_uri = (*argv)[i] + 10;
     } else if (strncmp((*argv)[i], "--info_svr_uri=", 15) == 0) {
       pdlfs::FLAGS_info_svr_uri = (*argv)[i] + 15;
+    } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
+      pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else {
       if (pdlfs::FLAGS_rank == 0) {
         fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
@@ -715,12 +877,19 @@ void BM_Main(int* const argc, char*** const argv) {
     }
   }
 
+  std::string default_db_prefix;
+  // Choose a prefix for the test db if none given with --db=<path>
+  if (!pdlfs::FLAGS_db_prefix) {
+    default_db_prefix = "/tmp/deltafs_bm";
+    pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
+  }
+
   if (pdlfs::FLAGS_reads == -1 || pdlfs::FLAGS_reads > pdlfs::FLAGS_num) {
     pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
-  pdlfs::Benchmark bench;
-  bench.Run();
+  pdlfs::Client cli;
+  cli.Run();
 }
 }  // namespace
 
