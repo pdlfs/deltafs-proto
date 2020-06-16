@@ -398,7 +398,9 @@ class Client {
     PrintWarnings();
     PrintEnvironment();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs info svr:        %s\n", FLAGS_info_svr_uri);
+    fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
+    fprintf(stdout, "Fs infosvr locatio: %s\n",
+            FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Num (rd/wr):        %d/%d per rank\n", FLAGS_reads,
             FLAGS_num);
@@ -414,7 +416,9 @@ class Client {
             FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Random key order:   %d\n", FLAGS_random_order);
     fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
-    if (FLAGS_fs_use_local) PrintDbSettings();
+    if (FLAGS_fs_use_local) {
+      PrintDbSettings();
+    }
     fprintf(stdout, "------------------------------------------------\n");
   }
 
