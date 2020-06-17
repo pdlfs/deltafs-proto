@@ -283,7 +283,7 @@ struct RankState {
   std::string pathbuf;
   Stat stbuf;
 
-  RankState() {
+  RankState() : ctx(1000 * FLAGS_rank) {
     fids.reserve(FLAGS_num);
     for (int i = 0; i < FLAGS_num; i++) {
       fids.push_back(i);
