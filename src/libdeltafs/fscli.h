@@ -38,6 +38,7 @@
 #include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/random.h"
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
@@ -53,7 +54,7 @@ class DirIndex;
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
  public:
-  FilesystemCliCtx() : stubs_(NULL), n_(0) {}
+  explicit FilesystemCliCtx(int seed = 301) : rnd_(seed), stubs_(NULL), n_(0) {}
 
   ~FilesystemCliCtx() {
     if (stubs_) {
@@ -67,6 +68,7 @@ class FilesystemCliCtx {
   User who;
 
  private:
+  Random rnd_;
   friend class FilesystemCli;
   rpc::If** stubs_;
   int n_;

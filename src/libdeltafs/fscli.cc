@@ -976,9 +976,13 @@ rpc::If* FilesystemCli::PrepareStub(  ///
     memset(ctx->stubs_, 0, sizeof(rpc::If*) * srvs_ * ports_per_srv_);
     ctx->n_ = srvs_ * ports_per_srv_;
   }
-  const int i = srv_idx * ports_per_srv_ + 0;
+  int port_idx = 0;
+  if (ports_per_srv_ > 1) {
+    port_idx = int(ctx->rnd_.Next()) % ports_per_srv_;
+  }
+  int i = srv_idx * ports_per_srv_ + port_idx;
   if (!ctx->stubs_[i]) {
-    ctx->stubs_[i] = rpc_->OpenStubFor(uri_mapper_->GetUri(i, 0));
+    ctx->stubs_[i] = rpc_->OpenStubFor(uri_mapper_->GetUri(srv_idx, port_idx));
   }
   return ctx->stubs_[i];
 }
