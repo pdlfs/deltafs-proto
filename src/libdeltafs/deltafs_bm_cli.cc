@@ -134,6 +134,9 @@ int FLAGS_num = 8;
 // Number of files to stat per rank.
 int FLAGS_reads = -1;
 
+// Abort on all errors.
+bool FLAGS_perfect_run = false;
+
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
 
@@ -515,8 +518,7 @@ class Client {
     Status s = rpccli->Call(in, out);
     if (!s.ok()) {
       fprintf(stderr, "Error calling fs info svr: %s\n", s.ToString().c_str());
-      MPI_Finalize();
-      exit(1);
+      MPI_Abort(MPI_COMM_WORLD, 1);
     }
     if (out.contents.data() != out.extra_buf.data()) {
       dst->append(out.contents.data(), out.contents.size());
@@ -582,8 +584,7 @@ class Client {
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
               s.ToString().c_str());
-      MPI_Finalize();
-      exit(1);
+      MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
     FilesystemOptions opts;
@@ -650,8 +651,9 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot insert name into batch: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        MPI_Finalize();
-        exit(1);
+        if (FLAGS_perfect_run) {
+          MPI_Abort(MPI_COMM_WORLD, 1);
+        }
       }
       state->stats.FinishedSingleOp(FLAGS_num);
     }
@@ -659,8 +661,9 @@ class Client {
     if (!s.ok()) {
       fprintf(stderr, "%d: Fail to commit batch: %s\n", FLAGS_rank,
               s.ToString().c_str());
-      MPI_Finalize();
-      exit(1);
+      if (FLAGS_perfect_run) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+      }
     }
     fscli_->BatchEnd(batch);
   }
@@ -677,8 +680,9 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        MPI_Finalize();
-        exit(1);
+        if (FLAGS_perfect_run) {
+          MPI_Abort(MPI_COMM_WORLD, 1);
+        }
       }
       state->stats.FinishedSingleOp(FLAGS_num);
     }
@@ -696,8 +700,9 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to lstat: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        MPI_Finalize();
-        exit(1);
+        if (FLAGS_perfect_run) {
+          MPI_Abort(MPI_COMM_WORLD, 1);
+        }
       }
       state->stats.FinishedSingleOp(FLAGS_reads);
     }
