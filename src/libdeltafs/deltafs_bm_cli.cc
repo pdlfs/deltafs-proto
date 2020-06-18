@@ -287,8 +287,9 @@ struct RankState {
   Stat stbuf;
 
   RankState() : ctx(1000 * FLAGS_rank) {
-    fids.reserve(FLAGS_num);
-    for (int i = 0; i < FLAGS_num; i++) {
+    int num = std::max(FLAGS_num, FLAGS_reads);
+    fids.reserve(num);
+    for (int i = 0; i < num; i++) {
       fids.push_back(i);
     }
     if (FLAGS_random_order) {
@@ -968,10 +969,6 @@ void BM_Main(int* const argc, char*** const argv) {
   if (!pdlfs::FLAGS_db_prefix) {
     default_db_prefix = "/tmp/deltafs_bm";
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
-  }
-
-  if (pdlfs::FLAGS_reads == -1 || pdlfs::FLAGS_reads > pdlfs::FLAGS_num) {
-    pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
   pdlfs::Client cli;
