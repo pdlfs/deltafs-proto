@@ -93,6 +93,9 @@ int FLAGS_comm_size = 1;
 // My rank number.
 int FLAGS_rank = 0;
 
+// Use udp.
+bool FLAGS_udp = false;
+
 // If a host is configured with 1+ ip addresses, use the one with the following
 // prefix.
 const char* FLAGS_ip_prefix = "127.0.0.1";
@@ -402,7 +405,7 @@ class Server : public FilesystemWrapper {
   static FilesystemServer* OpenPort(const char* ip, FilesystemIf* const fs) {
     FilesystemServerOptions svropts;
     svropts.num_rpc_threads = FLAGS_rpc_threads;
-    svropts.uri = "udp://";
+    svropts.uri = FLAGS_udp ? "udp://" : "tcp://";
     svropts.uri += ip;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
     rpcsvr->SetFs(fs);
@@ -585,6 +588,7 @@ void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_udp = true;
 
   for (int i = 1; i < (*argc); i++) {
     int n;
@@ -624,6 +628,9 @@ void BM_Main(int* const argc, char*** const argv) {
                       &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
+    } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_udp = n;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
