@@ -442,10 +442,21 @@ class Server : public FilesystemWrapper {
 #endif
   }
 
-  virtual Status Mkfle(const User& who, const LookupStat& parent,
-                       const Slice& name, uint32_t mode, Stat* stat) {
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
+  virtual Status Mkdir(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat*) OVERRIDE {
     return Status::OK();
   }
+
+  virtual Status Mkfle(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat*) OVERRIDE {
+    return Status::OK();
+  }
+#undef OVERRIDE
 
   void Interrupt() {
     MutexLock ml(&mu_);
