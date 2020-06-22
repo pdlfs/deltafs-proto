@@ -101,6 +101,9 @@ const char* FLAGS_mon_metric_name = "myfs.ops";
 // Number of seconds for sending the next stats packet.
 int FLAGS_mon_interval = 1;
 
+// Use udp.
+bool FLAGS_udp = false;
+
 // Uri for the information server.
 const char* FLAGS_info_svr_uri = "tcp://127.0.0.1:10086";
 
@@ -324,7 +327,8 @@ class CompactUriMapper : public FilesystemCli::UriMapper {
     char tmp[50];
     struct in_addr tmp_addr;
     tmp_addr.s_addr = ip_map_[svr_idx];
-    snprintf(tmp, sizeof(tmp), "udp://%s:%hu", inet_ntoa(tmp_addr),
+    snprintf(tmp, sizeof(tmp), "%s://%s:%hu", FLAGS_udp ? "udp" : "tcp",
+             inet_ntoa(tmp_addr),
              port_map_[svr_idx * num_ports_per_svr_ + port_idx]);
     return tmp;
   }
@@ -607,7 +611,7 @@ class Client {
   void Open(int num_svrs, int num_ports_per_svr) {
     RPCOptions rpcopts;
     rpcopts.mode = rpc::kClientOnly;
-    rpcopts.uri = "udp://-1:-1";
+    rpcopts.uri = FLAGS_udp ? "udp://-1:-1" : "tcp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
     uri_mapper_ = new CompactUriMapper(svr_map_, num_svrs, num_ports_per_svr);
     if (FLAGS_rank == 0 && FLAGS_print_ips) {
@@ -899,6 +903,7 @@ void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_udp = true;
 
   for (int i = 1; i < (*argc); i++) {
     int n;
@@ -947,6 +952,9 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
+    } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_udp = n;
     } else if (sscanf((*argv)[i], "--mon_interval=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_mon_interval = n;
     } else if (strncmp((*argv)[i], "--mon_uri=", 10) == 0) {
