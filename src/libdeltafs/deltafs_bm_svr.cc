@@ -106,6 +106,9 @@ int FLAGS_ports_per_rank = 1;
 // Print the ip addresses of all ranks for debugging.
 bool FLAGS_print_ips = false;
 
+// Initialize a dummy server for rpc testing.
+bool FLAGS_dummy_svr = false;
+
 // Skip all fs checks.
 bool FLAGS_skip_fs_checks = false;
 
@@ -121,7 +124,7 @@ int FLAGS_rpc_worker_threads = 0;
 // Number of rpc threads to run.
 int FLAGS_rpc_threads = 1;
 
-class Server {
+class Server : public FilesystemWrapper {
  private:
   port::Mutex mu_;
   port::AtomicPointer shutting_down_;
@@ -145,16 +148,7 @@ class Server {
   }
 #endif
 
-  static void PrintHeader() {
-    PrintEnvironment();
-    PrintWarnings();
-    fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
-            FLAGS_rpc_worker_threads);
-    fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
-    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
-    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "Ip:                 %s*\n", FLAGS_ip_prefix);
+  static void PrintDbSettings() {
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
     fprintf(stdout, "Blk cache size:     %-3d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));
@@ -191,6 +185,22 @@ class Server {
 #endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
+  }
+
+  static void PrintHeader() {
+    PrintEnvironment();
+    PrintWarnings();
+    fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
+            FLAGS_rpc_worker_threads);
+    fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
+    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
+    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
+    fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
+    if (!FLAGS_dummy_svr) {
+      PrintDbSettings();
+    }
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -342,7 +352,7 @@ class Server {
     }
   }
 
-  void OpenFilesystem() {
+  FilesystemIf* OpenFilesystem() {
     Env* env = OpenEnv();
     env->CreateDir(FLAGS_db_prefix);
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
@@ -369,6 +379,7 @@ class Server {
     opts.srvid = FLAGS_rank;
     fs_ = new Filesystem(opts);
     fs_->SetDb(fsdb_);
+    return fs_;
   }
 
   static FilesystemInfoServer* OpenInfoPort(const char* ip) {
@@ -431,6 +442,11 @@ class Server {
 #endif
   }
 
+  virtual Status Mkfle(const User& who, const LookupStat& parent,
+                       const Slice& name, uint32_t mode, Stat* stat) {
+    return Status::OK();
+  }
+
   void Interrupt() {
     MutexLock ml(&mu_);
     shutting_down_.Release_Store(this);
@@ -441,14 +457,14 @@ class Server {
     if (FLAGS_rank == 0) {
       PrintHeader();
     }
-    OpenFilesystem();
+    FilesystemIf* const fs = FLAGS_dummy_svr ? this : OpenFilesystem();
     char ip_str[INET_ADDRSTRLEN];
     memset(ip_str, 0, sizeof(ip_str));
     unsigned myip = inet_addr(PickAddr(ip_str));
     int np = FLAGS_ports_per_rank;
     std::vector<unsigned short> myports;
     for (int i = 0; i < np; i++) {
-      FilesystemServer* const svr = OpenPort(ip_str, fs_);
+      FilesystemServer* const svr = OpenPort(ip_str, fs);
       myports.push_back(svr->GetPort());
       svrs_.push_back(svr);
     }
@@ -501,31 +517,33 @@ class Server {
       svrs_[i]->Close();
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    if (FLAGS_dbopts.enable_io_monitoring) {
-      fprintf(stdout, "Total random reads: %llu ",
-              static_cast<unsigned long long>(
-                  fsdb_->GetDbEnv()->TotalRndTblReads()));
-      fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
-              1.0 * fsdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
-                  fsdb_->GetDbEnv()->TotalRndTblReads(),
-              static_cast<unsigned long long>(
-                  fsdb_->GetDbEnv()->TotalRndTblBytesRead()));
-      fprintf(stdout, "Total sequential bytes read: %llu ",
-              static_cast<unsigned long long>(
-                  fsdb_->GetDbEnv()->TotalSeqTblBytesRead()));
-      fprintf(stdout, "(Avg read size: %.1fK)\n",
-              1.0 * fsdb_->GetDbEnv()->TotalSeqTblBytesRead() / 1024.0 /
-                  fsdb_->GetDbEnv()->TotalSeqTblReads());
-      fprintf(stdout, "Total bytes written: %llu ",
-              static_cast<unsigned long long>(
-                  fsdb_->GetDbEnv()->TotalTblBytesWritten()));
-      fprintf(stdout, "(Avg write size: %.1fK)\n",
-              1.0 * fsdb_->GetDbEnv()->TotalTblBytesWritten() / 1024.0 /
-                  fsdb_->GetDbEnv()->TotalTblWrites());
+    if (fsdb_) {
+      if (FLAGS_dbopts.enable_io_monitoring) {
+        fprintf(stdout, "Total random reads: %llu ",
+                static_cast<unsigned long long>(
+                    fsdb_->GetDbEnv()->TotalRndTblReads()));
+        fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
+                1.0 * fsdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
+                    fsdb_->GetDbEnv()->TotalRndTblReads(),
+                static_cast<unsigned long long>(
+                    fsdb_->GetDbEnv()->TotalRndTblBytesRead()));
+        fprintf(stdout, "Total sequential bytes read: %llu ",
+                static_cast<unsigned long long>(
+                    fsdb_->GetDbEnv()->TotalSeqTblBytesRead()));
+        fprintf(stdout, "(Avg read size: %.1fK)\n",
+                1.0 * fsdb_->GetDbEnv()->TotalSeqTblBytesRead() / 1024.0 /
+                    fsdb_->GetDbEnv()->TotalSeqTblReads());
+        fprintf(stdout, "Total bytes written: %llu ",
+                static_cast<unsigned long long>(
+                    fsdb_->GetDbEnv()->TotalTblBytesWritten()));
+        fprintf(stdout, "(Avg write size: %.1fK)\n",
+                1.0 * fsdb_->GetDbEnv()->TotalTblBytesWritten() / 1024.0 /
+                    fsdb_->GetDbEnv()->TotalTblWrites());
+      }
+      fprintf(stdout, " - Db stats: >>>\n%s\n", fsdb_->GetDbStats().c_str());
+      fprintf(stdout, " - L0 stats: >>>\n%s\n",
+              fsdb_->GetDbLevel0Events().c_str());
     }
-    fprintf(stdout, " - Db stats: >>>\n%s\n", fsdb_->GetDbStats().c_str());
-    fprintf(stdout, " - L0 stats: >>>\n%s\n",
-            fsdb_->GetDbLevel0Events().c_str());
     if (FLAGS_rank == 0) {
       puts("Bye!");
     }
@@ -571,6 +589,9 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_ports_per_rank = n;
     } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_print_ips = n;
+    } else if (sscanf((*argv)[i], "--dummy_svr=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dummy_svr = n;
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
