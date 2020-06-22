@@ -450,13 +450,21 @@ class Server : public FilesystemWrapper {
 #else
 #define OVERRIDE
 #endif
+  virtual Status Lokup(const User& who, const LookupStat& parent,
+                       const Slice& name, LookupStat*) OVERRIDE {
+    return Status::OK();
+  }
   virtual Status Mkdir(const User& who, const LookupStat& parent,
                        const Slice& name, uint32_t mode, Stat*) OVERRIDE {
     return Status::OK();
   }
-
   virtual Status Mkfle(const User& who, const LookupStat& parent,
                        const Slice& name, uint32_t mode, Stat*) OVERRIDE {
+    return Status::OK();
+  }
+  virtual Status Mkfls(const User& who, const LookupStat& parent,
+                       const Slice& namearr, uint32_t mode,
+                       uint32_t* n) OVERRIDE {
     return Status::OK();
   }
 #undef OVERRIDE
