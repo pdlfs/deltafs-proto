@@ -138,7 +138,7 @@ int FLAGS_num = 8;
 int FLAGS_reads = -1;
 
 // Abort on all errors.
-bool FLAGS_perfect_run = false;
+bool FLAGS_abort_on_error = false;
 
 // If true, do not destroy the existing database.
 bool FLAGS_use_existing_db = false;
@@ -656,7 +656,7 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot insert name into batch: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        if (FLAGS_perfect_run) {
+        if (FLAGS_abort_on_error) {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
@@ -666,7 +666,7 @@ class Client {
     if (!s.ok()) {
       fprintf(stderr, "%d: Fail to commit batch: %s\n", FLAGS_rank,
               s.ToString().c_str());
-      if (FLAGS_perfect_run) {
+      if (FLAGS_abort_on_error) {
         MPI_Abort(MPI_COMM_WORLD, 1);
       }
     }
@@ -685,7 +685,7 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        if (FLAGS_perfect_run) {
+        if (FLAGS_abort_on_error) {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
@@ -705,7 +705,7 @@ class Client {
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to lstat: %s\n", FLAGS_rank,
                 s.ToString().c_str());
-        if (FLAGS_perfect_run) {
+        if (FLAGS_abort_on_error) {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
@@ -903,16 +903,22 @@ void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_abort_on_error = true;
   pdlfs::FLAGS_udp = true;
 
   for (int i = 1; i < (*argc); i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
+    if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1 &&
+        (n == 0 || n == 1)) {
       pdlfs::FLAGS_print_ips = n;
     } else if (sscanf((*argv)[i], "--print_per_rank_stats=%d%c", &n, &junk) ==
-               1) {
+                   1 &&
+               (n == 0 || n == 1)) {
       pdlfs::FLAGS_print_per_rank_stats = n;
+    } else if (sscanf((*argv)[i], "--abort_on_error=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_abort_on_error = n;
     } else if (sscanf((*argv)[i], "--skip_fs_checks=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_skip_fs_checks = n;
