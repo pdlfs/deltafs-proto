@@ -851,7 +851,10 @@ class Client {
     }
     if (FLAGS_reads != 0) {
       for (int i = 0; i < FLAGS_read_phases; i++) {
-        SleepForMicroseconds(5 * 1000 * 1000);
+        // Skip sleeping when nothing has been run ahead of us
+        if (i != 0 || FLAGS_num != 0) {
+          SleepForMicroseconds(5 * 1000 * 1000);
+        }
         RunStep("fstats", &state, &Client::DoReads);
       }
     }
