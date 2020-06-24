@@ -104,7 +104,7 @@ int FLAGS_mon_interval = 1;
 // Use udp for rpc communication.
 bool FLAGS_udp = false;
 
-// RPC timeout.
+// RPC timeout in seconds.
 int FLAGS_rpc_timeout = 30;
 
 // Uri for the information server.
@@ -412,10 +412,10 @@ class Client {
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
-    char tmp[10];
-    snprintf(tmp, sizeof(tmp), "%d", FLAGS_rpc_timeout);
+    char timeout[10];
+    snprintf(timeout, sizeof(timeout), "%d s", FLAGS_rpc_timeout);
     fprintf(stdout, "Fs rpc timeout:     %s\n",
-            FLAGS_fs_use_local ? "N/A" : tmp);
+            FLAGS_fs_use_local ? "N/A" : timeout);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Num (rd/wr):        %d x %d/%d per rank\n", FLAGS_reads,
             FLAGS_read_phases, FLAGS_num);
@@ -617,7 +617,7 @@ class Client {
 
   void Open(int num_svrs, int num_ports_per_svr) {
     RPCOptions rpcopts;
-    rpcopts.rpc_timeout = FLAGS_rpc_timeout;
+    rpcopts.rpc_timeout = uint64_t(FLAGS_rpc_timeout) * 1000000;
     rpcopts.mode = rpc::kClientOnly;
     rpcopts.uri = FLAGS_udp ? "udp://-1:-1" : "tcp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
