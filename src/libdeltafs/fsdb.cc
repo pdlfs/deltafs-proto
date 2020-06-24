@@ -72,7 +72,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       table_bulk_read_size(256 << 10),
       memtable_size(8 << 20),
       table_size(4 << 20),
-      block_size(4 << 10),
+      block_size(2 << 10),
       table_cache_size(2500),
       filter_bits_per_key(10),
       block_cache_size(0),
