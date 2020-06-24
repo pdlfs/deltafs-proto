@@ -101,8 +101,11 @@ const char* FLAGS_mon_metric_name = "myfs.ops";
 // Number of seconds for sending the next stats packet.
 int FLAGS_mon_interval = 1;
 
-// Use udp.
+// Use udp for rpc communication.
 bool FLAGS_udp = false;
+
+// RPC timeout.
+int FLAGS_rpc_timeout = 30;
 
 // Uri for the information server.
 const char* FLAGS_info_svr_uri = "tcp://127.0.0.1:10086";
@@ -409,6 +412,10 @@ class Client {
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
+    char tmp[10];
+    snprintf(tmp, sizeof(tmp), "%d", FLAGS_rpc_timeout);
+    fprintf(stdout, "Fs rpc timeout:     %s\n",
+            FLAGS_fs_use_local ? "N/A" : tmp);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Num (rd/wr):        %d x %d/%d per rank\n", FLAGS_reads,
             FLAGS_read_phases, FLAGS_num);
@@ -610,6 +617,7 @@ class Client {
 
   void Open(int num_svrs, int num_ports_per_svr) {
     RPCOptions rpcopts;
+    rpcopts.rpc_timeout = FLAGS_rpc_timeout;
     rpcopts.mode = rpc::kClientOnly;
     rpcopts.uri = FLAGS_udp ? "udp://-1:-1" : "tcp://-1:-1";
     rpc_ = RPC::Open(rpcopts);
@@ -962,6 +970,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--read_phases=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_read_phases = n;
+    } else if (sscanf((*argv)[i], "--rpc_timeout=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_timeout = n;
     } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_udp = n;
