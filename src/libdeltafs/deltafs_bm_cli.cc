@@ -206,12 +206,8 @@ struct Stats {
         next_report_ += 1000;
       else if (next_report_ < 50000)
         next_report_ += 5000;
-      else if (next_report_ < 100000)
-        next_report_ += 10000;
-      else if (next_report_ < 500000)
-        next_report_ += 50000;
       else
-        next_report_ += 100000;
+        next_report_ += 10000;
       fprintf(stdout, "%d: Finished %d ops (%.0f%%)%30s\r", FLAGS_rank, done_,
               100.0 * done_ / total, "");
       fflush(stdout);
@@ -226,9 +222,10 @@ struct Stats {
     // elapsed times. On the other hand, per-op latency is computed on the sum
     // of per-rank elapsed times, not the actual elapsed time.
     double elapsed = (finish_ - start_) * 1e-6;
-    fprintf(stdout, "%-12d: %9.3f micros/op, %9.3f Mop/s, %9d Mops, %15d ops\n",
-            FLAGS_rank, seconds_ * 1e6 / done_, done_ / 1000000.0 / elapsed,
-            done_ / 1000000, done_);
+    fprintf(stdout,
+            "%-12d: %9.3f micros/op, %9.3f Kop/s, %9.3f Kops, %15d ops\n",
+            FLAGS_rank, seconds_ * 1e6 / done_, done_ / 1000.0 / elapsed,
+            done_ / 1000.0, done_);
 #if defined(PDLFS_OS_LINUX)
     fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
             (TimevalToMicros(&rusage_.ru_utime) -
@@ -269,9 +266,9 @@ struct GlobalStats {
     // of per-rank elapsed times, not the actual elapsed time.
     double elapsed = (finish_ - start_) * 1e-6;
     fprintf(stdout,
-            "==%-10s: %9.3f micros/op, %9.3f Mop/s, %9ld Mops, %15ld ops\n",
+            "==%-10s: %9.3f micros/op, %9.3f Mop/s, %9.3f Mops, %15ld ops\n",
             name, seconds_ * 1e6 / done_, done_ / 1000000.0 / elapsed,
-            done_ / 1000000, done_);
+            done_ / 1000000.0, done_);
     fflush(stdout);
   }
 };
