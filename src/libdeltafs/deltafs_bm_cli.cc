@@ -135,7 +135,10 @@ int FLAGS_batch_size = 16;
 int FLAGS_num = 8;
 
 // Number of files to stat per rank.
-int FLAGS_reads = -1;
+int FLAGS_reads = 0;
+
+// Number of read steps to run.
+int FLAGS_read_phases = 0;
 
 // Abort on all errors.
 bool FLAGS_abort_on_errors = false;
@@ -410,8 +413,8 @@ class Client {
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "Num (rd/wr):        %d/%d per rank\n", FLAGS_reads,
-            FLAGS_num);
+    fprintf(stdout, "Num (rd/wr):        %d x %d/%d per rank\n", FLAGS_reads,
+            FLAGS_read_phases, FLAGS_num);
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
              FLAGS_batched_writes, FLAGS_batch_size);
@@ -780,7 +783,7 @@ class Client {
     delete sock;
   }
 
-  void RunBenchmarks() {
+  void RunSteps() {
     RankState state;
     PrepareRun(&state);
     MonitorArg mon_arg(&state.stats);
@@ -799,8 +802,10 @@ class Client {
       }
     }
     if (FLAGS_reads != 0) {
-      SleepForMicroseconds(5 * 1000 * 1000);
-      RunStep("fstats", &state, &Client::DoReads);
+      for (int i = 0; i < FLAGS_read_phases; i++) {
+        SleepForMicroseconds(5 * 1000 * 1000);
+        RunStep("fstats", &state, &Client::DoReads);
+      }
     }
     if (FLAGS_mon_destination_uri) {
       MutexLock ml(&mon_arg.mutex);
@@ -861,7 +866,7 @@ class Client {
     } else {
       OpenLocal();
     }
-    RunBenchmarks();
+    RunSteps();
     if (fsdb_ && FLAGS_rank == 0) {
       if (FLAGS_dbopts.enable_io_monitoring) {
         fprintf(stdout, "Total random reads: %llu ",
@@ -958,6 +963,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
+    } else if (sscanf((*argv)[i], "--read_phases=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_read_phases = n;
     } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_udp = n;
