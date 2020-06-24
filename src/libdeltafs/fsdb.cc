@@ -74,7 +74,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       table_size(4 << 20),
       block_size(4 << 10),
       table_cache_size(2500),
-      filter_bits_per_key(14),
+      filter_bits_per_key(10),
       block_cache_size(0),
       block_restart_interval(16),
       level_factor(8),
