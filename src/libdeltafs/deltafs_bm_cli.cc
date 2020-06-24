@@ -395,6 +395,8 @@ class Client {
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dbopts.prefetch_compaction_input);
     fprintf(stdout, "Db level factor:    %d\n", FLAGS_dbopts.level_factor);
+    fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
+            FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dbopts.l1_compaction_trigger);
 #if defined(PDLFS_RADOS)
