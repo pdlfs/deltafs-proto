@@ -373,9 +373,9 @@ class Client {
 
   static void PrintDbSettings() {
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
-    fprintf(stdout, "Blk cache size:     %-3d MB\n",
+    fprintf(stdout, "Blk cache size:     %-4d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));
-    fprintf(stdout, "Blk size:           %-3d KB\n",
+    fprintf(stdout, "Blk size:           %-4d KB\n",
             int(FLAGS_dbopts.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dbopts.filter_bits_per_key));
@@ -385,17 +385,17 @@ class Client {
             FLAGS_dbopts.enable_io_monitoring);
     fprintf(stdout, "Wal off:            %d\n",
             FLAGS_dbopts.disable_write_ahead_logging);
-    fprintf(stdout, "Wal write size:     %-3d KB\n",
+    fprintf(stdout, "Wal write size:     %-4d KB\n",
             int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
     fprintf(stdout, "LSM COMPACTION OFF: %d\n",
             FLAGS_dbopts.disable_compaction);
-    fprintf(stdout, "Memtable size:      %-3d MB\n",
+    fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_dbopts.memtable_size >> 20));
-    fprintf(stdout, "Tbl size:           %-3d MB\n",
+    fprintf(stdout, "Tbl size:           %-4d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
-    fprintf(stdout, "Tbl write size:     %-3d KB\n",
+    fprintf(stdout, "Tbl write size:     %-4d KB\n",
             int(FLAGS_dbopts.table_buffer >> 10));
-    fprintf(stdout, "Tbl bulk read size: %-3d KB\n",
+    fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
             int(FLAGS_dbopts.table_bulk_read_size >> 10));
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dbopts.prefetch_compaction_input);
