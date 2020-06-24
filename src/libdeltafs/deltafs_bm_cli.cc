@@ -158,6 +158,11 @@ int FLAGS_uid = 1;
 // Group id.
 int FLAGS_gid = 1;
 
+// Print all client operations made.
+#ifndef NDEBUG
+int FLAGS_print_ops = 0;
+#endif
+
 // Per-rank performance stats.
 struct Stats {
 #if defined(PDLFS_OS_LINUX)
@@ -644,6 +649,12 @@ class Client {
     if (!FLAGS_share_dir || FLAGS_rank == 0) {
       Status s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
                                &state->stbuf);
+#ifndef NDEBUG
+      if (FLAGS_print_ops) {
+        fprintf(stderr, "mkdir %s: %s\n", state->pathbuf.c_str(),
+                s.ToString().c_str());
+      }
+#endif
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkdir: %s\n", FLAGS_rank,
                 s.ToString().c_str());
@@ -692,6 +703,12 @@ class Client {
       state->pathbuf.append(fname.data(), fname.size());
       Status s = fscli_->Mkfle(&state->ctx, NULL, state->pathbuf.c_str(), 0644,
                                &state->stbuf);
+#ifndef NDEBUG
+      if (FLAGS_print_ops) {
+        fprintf(stderr, "mkfle %s: %s\n", state->pathbuf.c_str(),
+                s.ToString().c_str());
+      }
+#endif
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
                 s.ToString().c_str());
@@ -712,6 +729,12 @@ class Client {
       state->pathbuf.append(fname.data(), fname.size());
       Status s = fscli_->Lstat(&state->ctx, NULL, state->pathbuf.c_str(),
                                &state->stbuf);
+#ifndef NDEBUG
+      if (FLAGS_print_ops) {
+        fprintf(stderr, "lstat %s: %s\n", state->pathbuf.c_str(),
+                s.ToString().c_str());
+      }
+#endif
       if (!s.ok()) {
         fprintf(stderr, "%d: Fail to lstat: %s\n", FLAGS_rank,
                 s.ToString().c_str());
