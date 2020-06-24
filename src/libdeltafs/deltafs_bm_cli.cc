@@ -138,10 +138,10 @@ int FLAGS_batch_size = 16;
 int FLAGS_num = 8;
 
 // Number of files to stat per rank.
-int FLAGS_reads = 0;
+int FLAGS_reads = -1;
 
 // Number of read steps to run.
-int FLAGS_read_phases = 0;
+int FLAGS_read_phases = 1;
 
 // Abort on all errors.
 bool FLAGS_abort_on_errors = false;
@@ -1036,6 +1036,10 @@ void BM_Main(int* const argc, char*** const argv) {
       MPI_Finalize();
       exit(1);
     }
+  }
+
+  if (pdlfs::FLAGS_reads == -1) {
+    pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
   }
 
   std::string default_db_prefix;
