@@ -647,17 +647,35 @@ class Client {
 
   void PrepareRun(RankState* const state) {
     if (!FLAGS_share_dir || FLAGS_rank == 0) {
-      Status s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
-                               &state->stbuf);
+      Status s;
+      if (FLAGS_use_existing_db) {
+        Stat stat;
+        s = fscli_->Lstat(&state->ctx, NULL, state->pathbuf.c_str(), &stat);
 #ifndef NDEBUG
-      if (FLAGS_print_ops) {
-        fprintf(stderr, "mkdir %s: %s\n", state->pathbuf.c_str(),
-                s.ToString().c_str());
-      }
+        if (FLAGS_print_ops) {
+          fprintf(stderr, "lstat %s: %s\n", state->pathbuf.c_str(),
+                  s.ToString().c_str());
+        }
 #endif
+        if (!s.ok()) {
+          fprintf(stderr, "%d: Fail to lstat: %s\n", FLAGS_rank,
+                  s.ToString().c_str());
+        }
+      } else {
+        s = fscli_->Mkdir(&state->ctx, NULL, state->pathbuf.c_str(), 0755,
+                          &state->stbuf);
+#ifndef NDEBUG
+        if (FLAGS_print_ops) {
+          fprintf(stderr, "mkdir %s: %s\n", state->pathbuf.c_str(),
+                  s.ToString().c_str());
+        }
+#endif
+        if (!s.ok()) {
+          fprintf(stderr, "%d: Fail to mkdir: %s\n", FLAGS_rank,
+                  s.ToString().c_str());
+        }
+      }
       if (!s.ok()) {
-        fprintf(stderr, "%d: Fail to mkdir: %s\n", FLAGS_rank,
-                s.ToString().c_str());
         MPI_Finalize();
         exit(1);
       }
