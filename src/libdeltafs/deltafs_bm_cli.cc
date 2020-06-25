@@ -146,8 +146,8 @@ int FLAGS_read_phases = 1;
 // Abort on all errors.
 bool FLAGS_abort_on_errors = false;
 
-// If true, do not destroy the existing database.
-bool FLAGS_use_existing_db = false;
+// If true, will reuse the existing fs image.
+bool FLAGS_use_existing_fs = false;
 
 // Use the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
@@ -408,7 +408,7 @@ class Client {
     fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
     if (FLAGS_env_use_rados) PrintRadosSettings();
 #endif
-    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
+    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
   }
 
@@ -416,6 +416,7 @@ class Client {
     PrintWarnings();
     PrintEnvironment();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Fs use existing:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
@@ -596,7 +597,7 @@ class Client {
     snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
     std::string dbpath = FLAGS_db_prefix;
     dbpath += dbid;
-    if (!FLAGS_use_existing_db) {
+    if (!FLAGS_use_existing_fs) {
       FilesystemDb::DestroyDb(dbpath, env);
     }
     Status s = fsdb_->Open(dbpath);
@@ -648,7 +649,7 @@ class Client {
   void PrepareRun(RankState* const state) {
     if (!FLAGS_share_dir || FLAGS_rank == 0) {
       Status s;
-      if (FLAGS_use_existing_db) {
+      if (FLAGS_use_existing_fs) {
         Stat stat;
         s = fscli_->Lstat(&state->ctx, NULL, state->pathbuf.c_str(), &stat);
 #ifndef NDEBUG
@@ -996,7 +997,10 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_rados_force_syncio = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_use_existing_db = n;
+      pdlfs::FLAGS_use_existing_fs = n;
+    } else if (sscanf((*argv)[i], "--use_existing_fs=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_use_existing_fs = n;
     } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
                    1 &&
                (n == 0 || n == 1)) {

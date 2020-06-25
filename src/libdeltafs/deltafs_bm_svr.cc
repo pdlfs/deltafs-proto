@@ -115,8 +115,8 @@ bool FLAGS_dummy_svr = false;
 // Skip all fs checks.
 bool FLAGS_skip_fs_checks = false;
 
-// If true, do not destroy the existing database.
-bool FLAGS_use_existing_db = false;
+// If true, will reuse the existing fs image.
+bool FLAGS_use_existing_fs = false;
 
 // Use the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
@@ -188,7 +188,7 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
     if (FLAGS_env_use_rados) PrintRadosSettings();
 #endif
-    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_db);
+    fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
   }
 
@@ -200,6 +200,7 @@ class Server : public FilesystemWrapper {
             FLAGS_rpc_worker_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Fs use existing:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
@@ -365,7 +366,7 @@ class Server : public FilesystemWrapper {
     snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
     std::string dbpath = FLAGS_db_prefix;
     dbpath += dbid;
-    if (!FLAGS_use_existing_db) {
+    if (!FLAGS_use_existing_fs) {
       FilesystemDb::DestroyDb(dbpath, env);
     }
     Status s = fsdb_->Open(dbpath);
@@ -629,7 +630,10 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_rados_force_syncio = n;
     } else if (sscanf((*argv)[i], "--use_existing_db=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
-      pdlfs::FLAGS_use_existing_db = n;
+      pdlfs::FLAGS_use_existing_fs = n;
+    } else if (sscanf((*argv)[i], "--use_existing_fs=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_use_existing_fs = n;
     } else if (sscanf((*argv)[i], "--disable_compaction=%d%c", &n, &junk) ==
                    1 &&
                (n == 0 || n == 1)) {
