@@ -162,6 +162,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.l0_compaction_trigger = options_.l0_compaction_trigger;
   dbopts.l0_soft_limit = options_.l0_soft_limit;
   dbopts.l0_hard_limit = options_.l0_hard_limit;
+  dbopts.max_mem_compact_level = 0;
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
