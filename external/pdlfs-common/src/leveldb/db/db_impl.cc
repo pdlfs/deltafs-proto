@@ -469,13 +469,13 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   reporter.info_log = options_.info_log;
   reporter.fname = fname.c_str();
   reporter.status = (options_.paranoid_checks ? &status : NULL);
-  // We intentionally make log::Reader do checksumming even if
-  // paranoid_checks==false so that corruptions cause entire commits
-  // to be skipped instead of propagating bad information (like overly
-  // large sequence numbers).
+  // We intentionally have log::Reader do checksumming even when paranoid_checks
+  // is set to false in order that corruptions cause entire commits to be
+  // skipped instead of propagating bad information (like overly large sequence
+  // numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
 #if VERBOSE >= 1
-  Log(options_.info_log, 1, "Recovering log: %s", fname.c_str());
+  Log(options_.info_log, 1, "Recovering log to memtable: %s", fname.c_str());
 #endif
 
   // Read all the records and add to a memtable
@@ -542,8 +542,9 @@ Status DBImpl::DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base) {
   return s;
 }
 
-// REQUIRES: mutex_ has been locked. May insert table into deeper levels when
-// *base is given. Otherwise, will directly insert into Level 0.
+// REQUIRES: mutex_ has been locked. Will attempt to insert table into deeper
+// levels (limited by options_.max_mem_compact_level) when *base is given.
+// Otherwise, will directly insert table into Level 0.
 Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
                                 SequenceNumber* max_seq) {
