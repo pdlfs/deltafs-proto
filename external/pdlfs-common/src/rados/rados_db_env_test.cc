@@ -47,6 +47,11 @@ class RadosDbEnvTest {
     ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_pool_name, RadosOptions(), &osd));
     env_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
     env_ = mgr_->CreateDbEnvWrapper(env_, true, RadosDbEnvOptions());
+    // Mount the directory read-write
+    env_->CreateDir(working_dir_.c_str());
+    DBOptions options;
+    options.env = env_;
+    DestroyDB(working_dir_, options);  // This will delete the dir
     env_->CreateDir(working_dir_.c_str());
     mgr_->Release(conn);
   }
@@ -136,7 +141,6 @@ TEST(RadosDbEnvTest, Db) {
   ASSERT_EQ("v2", GetFromDb("k2", db));
   ASSERT_EQ("v1", GetFromDb("k1", db));
   delete db;
-  DestroyDB(working_dir_, options);
 }
 
 }  // namespace rados
