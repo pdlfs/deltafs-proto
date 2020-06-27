@@ -92,6 +92,7 @@ class RadosBulkTest {
 TEST(RadosBulkTest, BulkIn) {
   Open();
   DBOptions options = GetIoSimplifiedDbOptions();
+  options.detach_dir_on_close = true;
   options.create_if_missing = true;
   options.env = env_;
   DB* db;
