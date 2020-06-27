@@ -381,13 +381,13 @@ Status DBImpl::Recover(VersionEdit* edit) {
   if (s.ok()) {
     SequenceNumber max_sequence(0);
 
-    // Recover from all newer log files than the ones named in the
-    // descriptor (new log files may have been added by the previous
-    // incarnation without registering them in the descriptor).
+    // Recover from all newer log files than the ones named in the descriptor
+    // (new log files may have been added by the previous incarnation without
+    // registering them in the descriptor).
     //
-    // Note that PrevLogNumber() is no longer used, but we pay
-    // attention to it in case we are recovering a database
-    // produced by an older version of leveldb.
+    // Note that PrevLogNumber() is no longer used, but we pay attention to it
+    // in case we are recovering a database produced by an older version of
+    // leveldb.
     const uint64_t min_log = versions_->LogNumber();
     const uint64_t prev_log = versions_->PrevLogNumber();
     std::vector<std::string> filenames;
@@ -607,7 +607,7 @@ void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
 
-  // Save the contents of the memtable as a new Table
+  // Save memtable contents into a new table file
   VersionEdit edit;
   Version* base = versions_->current();
   base->Ref();
@@ -618,10 +618,19 @@ void DBImpl::CompactMemTable() {
     s = Status::IOError("Deleting db during memtable compaction");
   }
 
-  // Replace immutable memtable with the generated Table
+  // Replace the memtable we just compacted with the generated table by
+  // recording the current log number (logfile_number_) in the new version; logs
+  // earlier than that (including the one backing the memtable we just
+  // compacted) are no longer needed.
+  //
+  // Note that the recoding of a previous log number is no longer used. So we
+  // simply set it to 0.
   if (s.ok()) {
-    edit.SetPrevLogNumber(0);
-    edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
+    // Do not record any log changes if we don't have any
+    if (!options_.disable_write_ahead_log) {
+      edit.SetPrevLogNumber(0);
+      edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
+    }
     s = versions_->LogAndApply(&edit, &mutex_);
   }
 
@@ -697,7 +706,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
 }
 
 Status DBImpl::TEST_CompactMemTable() {
-  // NULL batch means just wait for earlier writes to be done
+  // NULL batch simply means waiting for earlier writes to complete
   Status s = Write(WriteOptions(), NULL);
   if (s.ok()) {
     // Wait until the compaction completes
