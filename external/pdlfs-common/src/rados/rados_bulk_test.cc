@@ -58,6 +58,10 @@ class RadosBulkTest {
   }
 
   ~RadosBulkTest() {
+    DBOptions options;
+    options.env = env_;
+    DestroyDB(working_dir2_, options);
+    DestroyDB(working_dir1_, options);
     delete env_;
     delete mgr_;
   }
