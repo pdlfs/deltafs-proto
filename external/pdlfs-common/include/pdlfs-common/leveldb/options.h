@@ -179,6 +179,8 @@ struct DBOptions {
 
   // Set to true to disable the use of a write-ahead log to protect
   // the data in the current memtable.
+  // Without a write-ahead log, a user must explicitly flush the memtable before
+  // closing a db in order not to lose the data in the memtable.
   // Default: false
   bool disable_write_ahead_log;
 
