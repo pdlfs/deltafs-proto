@@ -168,8 +168,10 @@ DBImpl::~DBImpl() {
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
-  log_->Sync();
-  delete log_;
+  if (log_ != NULL) {
+    log_->Sync();
+    delete log_;
+  }
   delete logfile_;
   delete table_cache_;
 
