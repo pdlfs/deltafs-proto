@@ -177,6 +177,12 @@ struct DBOptions {
   // Default: false
   bool rotating_manifest;
 
+  // Perform an extra sync operation on a write ahead log before closing it.
+  // Write-ahead logs are flushed on every write. This extra sync operation will
+  // force log data to reach storage.
+  // Default: false
+  bool sync_log_on_close;
+
   // Set to true to disable the use of a write-ahead log to protect
   // the data in the current memtable.
   // Without a write-ahead log, a user must explicitly flush the memtable before

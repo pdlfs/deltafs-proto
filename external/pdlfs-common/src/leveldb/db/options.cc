@@ -45,6 +45,7 @@ DBOptions::DBOptions()
       gc_skip_deletion(false),
       skip_lock_file(false),
       rotating_manifest(false),
+      sync_log_on_close(false),
       disable_write_ahead_log(false),
       disable_compaction(false),
       disable_seek_compaction(false),

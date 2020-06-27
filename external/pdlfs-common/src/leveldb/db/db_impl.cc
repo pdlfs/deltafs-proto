@@ -169,7 +169,9 @@ DBImpl::~DBImpl() {
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
   if (log_ != NULL) {
-    log_->Sync();
+    if (options_.sync_log_on_close) {
+      log_->Sync();
+    }
     delete log_;
   }
   delete logfile_;
@@ -1632,6 +1634,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
           // Avoid chewing through file number space in a tight loop.
           versions_->ReuseFileNumber(new_log_number);
           break;
+        }
+        if (options_.sync_log_on_close) {
+          log_->Sync();
         }
         delete log_;
         delete logfile_;  // This closes the file
