@@ -116,6 +116,7 @@ TEST(RadosDbEnvTest, ListDbFiles) {
 TEST(RadosDbEnvTest, Db) {
   Open();
   DBOptions options;
+  options.info_log = Logger::Default();
   options.create_if_missing = true;
   options.env = env_;
   DB* db;
