@@ -8,7 +8,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-#include "rados_db_env.h"
+#include "rados_env.h"
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
@@ -30,9 +30,9 @@ const char* FLAGS_conf = NULL;  // Use ceph defaults
 namespace pdlfs {
 namespace rados {
 
-class RadosDbEnvBulkTest {
+class RadosBulkTest {
  public:
-  RadosDbEnvBulkTest() {
+  RadosBulkTest() {
     working_dir1_ = test::TmpDir() + "/rados_bulk1";
     working_dir2_ = test::TmpDir() + "/rados_bulk2";
     RadosConnMgrOptions options;
@@ -48,18 +48,22 @@ class RadosDbEnvBulkTest {
         RadosConnOptions(), &conn));
     ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_pool_name, RadosOptions(), &osd));
     env_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
+    DBOptions options;
+    options.env = env_;
     env_->CreateDir(working_dir1_.c_str());
+    DestroyDB(working_dir1_, options);
     env_->CreateDir(working_dir2_.c_str());
+    DestroyDB(working_dir2_, options);
     mgr_->Release(conn);
   }
 
-  ~RadosDbEnvBulkTest() {
-    env_->DeleteDir(working_dir2_.c_str());
-    env_->DeleteDir(working_dir1_.c_str());
+  ~RadosBulkTest() {
     delete env_;
     delete mgr_;
   }
 
+  // Disable the use of an info log file, a lock file, and a CURRENT file so
+  // that we can run db directly atop a raw rados env.
   DBOptions GetIoSimplifiedDbOptions() {
     DBOptions options;
     options.info_log = Logger::Default();
@@ -85,7 +89,7 @@ class RadosDbEnvBulkTest {
   Env* env_;
 };
 
-TEST(RadosDbEnvBulkTest, BulkIn) {
+TEST(RadosBulkTest, BulkIn) {
   Open();
   DBOptions options = GetIoSimplifiedDbOptions();
   options.create_if_missing = true;
@@ -104,8 +108,6 @@ TEST(RadosDbEnvBulkTest, BulkIn) {
   ASSERT_OK(db->AddL0Tables(in, working_dir1_));
   ASSERT_EQ("v1", GetFromDb("k1", db));
   delete db;
-  DestroyDB(working_dir2_, options);
-  DestroyDB(working_dir1_, options);
 }
 
 }  // namespace rados
