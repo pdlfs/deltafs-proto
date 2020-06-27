@@ -117,6 +117,7 @@ TEST(RadosDbEnvTest, Db) {
   Open();
   DBOptions options;
   options.info_log = Logger::Default();
+  options.sync_log_on_close = true;
   options.create_if_missing = true;
   options.env = env_;
   DB* db;
