@@ -52,6 +52,10 @@ struct DBOptions {
   // Default: false
   bool error_if_exists;
 
+  // Detach the db directory on closing the db.
+  // Default: false
+  bool detach_dir_on_close;
+
   // If true, the implementation will do aggressive checking of the
   // data it is processing and will stop early if it detects any
   // errors.  This may have unforeseen ramifications: for example, a

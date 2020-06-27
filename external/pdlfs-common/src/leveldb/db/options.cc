@@ -29,6 +29,7 @@ DBOptions::DBOptions()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
+      detach_dir_on_close(false),
       paranoid_checks(false),
       env(Env::Default()),
       info_log(NULL),

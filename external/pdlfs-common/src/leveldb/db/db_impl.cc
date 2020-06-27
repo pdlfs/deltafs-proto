@@ -186,7 +186,9 @@ DBImpl::~DBImpl() {
   }
 
   // Detach db directory so other processes may mount the db.
-  env_->DetachDir(dbname_.c_str());
+  if (options_.detach_dir_on_close) {
+    env_->DetachDir(dbname_.c_str());
+  }
 }
 
 Status DBImpl::NewDB() {
