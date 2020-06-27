@@ -125,12 +125,15 @@ TEST(RadosDbEnvTest, Db) {
   ASSERT_OK(db->Put(wo, "k1", "v1"));
   FlushOptions fo;
   ASSERT_OK(db->FlushMemTable(fo));
-  db->CompactRange(NULL, NULL);
   ASSERT_OK(db->Put(wo, "k2", "v2"));
+  db->CompactRange(NULL, NULL);
+  ASSERT_OK(db->Put(wo, "k3", "v3"));
   delete db;
   options.error_if_exists = false;
   ASSERT_OK(DB::Open(options, working_dir_, &db));
+  ASSERT_EQ("v3", GetFromDb("k3", db));
   ASSERT_EQ("v2", GetFromDb("k2", db));
+  ASSERT_EQ("v1", GetFromDb("k1", db));
   delete db;
   DestroyDB(working_dir_, options);
 }
