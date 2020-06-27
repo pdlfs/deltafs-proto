@@ -48,7 +48,7 @@ class RadosBulkTest {
         RadosConnOptions(), &conn));
     ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_pool_name, RadosOptions(), &osd));
     env_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
-    DBOptions options;
+    DBOptions options = GetRadosDbOptions();
     options.env = env_;
     env_->CreateDir(working_dir1_.c_str());
     DestroyDB(working_dir1_, options);
@@ -58,7 +58,7 @@ class RadosBulkTest {
   }
 
   ~RadosBulkTest() {
-    DBOptions options;
+    DBOptions options = GetRadosDbOptions();
     options.env = env_;
     DestroyDB(working_dir2_, options);
     DestroyDB(working_dir1_, options);
@@ -68,7 +68,7 @@ class RadosBulkTest {
 
   // Disable the use of an info log file, a lock file, and a CURRENT file so
   // that we can run db directly atop a raw rados env.
-  DBOptions GetIoSimplifiedDbOptions() {
+  static DBOptions GetRadosDbOptions() {
     DBOptions options;
     options.info_log = Logger::Default();
     options.rotating_manifest = true;
@@ -95,8 +95,7 @@ class RadosBulkTest {
 
 TEST(RadosBulkTest, BulkIn) {
   Open();
-  DBOptions options = GetIoSimplifiedDbOptions();
-  options.detach_dir_on_close = true;
+  DBOptions options = GetRadosDbOptions();
   options.create_if_missing = true;
   options.env = env_;
   DB* db;
