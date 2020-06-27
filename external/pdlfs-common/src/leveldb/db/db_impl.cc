@@ -618,15 +618,15 @@ void DBImpl::CompactMemTable() {
     s = Status::IOError("Deleting db during memtable compaction");
   }
 
-  // Replace the memtable we just compacted with the generated table by
+  // Replace the memtable we just compacted with the newly generated table by
   // recording the current log number (logfile_number_) in the new version; logs
   // earlier than that (including the one backing the memtable we just
-  // compacted) are no longer needed.
+  // compacted) are no longer needed (and will be garbage collected).
   //
   // Note that the recoding of a previous log number is no longer used. So we
   // simply set it to 0.
   if (s.ok()) {
-    // Do not record any log changes if we don't have any
+    // Do not record any log changes if we didn't write any logs.
     if (!options_.disable_write_ahead_log) {
       edit.SetPrevLogNumber(0);
       edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
