@@ -104,6 +104,8 @@ TEST(RadosBulkTest, BulkIn) {
   options.error_if_exists = false;
   ASSERT_OK(DB::Open(options, working_dir2_, &db));
   InsertOptions in;
+  in.attach_dir_on_start = true;
+  in.detach_dir_on_complete = true;
   in.method = kCopy;
   ASSERT_OK(db->AddL0Tables(in, working_dir1_));
   ASSERT_EQ("v1", GetFromDb("k1", db));

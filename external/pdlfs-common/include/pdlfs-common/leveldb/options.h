@@ -319,11 +319,11 @@ struct FlushOptions {
   FlushOptions();
 };
 
-// During each bulk insertion, a set of table files are injected into
-// the database. The following are possible operations that can be
-// used to achieve this data injection.
+// Performing a bulk insertion requires inserting a set of table files into a
+// db. The following are possible file operations that can be used to accomplish
+// such insertion activities.
 enum InsertMethod {
-  kRename = 0x0,  // May not supported by some underlying storage
+  kRename = 0x0,  // May not be supported by certain underlying storage systems
   kCopy = 0x1
 };
 
@@ -347,8 +347,18 @@ struct InsertOptions {
   // Default: false
   bool verify_checksums;
 
-  // Which file system action should get performed when a
-  // table file is to be bulk inserted into the database.
+  // Attach the bulk insertion dir on start.
+  // Set this to true when the underlying storage requires an explicit mount to
+  // access files in a dir.
+  // Default: false
+  bool attach_dir_on_start;
+
+  // Detach the bulk insertion dir when done.
+  // Default: false
+  bool detach_dir_on_complete;
+
+  // Which file action should be performed in order to be insert a table file
+  // into the db.
   // Default: kRename
   InsertMethod method;
 

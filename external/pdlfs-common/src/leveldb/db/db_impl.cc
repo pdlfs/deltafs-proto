@@ -2012,28 +2012,37 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   Status s;
   InsertionState insert(options, bulk_dir);
   std::vector<std::string>* const names = &insert.source_names;
+  if (options.attach_dir_on_start) {
+    // Ignore error since we may have already mounted the directory
+    env_->AttachDir(bulk_dir.c_str());
+  }
   s = env_->GetChildren(bulk_dir.c_str(), names);
   if (!s.ok()) {
     return s;
   }
 
   std::sort(names->begin(), names->end());
+  {
+    MutexLock l(&mutex_);
+    // Temporarily disable any background compaction
+    bg_compaction_paused_++;
+    while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
+      bg_cv_.Wait();
+    }
 
-  MutexLock l(&mutex_);
-  // Temporarily disable any background compaction
-  bg_compaction_paused_++;
-  while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
-    bg_cv_.Wait();
+    bulk_insert_in_progress_ = true;
+    s = InsertLevel0Tables(&insert);
+    bulk_insert_in_progress_ = false;
+    // Restart background compaction
+    assert(bg_compaction_paused_ > 0);
+    bg_compaction_paused_--;
+    MaybeScheduleCompaction();
+    bg_cv_.SignalAll();
   }
 
-  bulk_insert_in_progress_ = true;
-  s = InsertLevel0Tables(&insert);
-  bulk_insert_in_progress_ = false;
-  // Restart background compaction
-  assert(bg_compaction_paused_ > 0);
-  bg_compaction_paused_--;
-  MaybeScheduleCompaction();
-  bg_cv_.SignalAll();
+  if (options.detach_dir_on_complete) {
+    env_->DetachDir(bulk_dir.c_str());
+  }
   return s;
 }
 

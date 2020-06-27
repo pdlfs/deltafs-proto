@@ -74,6 +74,8 @@ InsertOptions::InsertOptions()
     : no_seq_adjustment(false),
       suggested_max_seq(0),
       verify_checksums(false),
+      attach_dir_on_start(false),
+      detach_dir_on_complete(false),
       method(kRename) {}
 
 DumpOptions::DumpOptions() : verify_checksums(false), snapshot(NULL) {}
