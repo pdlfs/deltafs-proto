@@ -143,6 +143,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   DBOptions dbopts;
   dbopts.create_if_missing = true;
   dbopts.table_builder_skip_verification = true;
+  dbopts.sync_log_on_close = true;
   dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
   dbopts.prefetch_compaction_input = options_.prefetch_compaction_input;
   dbopts.disable_compaction = options_.disable_compaction;
