@@ -58,10 +58,8 @@ class RadosBulkTest {
   }
 
   ~RadosBulkTest() {
-    DBOptions options = GetRadosDbOptions();
-    options.env = env_;
-    DestroyDB(working_dir2_, options);
-    DestroyDB(working_dir1_, options);
+    env_->DetachDir(working_dir2_.c_str());
+    env_->DetachDir(working_dir1_.c_str());
     delete env_;
     delete mgr_;
   }
@@ -96,6 +94,7 @@ class RadosBulkTest {
 TEST(RadosBulkTest, BulkIn) {
   Open();
   DBOptions options = GetRadosDbOptions();
+  options.detach_dir_on_close = true;
   options.create_if_missing = true;
   options.env = env_;
   DB* db;

@@ -57,9 +57,7 @@ class RadosDbEnvTest {
   }
 
   ~RadosDbEnvTest() {
-    DBOptions options;
-    options.env = env_;
-    DestroyDB(working_dir_, options);
+    env_->DetachDir(working_dir_.c_str());
     delete env_;
     delete mgr_;
   }
