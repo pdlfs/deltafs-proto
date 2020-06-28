@@ -103,7 +103,7 @@ TEST(RadosBulkTest, BulkIn) {
   ASSERT_OK(db->Put(wo, "k1", "v1"));
   FlushOptions fo;
   ASSERT_OK(db->FlushMemTable(fo));
-  delete db;
+  delete db;  // This will detach working_dir1_
   options.error_if_exists = false;
   ASSERT_OK(DB::Open(options, working_dir2_, &db));
   InsertOptions in;
@@ -112,7 +112,7 @@ TEST(RadosBulkTest, BulkIn) {
   in.method = kCopy;
   ASSERT_OK(db->AddL0Tables(in, working_dir1_));
   ASSERT_EQ("v1", GetFromDb("k1", db));
-  delete db;
+  delete db;  // This will detach working_dir2_
 }
 
 }  // namespace rados

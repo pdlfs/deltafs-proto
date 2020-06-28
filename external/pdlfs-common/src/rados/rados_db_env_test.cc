@@ -122,6 +122,7 @@ TEST(RadosDbEnvTest, Db) {
   Open();
   DBOptions options;
   options.info_log = Logger::Default();
+  options.max_mem_compact_level = 0;
   options.sync_log_on_close = true;
   options.create_if_missing = true;
   options.env = env_;
@@ -132,8 +133,10 @@ TEST(RadosDbEnvTest, Db) {
   FlushOptions fo;
   ASSERT_OK(db->FlushMemTable(fo));
   ASSERT_OK(db->Put(wo, "k2", "v2"));
+  // This will force the generation of a new L0 table and then a merge of two L0
+  // tables into a new L1 table
   db->CompactRange(NULL, NULL);
-  ASSERT_OK(db->Put(wo, "k3", "v3"));
+  ASSERT_OK(db->Put(wo, "k3", "v3"));  // Leaves data in the write-ahead log
   delete db;
   options.error_if_exists = false;
   ASSERT_OK(DB::Open(options, working_dir_, &db));
