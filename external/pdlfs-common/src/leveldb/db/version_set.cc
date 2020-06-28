@@ -1153,7 +1153,7 @@ Status VersionSet::Recover() {
 
   if (status.ok()) {
     if (selected == NULL) {
-      status = Status::Corruption(dbname_, "no valid manifest available");
+      status = Status::Corruption("No valid db manifest found");
     } else {
       Version* v = new Version(this);
       selected->SaveTo(v);

@@ -192,6 +192,9 @@ DBImpl::~DBImpl() {
 }
 
 Status DBImpl::NewDB() {
+#if VERBOSE >= 1
+  Log(options_.info_log, 1, "Initializing a new db");
+#endif
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
@@ -217,10 +220,11 @@ Status DBImpl::NewDB() {
     }
   }
   delete file;
-  if (s.ok()) {
 #if VERBOSE >= 1
-    Log(options_.info_log, 1, "Started a new db");
+  Log(options_.info_log, 1, "Writing %s: %s\n", manifest.c_str(),
+      s.ToString().c_str());
 #endif
+  if (s.ok()) {
     if (!options_.rotating_manifest) {
       // Make "CURRENT" file that points to the new manifest file.
       s = SetCurrentFile(env_, dbname_, num);
@@ -373,11 +377,12 @@ Status DBImpl::Recover(VersionEdit* edit) {
         return s;
       }
     } else {
-      return Status::InvalidArgument(dbname_, "does not exist");
+      return Status::InvalidArgument(
+          "db does not exist (create_if_missing==0)");
     }
   } else {
     if (options_.error_if_exists) {
-      return Status::InvalidArgument(dbname_, "exists");
+      return Status::InvalidArgument("db exists (error_if_exists==1)");
     }
   }
 
