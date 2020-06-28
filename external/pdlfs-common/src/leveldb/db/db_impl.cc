@@ -482,7 +482,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   // numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
 #if VERBOSE >= 1
-  Log(options_.info_log, 1, "Recovering log to memtable: %s", fname.c_str());
+  Log(options_.info_log, 1, "Recovering log into memtable: %s", fname.c_str());
 #endif
 
   // Read all the records and add to a memtable
@@ -646,7 +646,7 @@ void DBImpl::CompactMemTable() {
     DeleteObsoleteFiles();
 #if VERBOSE >= 1
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, 1, "Compaction done: RAM->L0, db => %s",
+    Log(options_.info_log, 1, "Compaction done: LM->L0, db => %s",
         versions_->LevelSummary(&tmp));
 #endif
   } else {

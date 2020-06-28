@@ -1053,7 +1053,10 @@ Status VersionSet::Recover() {
         uint64_t log_number = 0;
         uint64_t prev_log_number = 0;
         Builder* builder = new Builder(this, current);
-
+#if VERBOSE >= 1
+        Log(options_->info_log, 1, "Restoring db from %s\n",
+            manifests[i].c_str());
+#endif
         {
           LogReporter reporter;
           reporter.status = &s;
