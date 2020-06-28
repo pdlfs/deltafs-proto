@@ -99,6 +99,9 @@ struct FilesystemDbOptions {
   // Number of files in Level-0 until writes are entirely stalled.
   // Default: 12
   int l0_hard_limit;
+  // Detach db directory on db closing.
+  // Default: false
+  bool detach_dir_on_close;
   // Collect performance stats for db table files.
   // Default: false
   bool enable_io_monitoring;

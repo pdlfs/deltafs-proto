@@ -82,6 +82,7 @@ FilesystemDbOptions::FilesystemDbOptions()
       l0_compaction_trigger(4),
       l0_soft_limit(8),
       l0_hard_limit(12),
+      detach_dir_on_close(false),
       enable_io_monitoring(false),
       use_default_logger(false),
       disable_write_ahead_logging(false),
@@ -144,6 +145,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.create_if_missing = true;
   dbopts.table_builder_skip_verification = true;
   dbopts.sync_log_on_close = true;
+  dbopts.detach_dir_on_close = options_.detach_dir_on_close;
   dbopts.disable_write_ahead_log = options_.disable_write_ahead_logging;
   dbopts.prefetch_compaction_input = options_.prefetch_compaction_input;
   dbopts.disable_compaction = options_.disable_compaction;

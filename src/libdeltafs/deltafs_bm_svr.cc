@@ -321,6 +321,7 @@ class Server : public FilesystemWrapper {
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
 #if defined(PDLFS_RADOS)
+      FLAGS_dbopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
       options.force_syncio = FLAGS_rados_force_syncio;
