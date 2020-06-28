@@ -192,8 +192,8 @@ DBImpl::~DBImpl() {
 }
 
 Status DBImpl::NewDB() {
-#if VERBOSE >= 1
-  Log(options_.info_log, 1, "Initializing a new db");
+#if VERBOSE >= 2
+  Log(options_.info_log, 2, "Need to format a new db!");
 #endif
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
@@ -220,8 +220,8 @@ Status DBImpl::NewDB() {
     }
   }
   delete file;
-#if VERBOSE >= 1
-  Log(options_.info_log, 1, "Writing %s: %s\n", manifest.c_str(),
+#if VERBOSE >= 2
+  Log(options_.info_log, 2, "Writing %s: %s", manifest.c_str(),
       s.ToString().c_str());
 #endif
   if (s.ok()) {
@@ -2158,6 +2158,9 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   *dbptr = NULL;
 
   DBImpl* impl = new DBImpl(options, dbname);
+#if VERBOSE >= 1
+  Log(options.info_log, 1, "Opening db at %s ...", dbname.c_str());
+#endif
   impl->mutex_.Lock();
   VersionEdit edit;
   Status s =

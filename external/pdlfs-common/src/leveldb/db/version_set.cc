@@ -918,6 +918,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       descriptor_log_ = new log::Writer(descriptor_file_);
       s = WriteSnapshot(descriptor_log_);
     }
+#if VERBOSE >= 2
+    Log(options_->info_log, 2, "Writing %s: %s", new_manifest_file.c_str(),
+        s.ToString().c_str());
+#endif
   }
 
   // Unlock during expensive MANIFEST log write
@@ -1054,7 +1058,7 @@ Status VersionSet::Recover() {
         uint64_t prev_log_number = 0;
         Builder* builder = new Builder(this, current);
 #if VERBOSE >= 1
-        Log(options_->info_log, 1, "Restoring db from %s\n",
+        Log(options_->info_log, 1, "Restoring db from %s",
             manifests[i].c_str());
 #endif
         {
