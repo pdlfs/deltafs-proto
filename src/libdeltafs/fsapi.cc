@@ -39,7 +39,8 @@ FilesystemWrapper::~FilesystemWrapper() {}
 
 FilesystemIf::~FilesystemIf() {}
 
-Status FilesystemWrapper::Blkin(const User& who, const LookupStat& parent) {
+Status FilesystemWrapper::Blkin(  ///
+    const User& who, const LookupStat& parent, const std::string& table_dir) {
   return Status::NotSupported(Slice());
 }
 

@@ -54,7 +54,8 @@ uint32_t Filesystem::PickupServer(const DirId& id) {
   return DirIndex::RandomServer(Slice(tmp, p - tmp), 0);
 }
 
-Status Filesystem::Blkin(const User& who, const LookupStat& parent) {
+Status Filesystem::Blkin(  ///
+    const User& who, const LookupStat& parent, const std::string& table_dir) {
   return Status::NotSupported(Slice());
 }
 
