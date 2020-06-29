@@ -120,7 +120,7 @@ Status LokupOperation::operator()(If::Message& in, If::Message& out) {
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetUser(&input, &options.me)) {
-    s = Status::InvalidArgument("Wrong lokup input");
+    s = Status::InvalidArgument("Bad rpc input data");
   } else {
     s = fs_->Lokup(options.me, pa, options.name, &stat);
     char* dst = &out.buf[0];
@@ -138,12 +138,13 @@ Status LokupCli::operator()(  ///
     const LokupOptions& options, LokupRet* ret) {
   Status s;
   If::Message in;
-  char* dst = &in.buf[0];
+  char* const dst = &in.buf[0];
   EncodeFixed32(dst, kLokup);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
   p = EncodeLengthPrefixedSlice(p, options.name);
   p = EncodeUser(p, options.me);
+  assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
   If::Message out;
   uint32_t rv;
@@ -178,7 +179,7 @@ Status MkdirOperation::operator()(If::Message& in, If::Message& out) {
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetUser(&input, &options.me) || !GetFixed32(&input, &options.mode)) {
-    s = Status::InvalidArgument("Wrong mkdir input");
+    s = Status::InvalidArgument("Bad rpc input data");
   } else {
     s = fs_->Mkdir(options.me, pa, options.name, options.mode, &stat);
     char* dst = &out.buf[0];
@@ -196,7 +197,7 @@ Status MkdirCli::operator()(  ///
     const MkdirOptions& options, MkdirRet* ret) {
   Status s;
   If::Message in;
-  char* dst = &in.buf[0];
+  char* const dst = &in.buf[0];
   EncodeFixed32(dst, kMkdir);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
@@ -204,6 +205,7 @@ Status MkdirCli::operator()(  ///
   p = EncodeUser(p, options.me);
   EncodeFixed32(p, options.mode);
   p += 4;
+  assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
   If::Message out;
   uint32_t rv;
@@ -238,7 +240,7 @@ Status MkfleOperation::operator()(If::Message& in, If::Message& out) {
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetUser(&input, &options.me) || !GetFixed32(&input, &options.mode)) {
-    s = Status::InvalidArgument("Wrong mkfle input");
+    s = Status::InvalidArgument("Bad rpc input data");
   } else {
     s = fs_->Mkfle(options.me, pa, options.name, options.mode, &stat);
     char* dst = &out.buf[0];
@@ -256,7 +258,7 @@ Status MkfleCli::operator()(  ///
     const MkfleOptions& options, MkfleRet* ret) {
   Status s;
   If::Message in;
-  char* dst = &in.buf[0];
+  char* const dst = &in.buf[0];
   EncodeFixed32(dst, kMkfle);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
@@ -264,6 +266,7 @@ Status MkfleCli::operator()(  ///
   p = EncodeUser(p, options.me);
   EncodeFixed32(p, options.mode);
   p += 4;
+  assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
   If::Message out;
   uint32_t rv;
@@ -298,7 +301,7 @@ Status MkflsOperation::operator()(If::Message& in, If::Message& out) {
       !GetLengthPrefixedSlice(&input, &options.namearr) ||
       !GetUser(&input, &options.me) || !GetFixed32(&input, &options.n) ||
       !GetFixed32(&input, &options.mode)) {
-    s = Status::InvalidArgument("Wrong mkfls input");
+    s = Status::InvalidArgument("Bad rpc input data");
   } else {
     s = fs_->Mkfls(options.me, pa, options.namearr, options.mode, &options.n);
     char* dst = &out.buf[0];
@@ -317,7 +320,7 @@ Status MkflsCli::operator()(  ///
     const MkflsOptions& options, MkflsRet* ret) {
   Status s;
   If::Message in;
-  char* dst = &in.buf[0];
+  char* const dst = &in.buf[0];
   EncodeFixed32(dst, kMkfls);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
@@ -327,6 +330,7 @@ Status MkflsCli::operator()(  ///
   p += 4;
   EncodeFixed32(p, options.mode);
   p += 4;
+  assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
   If::Message out;
   uint32_t rv;
@@ -351,6 +355,60 @@ Status Mkfls(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
 }
 
 namespace rpc {
+Status BlkinOperation::operator()(If::Message& in, If::Message& out) {
+  Status s;
+  uint32_t op;
+  BlkinOptions options;
+  LookupStat pa;
+  Slice input = in.contents;
+  if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
+      !GetLengthPrefixedSlice(&input, &options.dir) ||
+      !GetUser(&input, &options.me)) {
+    s = Status::InvalidArgument("Bad rpc input data");
+  } else {
+    s = fs_->Blkin(options.me, pa, options.dir.ToString());
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    if (s.ok()) {
+      // Empty
+    }
+    out.contents = Slice(dst, 4);
+  }
+  return s;
+}
+Status BlkinCli::operator()(  ///
+    const BlkinOptions& options, BlkinRet* ret) {
+  Status s;
+  If::Message in;
+  char* const dst = &in.buf[0];
+  EncodeFixed32(dst, kBlkin);
+  char* p = dst + 4;
+  p = EncodeLookupStat(p, *options.parent);
+  p = EncodeLengthPrefixedSlice(p, options.dir);
+  p = EncodeUser(p, options.me);
+  assert(p - dst <= sizeof(in.buf));
+  in.contents = Slice(dst, p - dst);
+  If::Message out;
+  uint32_t rv;
+  s = rpc_->Call(in, out);
+  if (!s.ok()) {
+    return s;
+  }
+  Slice input = out.contents;
+  if (!GetFixed32(&input, &rv)) {
+    return Status::Corruption("Bad rpc reply header");
+  } else if (rv != 0) {
+    return Status::FromCode(rv);
+  } else {
+    return s;
+  }
+}
+}  // namespace rpc
+Status Blkin(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::BlkinOperation(fs)(in, out);
+}
+
+namespace rpc {
 Status LstatOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;
@@ -361,7 +419,7 @@ Status LstatOperation::operator()(If::Message& in, If::Message& out) {
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetUser(&input, &options.me)) {
-    s = Status::InvalidArgument("Wrong lstat input");
+    s = Status::InvalidArgument("Bad rpc input data");
   } else {
     s = fs_->Lstat(options.me, pa, options.name, &stat);
     char* dst = &out.buf[0];
@@ -379,12 +437,13 @@ Status LstatCli::operator()(  ///
     const LstatOptions& options, LstatRet* ret) {
   Status s;
   If::Message in;
-  char* dst = &in.buf[0];
+  char* const dst = &in.buf[0];
   EncodeFixed32(dst, kLstat);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
   p = EncodeLengthPrefixedSlice(p, options.name);
   p = EncodeUser(p, options.me);
+  assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
   If::Message out;
   uint32_t rv;

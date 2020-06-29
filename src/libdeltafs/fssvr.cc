@@ -49,13 +49,14 @@ FilesystemServer::FilesystemServer(  ///
       hmap_(NULL),
       rpc_workers_(NULL),
       rpc_(NULL) {
-  hmap_ = new RequestHandler[kNumOps];
-  memset(hmap_, 0, kNumOps * sizeof(void*));
-  hmap_[kLokup] = Lokup;
-  hmap_[kMkdir] = Mkdir;
-  hmap_[kMkfle] = Mkfle;
-  hmap_[kMkfls] = Mkfls;
-  hmap_[kLstat] = Lstat;
+  hmap_ = new RequestHandler[rpc::kNumOps];
+  memset(hmap_, 0, rpc::kNumOps * sizeof(void*));
+  hmap_[rpc::kLokup] = Lokup;
+  hmap_[rpc::kMkdir] = Mkdir;
+  hmap_[rpc::kMkfle] = Mkfle;
+  hmap_[rpc::kMkfls] = Mkfls;
+  hmap_[rpc::kBlkin] = Blkin;
+  hmap_[rpc::kLstat] = Lstat;
   if (!options_.info_log) {
     options_.info_log = Logger::Default();
   }

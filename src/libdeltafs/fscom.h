@@ -38,8 +38,9 @@
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
-
-enum { kLokup = 0, kMkdir, kMkfle, kMkfls, kLstat, kNumOps };
+namespace rpc {
+enum { kLokup = 0, kMkdir, kMkfle, kMkfls, kBlkin, kLstat, kNumOps };
+}
 
 struct LokupOptions {
   const LookupStat* parent;
@@ -137,6 +138,30 @@ namespace rpc {
 struct MkflsCli {
   MkflsCli(If* rpc) : rpc_(rpc) {}
   Status operator()(const MkflsOptions&, MkflsRet*);
+  If* rpc_;
+};
+}  // namespace rpc
+
+struct BlkinOptions {
+  const LookupStat* parent;
+  Slice dir;
+  User me;
+};
+struct BlkinRet {
+  // Empty
+};
+namespace rpc {
+struct BlkinOperation {
+  BlkinOperation(FilesystemIf* fs) : fs_(fs) {}
+  Status operator()(If::Message& in, If::Message& out);
+  FilesystemIf* fs_;
+};
+}  // namespace rpc
+Status Blkin(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+namespace rpc {
+struct BlkinCli {
+  BlkinCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const BlkinOptions&, BlkinRet*);
   If* rpc_;
 };
 }  // namespace rpc
