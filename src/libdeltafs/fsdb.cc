@@ -251,6 +251,13 @@ Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
   return mdb_->DELETE<Key>(id, fname, &options, tx);
 }
 
+Status FilesystemDb::BulkInsert(const std::string& dir) {
+  InsertOptions options;
+  options.detach_dir_on_complete = true;
+  options.attach_dir_on_start = true;
+  return db_->AddL0Tables(options, dir);
+}
+
 std::string FilesystemDb::GetDbLevel0Events() {
   std::string tmp;
   db_->GetProperty("leveldb.l0-events", &tmp);
