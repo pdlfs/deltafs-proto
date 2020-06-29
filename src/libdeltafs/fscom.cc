@@ -65,6 +65,21 @@ char* EncodeUser(char* dst, const User& u) {
   return dst;
 }
 
+void PutLookupStat(std::string* dst, const LookupStat& stat) {
+  PutFixed64(dst, stat.DnodeNo());
+  PutFixed64(dst, stat.InodeNo());
+  PutFixed64(dst, stat.LeaseDue());
+  PutFixed32(dst, stat.ZerothServer());
+  PutFixed32(dst, stat.DirMode());
+  PutFixed32(dst, stat.UserId());
+  PutFixed32(dst, stat.GroupId());
+}
+
+void PutUser(std::string* dst, const User& u) {
+  PutFixed32(dst, u.uid);
+  PutFixed32(dst, u.gid);
+}
+
 bool GetLookupStat(Slice* input, LookupStat* stat) {
   if (input->size() < 40) return false;
   const char* p = input->data();
@@ -320,6 +335,7 @@ Status MkflsCli::operator()(  ///
     const MkflsOptions& options, MkflsRet* ret) {
   Status s;
   If::Message in;
+#if 0
   char* const dst = &in.buf[0];
   EncodeFixed32(dst, kMkfls);
   char* p = dst + 4;
@@ -332,6 +348,16 @@ Status MkflsCli::operator()(  ///
   p += 4;
   assert(p - dst <= sizeof(in.buf));
   in.contents = Slice(dst, p - dst);
+#else
+  in.extra_buf.reserve(options.namearr.size() + 100);
+  PutFixed32(&in.extra_buf, kMkfls);
+  PutLookupStat(&in.extra_buf, *options.parent);
+  PutLengthPrefixedSlice(&in.extra_buf, options.namearr);
+  PutUser(&in.extra_buf, options.me);
+  PutFixed32(&in.extra_buf, options.n);
+  PutFixed32(&in.extra_buf, options.mode);
+  in.contents = in.extra_buf;
+#endif
   If::Message out;
   uint32_t rv;
   s = rpc_->Call(in, out);
