@@ -48,6 +48,7 @@ class FilesystemIf {
  public:
   FilesystemIf() {}
   virtual ~FilesystemIf();
+  virtual Status Blkin(const User& who, const LookupStat& parent) = 0;
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode, uint32_t* n) = 0;
   virtual Status Mkfle(const User& who, const LookupStat& parent,
@@ -69,6 +70,7 @@ class FilesystemWrapper : public FilesystemIf {
  public:
   FilesystemWrapper() {}
   virtual ~FilesystemWrapper();
+  virtual Status Blkin(const User& who, const LookupStat& parent) OVERRIDE;
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode,
                        uint32_t* n) OVERRIDE;
