@@ -712,6 +712,11 @@ class Client {
       }
     }
     fscli_->BatchEnd(batch);
+    if (FLAGS_fs_use_local) {
+      if (fsdb_) {
+        fsdb_->Flush(false);
+      }
+    }
   }
 
   void DoWrites(RankState* const state) {
@@ -737,6 +742,11 @@ class Client {
         }
       }
       state->stats.FinishedSingleOp(FLAGS_num);
+    }
+    if (FLAGS_fs_use_local) {
+      if (fsdb_) {
+        fsdb_->Flush(false);
+      }
     }
   }
 
@@ -849,11 +859,6 @@ class Client {
         RunStep("insert", &state, &Client::DoBatchedWrites);
       } else {
         RunStep("insert", &state, &Client::DoWrites);
-      }
-      if (FLAGS_fs_use_local) {
-        if (fsdb_) {
-          fsdb_->Flush(false);
-        }
       }
     }
     if (FLAGS_reads != 0) {
