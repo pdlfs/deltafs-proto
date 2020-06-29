@@ -850,6 +850,11 @@ class Client {
       } else {
         RunStep("insert", &state, &Client::DoWrites);
       }
+      if (FLAGS_fs_use_local) {
+        if (fsdb_) {
+          fsdb_->Flush(false);
+        }
+      }
     }
     if (FLAGS_reads != 0) {
       for (int i = 0; i < FLAGS_read_phases; i++) {
