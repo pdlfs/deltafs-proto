@@ -262,6 +262,22 @@ Status DBImpl::FlushMemTable(const FlushOptions& options) {
   return s;
 }
 
+Status DBImpl::FreezeCompaction() {
+  MutexLock l(&mutex_);
+  bg_compaction_paused_++;
+  return Status::OK();
+}
+
+Status DBImpl::ResumeCompaction() {
+  MutexLock l(&mutex_);
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
+  if (bg_compaction_paused_ == 0) {
+    MaybeScheduleCompaction();
+  }
+  return Status::OK();
+}
+
 Status DBImpl::DrainCompactions() {
   Status s;
   MutexLock l(&mutex_);
