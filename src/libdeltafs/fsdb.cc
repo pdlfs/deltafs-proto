@@ -221,8 +221,6 @@ FilesystemDb::~FilesystemDb() {
   delete mdb_;
 }
 
-Status FilesystemDb::DrainCompaction() { return db_->DrainCompactions(); }
-
 Status FilesystemDb::Flush(bool force_flush_l0) {
   FlushOptions opts;
   opts.force_flush_l0 = force_flush_l0;

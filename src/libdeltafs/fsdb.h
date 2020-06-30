@@ -147,6 +147,7 @@ class FilesystemDb {
   std::string GetDbLevel0Events();
   std::string GetDbStats();
   FilesystemDbEnvWrapper* GetDbEnv() { return dbenv_; }
+  DB* TEST_GetInternalDb() { return db_; }
   static Status DestroyDb(const std::string& dbloc, Env* env);
   Status Open(const std::string& dbloc);
   Status Get(const DirId& id, const Slice& fname, Stat* stat,
@@ -156,7 +157,6 @@ class FilesystemDb {
   Status Delete(const DirId& id, const Slice& fname);
   Status BulkInsert(const std::string& dir);
   Status Flush(bool force_flush_l0);
-  Status DrainCompaction();
 
  private:
   struct Tx;
