@@ -160,7 +160,7 @@ int FLAGS_gid = 1;
 
 // Print all client operations made.
 #ifndef NDEBUG
-int FLAGS_print_ops = 0;
+int FLAGS_print_ops = 1;
 #endif
 
 // Per-rank performance stats.
@@ -303,9 +303,6 @@ struct RankState {
     for (int i = 0; i < num; i++) {
       fids.push_back(i);
     }
-    if (FLAGS_random_order) {
-      std::random_shuffle(fids.begin(), fids.end(), STLRand(1000 * FLAGS_rank));
-    }
     char tmp[30];
     pathbuf.reserve(100);
     pathbuf += "/";
@@ -425,8 +422,9 @@ class Client {
     fprintf(stdout, "Fs rpc timeout:     %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "Num (rd/wr):        %d x %d/%d per rank\n", FLAGS_reads,
-            FLAGS_read_phases, FLAGS_num);
+    fprintf(stdout, "Num:                %d per rank\n", FLAGS_num);
+    fprintf(stdout, "Reads:              %d x %d per rank\n", FLAGS_reads,
+            FLAGS_read_phases);
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
              FLAGS_batched_writes, FLAGS_batch_size);
@@ -843,8 +841,27 @@ class Client {
     delete sock;
   }
 
+  void RunWrites(RankState* state, STLRand* rnd) {
+    if (FLAGS_random_order) {
+      std::random_shuffle(state->fids.begin(), state->fids.end(), *rnd);
+    }
+    if (FLAGS_batched_writes) {
+      RunStep("insert", state, &Client::DoBatchedWrites);
+    } else {
+      RunStep("insert", state, &Client::DoWrites);
+    }
+  }
+
+  void RunReads(RankState* state, STLRand* rnd) {
+    if (FLAGS_random_order) {
+      std::random_shuffle(state->fids.begin(), state->fids.end(), *rnd);
+    }
+    RunStep("fstats", state, &Client::DoReads);
+  }
+
   void RunSteps() {
     RankState state;
+    STLRand rnd(1000 * FLAGS_rank);
     PrepareRun(&state);
     MonitorArg mon_arg(&state.stats);
     if (FLAGS_mon_destination_uri) {
@@ -855,20 +872,14 @@ class Client {
       }
     }
     if (FLAGS_num != 0) {
-      if (FLAGS_batched_writes) {
-        RunStep("insert", &state, &Client::DoBatchedWrites);
-      } else {
-        RunStep("insert", &state, &Client::DoWrites);
-      }
+      RunWrites(&state, &rnd);
     }
-    if (FLAGS_reads != 0) {
-      for (int i = 0; i < FLAGS_read_phases; i++) {
-        // Skip sleeping when nothing has been run ahead of us
-        if (i != 0 || FLAGS_num != 0) {
-          SleepForMicroseconds(5 * 1000 * 1000);
-        }
-        RunStep("fstats", &state, &Client::DoReads);
+    for (int i = 0; i < FLAGS_read_phases && FLAGS_reads; i++) {
+      // Skip sleeping when nothing has been run ahead of us
+      if (i != 0 || FLAGS_num != 0) {
+        SleepForMicroseconds(5 * 1000 * 1000);
       }
+      RunReads(&state, &rnd);
     }
     if (FLAGS_mon_destination_uri) {
       MutexLock ml(&mon_arg.mutex);
