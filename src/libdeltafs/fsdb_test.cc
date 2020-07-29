@@ -810,7 +810,7 @@ class Benchmark {
     if (FLAGS_dboptions.disable_compaction) {
       return;
     }
-    s = db_->TEST_GetInternalDb()->DrainCompactions();
+    s = db_->TEST_GetDbRep()->DrainCompactions();
     if (!s.ok()) {
       fprintf(stderr, "Db drain compaction error: %s\n", s.ToString().c_str());
       exit(1);

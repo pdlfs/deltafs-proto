@@ -147,7 +147,7 @@ class FilesystemDb {
   std::string GetDbLevel0Events();
   std::string GetDbStats();
   FilesystemDbEnvWrapper* GetDbEnv() { return dbenv_; }
-  DB* TEST_GetInternalDb() { return db_; }
+  DB* TEST_GetDbRep() { return db_; }
   static Status DestroyDb(const std::string& dbloc, Env* env);
   Status Open(const std::string& dbloc);
   Status Get(const DirId& id, const Slice& fname, Stat* stat,
