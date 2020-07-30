@@ -419,7 +419,8 @@ class Client {
     PrintWarnings();
     PrintEnvironment();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs use existing:    %d\n", FLAGS_use_existing_fs);
+    fprintf(stdout, "Fs use existing:    %d (prepare_run=%d)\n",
+            FLAGS_use_existing_fs, !FLAGS_use_existing_fs);
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
@@ -428,7 +429,7 @@ class Client {
     fprintf(stdout, "Fs rpc timeout:     %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
-    fprintf(stdout, "Num:                %d per rank\n", FLAGS_num);
+    fprintf(stdout, "Num files:          %d per rank\n", FLAGS_num);
     fprintf(stdout, "Reads:              %d x %d per rank\n", FLAGS_reads,
             FLAGS_read_phases);
     char bat_info[100];
