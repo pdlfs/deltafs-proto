@@ -419,8 +419,8 @@ class Client {
     PrintWarnings();
     PrintEnvironment();
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs use existing:    %d (prepare_run=%d)\n",
-            FLAGS_use_existing_fs, !FLAGS_use_existing_fs);
+    fprintf(stdout, "Fs use existing:    %d (prepare_run=%s)\n",
+            FLAGS_use_existing_fs, !FLAGS_use_existing_fs ? "mkdir" : "lstat");
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
@@ -875,8 +875,16 @@ class Client {
     return 1;
   }
 
+  void Sleep() {
+    if (FLAGS_rank == 0) fprintf(stdout, "sleeping for 5 seconds...\n");
+    SleepForMicroseconds(5 * 1000 * 1000);
+  }
+
   void RunSteps() {
     RankState state;
+    if (FLAGS_rank == 0) {
+      fprintf(stdout, "preparing run...\n");
+    }
     PrepareRun(&state);
     MonitorArg mon_arg(&state.stats);
     if (FLAGS_mon_destination_uri) {
@@ -889,14 +897,14 @@ class Client {
     int nsteps = 0;
     for (int i = 0; i < FLAGS_phases; i++) {
       if (nsteps != 0) {
-        SleepForMicroseconds(5 * 1000 * 1000);
+        Sleep();
       }
       int n = RunWrites(&state);
       nsteps += n;
     }
     for (int i = 0; i < FLAGS_read_phases; i++) {
       if (nsteps != 0) {
-        SleepForMicroseconds(5 * 1000 * 1000);
+        Sleep();
       }
       int n = RunReads(&state);
       nsteps += n;
