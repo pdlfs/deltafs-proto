@@ -137,6 +137,9 @@ int FLAGS_batch_size = 16;
 // Number of files to insert per rank.
 int FLAGS_num = 8;
 
+// Number of write steps to run.
+int FLAGS_phases = 1;
+
 // Number of files to stat per rank.
 int FLAGS_reads = -1;
 
@@ -293,11 +296,14 @@ struct RankState {
   Stats stats;
   FilesystemCliCtx ctx;
   std::vector<uint32_t> fids;
+  STLRand rnd;
   std::string::size_type prefix_length;
   std::string pathbuf;
   Stat stbuf;
 
-  RankState() : ctx(1000 * FLAGS_rank) {
+  void RandomShuffle() { std::random_shuffle(fids.begin(), fids.end(), rnd); }
+
+  RankState() : ctx(1000 * FLAGS_rank), rnd(1000 * FLAGS_rank) {
     int num = std::max(FLAGS_num, FLAGS_reads);
     fids.reserve(num);
     for (int i = 0; i < num; i++) {
@@ -841,27 +847,35 @@ class Client {
     delete sock;
   }
 
-  void RunWrites(RankState* state, STLRand* rnd) {
+  // Return the total number of steps performed.
+  int RunWrites(RankState* state) {
     if (FLAGS_random_order) {
-      std::random_shuffle(state->fids.begin(), state->fids.end(), *rnd);
+      state->RandomShuffle();
+    }
+    if (FLAGS_num == 0) {
+      return 0;
     }
     if (FLAGS_batched_writes) {
       RunStep("insert", state, &Client::DoBatchedWrites);
     } else {
       RunStep("insert", state, &Client::DoWrites);
     }
+    return 1;
   }
 
-  void RunReads(RankState* state, STLRand* rnd) {
+  int RunReads(RankState* state) {
     if (FLAGS_random_order) {
-      std::random_shuffle(state->fids.begin(), state->fids.end(), *rnd);
+      state->RandomShuffle();
+    }
+    if (FLAGS_reads == 0) {
+      return 0;
     }
     RunStep("fstats", state, &Client::DoReads);
+    return 1;
   }
 
   void RunSteps() {
     RankState state;
-    STLRand rnd(1000 * FLAGS_rank);
     PrepareRun(&state);
     MonitorArg mon_arg(&state.stats);
     if (FLAGS_mon_destination_uri) {
@@ -871,15 +885,20 @@ class Client {
         mon_arg.cv.Wait();
       }
     }
-    if (FLAGS_num != 0) {
-      RunWrites(&state, &rnd);
-    }
-    for (int i = 0; i < FLAGS_read_phases && FLAGS_reads; i++) {
-      // Skip sleeping when nothing has been run ahead of us
-      if (i != 0 || FLAGS_num != 0) {
+    int nsteps = 0;
+    for (int i = 0; i < FLAGS_phases; i++) {
+      if (nsteps != 0) {
         SleepForMicroseconds(5 * 1000 * 1000);
       }
-      RunReads(&state, &rnd);
+      int n = RunWrites(&state);
+      nsteps += n;
+    }
+    for (int i = 0; i < FLAGS_read_phases; i++) {
+      if (nsteps != 0) {
+        SleepForMicroseconds(5 * 1000 * 1000);
+      }
+      int n = RunReads(&state);
+      nsteps += n;
     }
     if (FLAGS_mon_destination_uri) {
       MutexLock ml(&mon_arg.mutex);
