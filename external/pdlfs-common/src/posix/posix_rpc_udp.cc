@@ -22,12 +22,12 @@
 namespace pdlfs {
 
 PosixUDPServer::PosixUDPServer(const RPCOptions& options, size_t max_msgsz)
-    : PosixSocketServer(options), max_msgsz_(max_msgsz), bg_work_(0) {}
+    : PosixSocketServer(options), max_msgsz_(max_msgsz), bg_count(0) {}
 
 PosixUDPServer::~PosixUDPServer() {
   BGStop();  // Stop receiving new messages
   MutexLock ml(&mutex_);
-  while (bg_work_ != 0) {  // Wait until all existing messages are processed
+  while (bg_count != 0) {  // Wait until all bg work items have been processed
     bg_cv_.Wait();
   }
   // More resources will be released by parent
@@ -135,7 +135,7 @@ Status PosixUDPServer::BGLoop(int myid) {
 void PosixUDPServer::HandleIncomingCall(CallState** call) {
   if (options_.extra_workers) {
     mutex_.Lock();
-    ++bg_work_;
+    ++bg_count;
     // XXX: senders/callers are implicitly rate-limited by not sending them
     // replies. Should we more explicitly rate-limit them? For example, when
     // bg_work_ is larger than a certain threshold, incoming calls are instantly
@@ -155,9 +155,9 @@ void PosixUDPServer::ProcessCallWrapper(void* arg) {
   srv->ProcessCall(call);
   free(call);
   MutexLock ml(&srv->mutex_);
-  assert(srv->bg_work_ > 0);
-  --srv->bg_work_;
-  if (!srv->bg_work_) {
+  assert(srv->bg_count > 0);
+  --srv->bg_count;
+  if (!srv->bg_count) {
     srv->bg_cv_.SignalAll();
   }
 }
