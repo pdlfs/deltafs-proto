@@ -40,6 +40,8 @@ FilesystemServerOptions::FilesystemServerOptions()
       num_rpc_worker_threads(0),
       num_rpc_threads(1),
       uri("udp://0.0.0.0:10086"),
+      udp_rcvbuf(-1),
+      udp_sndbuf(-1),
       info_log(NULL) {}
 
 FilesystemServer::FilesystemServer(  ///
@@ -125,6 +127,8 @@ Status FilesystemServer::OpenServer() {
   options.num_rpc_threads = options_.num_rpc_threads;
   options.info_log = options_.info_log;
   options.uri = options_.uri;
+  options.udp_srv_rcvbuf = options_.udp_rcvbuf;
+  options.udp_srv_sndbuf = options_.udp_sndbuf;
   rpc_ = RPC::Open(options);
   Status status = rpc_->Start();
   if (status.ok()) {

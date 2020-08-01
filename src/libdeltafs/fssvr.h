@@ -45,6 +45,8 @@ struct FilesystemServerOptions {
   int num_rpc_worker_threads;  // Default: 0
   int num_rpc_threads;         // Default: 1
   std::string uri;
+  int udp_rcvbuf;  // Default: -1
+  int udp_sndbuf;  // Default: -1
   // Logger object for progressing/error information.
   // Default: NULL, which causes Logger::Default() to be used.
   Logger* info_log;

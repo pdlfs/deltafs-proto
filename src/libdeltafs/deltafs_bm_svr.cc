@@ -96,6 +96,12 @@ int FLAGS_rank = 0;
 // Use udp.
 bool FLAGS_udp = false;
 
+// UDP sender buffer size
+int FLAGS_udp_sndbuf = 512 * 1024;
+
+// UDP receiver buffer size
+int FLAGS_udp_rcvbuf = 512 * 1024;
+
 // If a host is configured with 1+ ip addresses, use the one with the following
 // prefix.
 const char* FLAGS_ip_prefix = "127.0.0.1";
@@ -195,7 +201,11 @@ class Server : public FilesystemWrapper {
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "Use ip:             %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "Rpc ip:             %s*\n", FLAGS_ip_prefix);
+    char udp_info[100];
+    snprintf(udp_info, sizeof(udp_info), "Yes (SO_RCVBUF=%dK, SO_SNDBUF=%dK)",
+             FLAGS_udp_rcvbuf >> 10, FLAGS_udp_sndbuf >> 10);
+    fprintf(stdout, "Rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
     fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
             FLAGS_rpc_worker_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
@@ -408,9 +418,12 @@ class Server : public FilesystemWrapper {
 
   static FilesystemServer* OpenPort(const char* ip, FilesystemIf* const fs) {
     FilesystemServerOptions svropts;
+    svropts.num_rpc_worker_threads = FLAGS_rpc_worker_threads;
     svropts.num_rpc_threads = FLAGS_rpc_threads;
     svropts.uri = FLAGS_udp ? "udp://" : "tcp://";
     svropts.uri += ip;
+    svropts.udp_rcvbuf = FLAGS_udp_rcvbuf;
+    svropts.udp_sndbuf = FLAGS_udp_sndbuf;
     FilesystemServer* const rpcsvr = new FilesystemServer(svropts);
     rpcsvr->SetFs(fs);
     Status s = rpcsvr->OpenServer();
