@@ -39,8 +39,8 @@ RPCOptions::RPCOptions()
       info_log(NULL),
       fs(NULL),
       addr_cache_size(128),
-      udp_rcvbuf(-1),
-      udp_sndbuf(-1) {}
+      udp_srv_rcvbuf(-1),
+      udp_srv_sndbuf(-1) {}
 
 int RPC::GetPort() { return -1; }
 

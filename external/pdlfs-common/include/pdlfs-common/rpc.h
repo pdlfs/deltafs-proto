@@ -84,13 +84,14 @@ struct RPCOptions {
 
   // Options specific to the socket rpc engine
 
-  // UDP receiver buffer. Set to -1 to skip this configuration.
+  // Per-socket receiver buffer size for server-side UDP sockets. Set to -1 to
+  // skip this configuration.
   // Default: -1
-  int udp_rcvbuf;
+  int udp_srv_rcvbuf;
 
-  // UDP sender buffer.
+  // Per-socket UDP server-side sender buffer size.
   // Default: -1
-  int udp_sndbuf;
+  int udp_srv_sndbuf;
 };
 
 // Each RPC* is a reference to an RPC instance. This instance either acts as a

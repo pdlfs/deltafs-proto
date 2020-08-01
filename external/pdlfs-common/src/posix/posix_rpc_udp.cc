@@ -58,6 +58,24 @@ Status PosixUDPServer::OpenAndBind(const std::string& uri) {
     }
   }
 
+  if (options_.udp_srv_rcvbuf != -1) {
+    int rv = setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &options_.udp_srv_rcvbuf,
+                        sizeof(options_.udp_srv_rcvbuf));
+    if (rv != 0) {
+      Log(options_.info_log, 0, "Cannot set SO_RCVBUF=%d: %s",
+          options_.udp_srv_rcvbuf, strerror(errno));
+    }
+  }
+
+  if (options_.udp_srv_sndbuf != -1) {
+    int rv = setsockopt(fd_, SOL_SOCKET, SO_SNDBUF, &options_.udp_srv_sndbuf,
+                        sizeof(options_.udp_srv_sndbuf));
+    if (rv != 0) {
+      Log(options_.info_log, 0, "Cannot set SO_SNDBUF=%d: %s",
+          options_.udp_srv_sndbuf, strerror(errno));
+    }
+  }
+
   if (status.ok()) {
     // Fetch the port that we have just bound to in case we have decided to have
     // the OS choose the port
