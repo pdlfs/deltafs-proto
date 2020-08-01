@@ -175,10 +175,11 @@ void PosixUDPServer::ProcessCall(CallState* const call) {
     char port[NI_MAXSERV];
     getnameinfo(call->addrbuf(), call->addrlen, host, sizeof(host), port,
                 sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    Log(options_.info_log, 1, "Fail to send rpc reply to cli[%s:%s]: %s", host,
-        port, strerror(errno_copy));
+    Log(options_.info_log, 1, "Fail to send rpc reply to client[%s:%s]: %s",
+        host, port, strerror(errno_copy));
 #else
-    Log(options_.info_log, 0, "Error sending data: %s", strerror(errno));
+    Log(options_.info_log, 0, "Error sending data to client: %s",
+        strerror(errno));
 #endif
   }
 }
