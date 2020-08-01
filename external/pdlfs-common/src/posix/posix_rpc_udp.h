@@ -47,7 +47,7 @@ class PosixUDPServer : public PosixSocketServer {
   virtual Status BGLoop(int myid);
   const size_t max_msgsz_;  // Buffer size for incoming rpc messages
   // State below protected by mutex_
-  int bg_count;  // Total number of bg work items pending
+  int bg_count_;  // Total number of bg work items pending
 };
 
 // UDP client.
