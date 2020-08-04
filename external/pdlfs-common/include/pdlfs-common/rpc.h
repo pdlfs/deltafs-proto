@@ -84,6 +84,14 @@ struct RPCOptions {
 
   // Options specific to the socket rpc engine
 
+  // Max unexpected message size in bytes for UDP communication.
+  // Default: 1432
+  size_t udp_max_unexpected_msgsz;
+
+  // Max expected message size for UDP.
+  // Default: 1432
+  size_t udp_max_expected_msgsz;
+
   // Per-socket receiver buffer size for server-side UDP sockets. Set to -1 to
   // skip this configuration.
   // Default: -1

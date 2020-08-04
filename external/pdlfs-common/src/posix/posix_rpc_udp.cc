@@ -21,8 +21,10 @@
 
 namespace pdlfs {
 
-PosixUDPServer::PosixUDPServer(const RPCOptions& options, size_t max_msgsz)
-    : PosixSocketServer(options), max_msgsz_(max_msgsz), bg_count_(0) {}
+PosixUDPServer::PosixUDPServer(const RPCOptions& options)
+    : PosixSocketServer(options),
+      max_msgsz_(options.udp_max_unexpected_msgsz),
+      bg_count_(0) {}
 
 PosixUDPServer::~PosixUDPServer() {
   BGStop();  // Stop receiving new messages
