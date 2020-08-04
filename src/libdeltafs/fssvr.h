@@ -45,6 +45,9 @@ struct FilesystemServerOptions {
   int num_rpc_worker_threads;  // Default: 0
   int num_rpc_threads;         // Default: 1
   std::string uri;
+  // Max incoming message size for UDP.
+  // Default: 1432
+  size_t udp_max_incoming_msgsz;
   int udp_rcvbuf;  // Default: -1
   int udp_sndbuf;  // Default: -1
   // Logger object for progressing/error information.
