@@ -167,7 +167,12 @@ void PosixUDPServer::ProcessCallWrapper(void* arg) {
 void PosixUDPServer::ProcessCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
-  options_.fs->Call(in, out);
+  Status s = options_.fs->Call(in, out);
+  if (!s.ok()) {
+    Log(options_.info_log, 0, "Fail to handle incoming call: %s",
+        s.ToString().c_str());
+    return;
+  }
   ssize_t nbytes = sendto(fd_, out.contents.data(), out.contents.size(), 0,
                           call->addrbuf(), call->addrlen);
   if (nbytes != out.contents.size()) {
