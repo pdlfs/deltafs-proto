@@ -41,13 +41,16 @@ namespace pdlfs {
 
 struct FilesystemServerOptions {
   FilesystemServerOptions();
-  rpc::Engine impl;            // RPC impl selector.
+  rpc::Engine impl;            // RPC impl selector. Default: rpc::kSocketRPC
   int num_rpc_worker_threads;  // Default: 0
   int num_rpc_threads;         // Default: 1
+  // Implementation-specific initialization string for RPC.
+  // Default: udp://0.0.0.0:10086
   std::string uri;
   // Max incoming message size for UDP.
   // Default: 1432
   size_t udp_max_incoming_msgsz;
+  // SO_RCVBUF and SO_SNDBUF for UDP. Set to -1 to use system defaults.
   int udp_rcvbuf;  // Default: -1
   int udp_sndbuf;  // Default: -1
   // Logger object for progressing/error information.
