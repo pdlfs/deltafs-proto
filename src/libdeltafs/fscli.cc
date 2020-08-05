@@ -198,7 +198,7 @@ Status FilesystemCli::BatchStart(  ///
       // or fails to initialize a regular lease from server.
       status = Lokup(ctx, *parent_dir->rep, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
-        assert(dir_lease->batch != NULL);
+        assert(dir_lease->mode == kBatchedCreats && dir_lease->batch != NULL);
         BAT* const bat = new BAT;  // Opaque handle to the batch
         bat->dir_lease = dir_lease;
         *result = bat;
@@ -275,11 +275,19 @@ Status FilesystemCli::BatchEnd(BAT* bat) {
   bc->refs--;
   uint32_t r = bc->refs;
   if (!r) {
-    // Non-regular leases are marked by their batch contexts.
-    // Once the context is deleted, the lease itself is invalidated and must be
-    // removed from the cache.
+    // Non-regular leases are defined by their batch contexts. Once the context
+    // is destroyed, the lease is effectively invalidated and therefore can be
+    // deleted from the client to prevent locking out subsequent regular
+    // directory accesses. Current implementation actually requires such
+    // deletion so that the lease lookup code does not need to check the
+    // presence of a batch context when obtaining a lease from the lease table
+    // or the cache. This, however, only matters when it is possible for one
+    // (for example, the lease LRU cache) to reference a lease without also
+    // referencing a batch context.
+    // XXX: We could skip caching non-regular leases and only put these special
+    // leases in the lease table.
     part->cached_leases->Erase(lease->lru_handle);
-    part->leases->Remove(lease);
+    part->leases->Remove(lease);  // Eagerly remove the lease from the client
     lease->out = true;
     lease->batch = NULL;
   }
@@ -474,7 +482,9 @@ Status FilesystemCli::Resolv(  ///
   return status;
 }
 
-// After a successful call, the returned lease must be released after use. On
+// After a successful call, the returned lease (including its parent directory
+// partition) must be released after use. If the lease has internal batch
+// contexts, these internal contexts must also be unreferenced after use. On
 // errors, no lease will be returned.
 Status FilesystemCli::Lokup(  ///
     FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& name,
@@ -491,7 +501,8 @@ Status FilesystemCli::Lokup(  ///
       mutex_.Unlock();
       s = Lokup1(ctx, parent, name, mode, part, stat);
       mutex_.Lock();
-      if (s.ok()) {  // Increase partition ref before returning the lease
+      // Increase partition reference before returning the lease to the caller
+      if (s.ok()) {
         assert(*stat != &rtlease_);
         Ref(part);
       }

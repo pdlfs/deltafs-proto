@@ -213,7 +213,18 @@ class FilesystemCli {
   struct BatchedCreates {
     FilesystemCliCtx* ctx;
     uint32_t mode;
-    uint32_t refs;
+    // Currently, each reference to a batch context must be accompanied by
+    // a reference to its parent lease (as well as a reference to the lease's
+    // parent directory partition). Each reference to a parent lease, on the
+    // other hand, is not necessarily accompanied by a reference to the lease's
+    // internal batch context (if there is one).
+    // XXX: In future, we could fully decouple the life-cycle of a batch context
+    // from the life-cycle of its parent lease so that a batch context could
+    // outlive its parent lease. For example, references to the parent lease
+    // can be dropped when a batch is committed while references to the batch
+    // context itself are dropped when the batch handle is destroyed.
+    uint32_t refs;  // Serialized via the parent lease's parent dir partition
+    // State below protected by mu
     port::Mutex mu;
     // 0 if not committed, 1 if being committed, or 2 if committed
     unsigned char commit_status;
