@@ -308,11 +308,7 @@ Status FilesystemCli::Mkfle(  ///
       Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty() && !has_tailing_slashes) {
-      if (parent_dir->batch != NULL) {
-        status = Status::AccessDenied("Dir locked for batch file creates");
-      } else {
-        status = Mkfle1(ctx, *parent_dir->rep, tgt, mode, stat);
-      }
+      status = Mkfle1(ctx, *parent_dir->rep, tgt, mode, stat);
     } else {
       status = Status::FileExpected("Path is dir");
     }
@@ -333,11 +329,7 @@ Status FilesystemCli::Mkdir(  ///
       Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
-      if (parent_dir->batch != NULL) {
-        status = Status::AccessDenied("Dir locked for batch file creates");
-      } else {
-        status = Mkdir1(ctx, *parent_dir->rep, tgt, mode, stat);
-      }
+      status = Mkdir1(ctx, *parent_dir->rep, tgt, mode, stat);
     } else {  // Special case: pathname is root
       status = Status::AlreadyExists(Slice());
     }
@@ -358,14 +350,10 @@ Status FilesystemCli::Lstat(  ///
       Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
     if (!tgt.empty()) {
-      if (parent_dir->batch != NULL) {
-        status = Status::AccessDenied("Dir locked for batch file creates");
-      } else {
-        status = Lstat1(ctx, *parent_dir->rep, tgt, stat);
-        if (has_tailing_slashes) {
-          if (!S_ISDIR(stat->FileMode())) {
-            status = Status::DirExpected("Not a dir");
-          }
+      status = Lstat1(ctx, *parent_dir->rep, tgt, stat);
+      if (has_tailing_slashes) {
+        if (!S_ISDIR(stat->FileMode())) {
+          status = Status::DirExpected("Not a dir");
         }
       }
     } else {  // Special case: pathname is root
@@ -619,13 +607,15 @@ Status FilesystemCli::Fetch1(  ///
 // Look up a named directory beneath a specified parent directory. On success, a
 // lease for the stat of the directory being looked up is returned. The returned
 // lease must be released after use. Only valid leases will be returned. Expired
-// leases are renewed before they are returned. Each returned lease requires a
-// reference to its parent directory partition. Caller of this function must be
-// holding an active reference to this parent partition when making a call and
-// then transfer the reference to the returned lease immediately after receiving
-// it following the call. When looking up under the "kBatchedCreats" mode, each
-// returned lease will additionally carry a reference to a batch create context
-// embedded within the lease. Such references must also be released after use.
+// leases are renewed before they are returned. Leases with a different mode
+// than requested are immediately released and are not returned. Each returned
+// lease requires adding a reference to its parent directory partition. Caller
+// of this function must be holding an active reference to this parent partition
+// when making this call and then transfer the reference to the returned lease
+// immediately after receiving it following the call. When looking up under the
+// "kBatchedCreats" mode, each returned lease will additionally carry a
+// reference to a batch create context embedded within the lease. Such a
+// reference must also be released after use.
 Status FilesystemCli::Lokup1(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
     LokupMode mode, Partition* const part, Lease** stat) {
@@ -639,12 +629,19 @@ Status FilesystemCli::Lokup1(  ///
   const uint32_t hash = Hash(name.data(), name.size(), 0);
   Status s = Lokup2(ctx, p, name, hash, mode, part, &lease);
   if (s.ok()) {
-    assert(lease->part == part);  // Pending partition reference increment
-    if (mode == kBatchedCreats) {
-      assert(lease->batch != NULL);
-      lease->batch->refs++;
+    if (lease->mode != mode) {
+      part->cached_leases->Release(lease->lru_handle);
+      s = Status::AccessDenied("Lease mode mismatch",
+                               "Dir locked for regular operations, batched "
+                               "creates, or bulk insertion");
+    } else {
+      // Pending partition reference increment
+      if (mode == kBatchedCreats) {
+        assert(lease->batch != NULL);
+        lease->batch->refs++;
+      }
+      *stat = lease;
     }
-    *stat = lease;
   }
 
   return s;
@@ -733,7 +730,14 @@ Status FilesystemCli::Lstat1(  ///
   return s;
 }
 
-// part->mu has been locked.
+// Look for a lease. Dynamically instantiate a new lease when none can be found
+// locally or the one we find has already expired. When dynamically
+// instantiating a lease, the specified lookup mode will be checked and the
+// lease will be created accordingly. Otherwise, the mode is not checked and the
+// returned lease may have a different mode. Return OK on success, or a non-OK
+// status on errors. After a successful call, the returned lease must be
+// released through the LRU cache of the lease's parent directory partition.
+// REQUIRES: part->mu has been locked.
 Status FilesystemCli::Lokup2(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
     const uint32_t hash, LokupMode mode, Partition* const part,
@@ -743,7 +747,7 @@ Status FilesystemCli::Lokup2(  ///
   Status s;
   LRUCache<LeaseHandl>* const lru = part->cached_leases;
   HashTable<Lease>* const ht = part->leases;
-  // Quickly check if we have it already...
+  // Quickly check if we have already had the lease...
   LeaseHandl* h = lru->Lookup(name, hash);
   if (h != NULL) {  // It's a hit!
     lease = h->value;
@@ -838,6 +842,7 @@ Status FilesystemCli::Lokup2(  ///
       lease = static_cast<Lease*>(malloc(sizeof(Lease) - 1 + name.size()));
       lease->key_length = name.size();
       memcpy(lease->key_data, name.data(), name.size());
+      lease->mode = mode;
       lease->hash = hash;
       lease->part = part;
       lease->out = false;

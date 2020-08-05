@@ -234,6 +234,7 @@ class FilesystemCli {
     Lease* next_hash;
     size_t key_length;
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    LokupMode mode;
     bool out;
     char key_data[1];  // Beginning of key
 
