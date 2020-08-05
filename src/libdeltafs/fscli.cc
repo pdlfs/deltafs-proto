@@ -178,8 +178,8 @@ struct FilesystemCli::BAT {
   Lease* dir_lease;
 };
 
-// On success, the returned batch handle contains a reference to the target
-// dir's lease from server and a reference to the internal batch context object
+// On success, the returned batch handle contains a reference to a special lease
+// of the target directory and a reference to the internal batch context object
 // associated with the lease.
 Status FilesystemCli::BatchStart(  ///
     FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
@@ -486,8 +486,8 @@ Status FilesystemCli::Resolv(  ///
   return status;
 }
 
-// After a successful call, the caller must release *stat after use. On errors,
-// no lease is returned.
+// After a successful call, the returned lease must be released after use. On
+// errors, no lease will be returned.
 Status FilesystemCli::Lokup(  ///
     FilesystemCliCtx* const ctx, const LookupStat& parent, const Slice& name,
     LokupMode mode, Lease** stat) {
@@ -619,13 +619,13 @@ Status FilesystemCli::Fetch1(  ///
 // Look up a named directory beneath a specified parent directory. On success, a
 // lease for the stat of the directory being looked up is returned. The returned
 // lease must be released after use. Only valid leases will be returned. Expired
-// leases are replaced before they are returned. Each returned lease requires a
-// reference to its parent directory partition. Caller of this function must
-// hold an active reference to the partition when making a call and transfer
-// this reference to the returned lease immediately after receiving it after the
-// call. When looking up under the "kBatchedCreats" mode, each returned lease
-// will additionally carry a reference to a batch create context embedded within
-// the lease. Such references must also be released after use.
+// leases are renewed before they are returned. Each returned lease requires a
+// reference to its parent directory partition. Caller of this function must be
+// holding an active reference to this parent partition when making a call and
+// then transfer the reference to the returned lease immediately after receiving
+// it following the call. When looking up under the "kBatchedCreats" mode, each
+// returned lease will additionally carry a reference to a batch create context
+// embedded within the lease. Such references must also be released after use.
 Status FilesystemCli::Lokup1(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
     LokupMode mode, Partition* const part, Lease** stat) {
@@ -1180,7 +1180,7 @@ Status FilesystemCli::AcquireDir(const DirId& id, Dir** result) {
   return s;
 }
 
-// Delete a partition from memory.
+// Delete a directory partition control block.
 void FilesystemCli::DeletePartition(const Slice& key, Partition* part) {
   assert(part->key() == key);
   FilesystemCli* const cli = part->dir->fscli;
@@ -1195,7 +1195,8 @@ void FilesystemCli::DeletePartition(const Slice& key, Partition* part) {
   free(part);
 }
 
-// Remove an active reference to a directory partition.
+// Remove a reference to a specified directory partition control block. Delete
+// it when the last reference is removed.
 void FilesystemCli::Release(Partition* const part) {
   mutex_.AssertHeld();
   plru_->Release(part->lru_handle);

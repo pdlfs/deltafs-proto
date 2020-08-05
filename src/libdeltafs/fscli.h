@@ -222,8 +222,7 @@ class FilesystemCli {
     Dir* dir;
   };
   typedef LRUEntry<Lease> LeaseHandl;
-  // A lease to a pathname lookup stat. Struct simultaneously serves as a hash
-  // table entry.
+  // A lease to a pathname lookup stat. Struct doubles as a hash table entry.
   struct Lease {
     LeaseHandl* lru_handle;
     LookupStat* value;
@@ -248,7 +247,7 @@ class FilesystemCli {
   port::Mutex mutex_;
   // Per-directory control block. Each directory consists of one or more
   // partitions. Per-directory giga status is serialized here.
-  // Struct simultaneously serves as an hash table entry.
+  // Struct doubles as an hash table entry.
   struct Dir {
     DirId* id;
     DirIndexOptions* giga_opts;
@@ -276,7 +275,7 @@ class FilesystemCli {
   Status FetchDir(uint32_t zeroth_server, Dir* dir);
   // Release a reference to the dir.
   void Release(Dir* dir);
-  // All directories cached at the client
+  // All directories currently kept in memory.
   HashTable<Dir>* dirs_;
   Dir dirlist_;  // Dummy head of the linked list
 
@@ -284,7 +283,7 @@ class FilesystemCli {
   enum { kWays = 8 };  // Must be a power of 2
   // Per-partition directory control block. Pathname lookups within a single
   // directory partition are serialized here.
-  // Struct simultaneously serves as an hash table entry.
+  // Struct doubles as an hash table entry.
   struct Partition {
     PartHandl* lru_handle;
     Dir* dir;
@@ -305,8 +304,8 @@ class FilesystemCli {
 
     ///
   };
-  // We keep an LRU cache of directory partitions in memory so that we don't
-  // need to create a new one every time a directory partition is accessed.
+  // We keep an LRU cache of directory partitions in memory so that we can reuse
+  // them when a recent directory partition is accessed.
   LRUCache<PartHandl>* plru_;
   static void DeletePartition(const Slice& key, Partition* partition);
   // Obtain the control block for a specific directory partition.
@@ -314,9 +313,12 @@ class FilesystemCli {
   // Add a reference to a specific directory partition preventing it from being
   // deleted from memory.
   void Ref(Partition* partition);
-  // Release an active reference to a directory partition.
+  // Release a reference to a specified directory partition.
   void Release(Partition* partition);
-  // All directory partitions in memory.
+  // All directory partition control blocks currently kept in memory. These
+  // include both the control blocks currently referenced by the LRU cache and
+  // the control blocks that have been evicted from the cache but still have
+  // remaining references.
   HashTable<Partition>* pars_;
 
   void FormatRoot();
