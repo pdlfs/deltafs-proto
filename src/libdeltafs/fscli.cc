@@ -85,7 +85,7 @@ Status FilesystemCli::TEST_Mkfle(  ///
   Status status =
       Resolu(ctx, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
-    const LookupStat& p = *parent_dir->value;
+    const LookupStat& p = *parent_dir->rep;
     status = TEST_Mkfle(ctx, p, tgt, stat, stats);
   }
   if (parent_dir) {
@@ -129,7 +129,7 @@ Status FilesystemCli::TEST_Lstat(  ///
   Status status =
       Resolu(ctx, NULL, pathname, &parent_dir, &tgt, &has_tailing_slashes);
   if (status.ok()) {
-    const LookupStat& p = *parent_dir->value;
+    const LookupStat& p = *parent_dir->rep;
     status = TEST_Lstat(ctx, p, tgt, stat, stats);
   }
   if (parent_dir) {
@@ -157,7 +157,7 @@ Status FilesystemCli::Atdir(  ///
   if (status.ok()) {
     if (!tgt.empty()) {
       AT* rv = new AT;
-      rv->parent_of_root = *parent_dir->value;
+      rv->parent_of_root = *parent_dir->rep;
       rv->name = tgt.ToString();
       *result = rv;
     } else {  // Special case for root
@@ -196,7 +196,7 @@ Status FilesystemCli::BatchStart(  ///
       // simultaneously locking the newly created dir. Any subsequent regular
       // lookup operation either finds a non-regular lease with a batch context
       // or fails to initialize a regular lease from server.
-      status = Lokup(ctx, *parent_dir->value, tgt, kBatchedCreats, &dir_lease);
+      status = Lokup(ctx, *parent_dir->rep, tgt, kBatchedCreats, &dir_lease);
       if (status.ok()) {
         assert(dir_lease->batch != NULL);
         BAT* const bat = new BAT;  // Opaque handle to the batch
@@ -227,7 +227,7 @@ Status FilesystemCli::BatchInsert(BAT* bat, const char* name) {
   const int i = bc->dir->giga->SelectServer(name);
   bc->mu.Unlock();
   Status s =
-      Mkfls1(bc->ctx, *lease->value, name, bc->mode, false, i, &bc->wribufs[i]);
+      Mkfls1(bc->ctx, *lease->rep, name, bc->mode, false, i, &bc->wribufs[i]);
   bc->mu.Lock();
   if (!s.ok() && bc->bg_status.ok()) {
     bc->bg_status = s;
@@ -250,7 +250,7 @@ Status FilesystemCli::BatchCommit(BAT* bat) {
   bc->mu.Unlock();
   Status s;
   for (int i = 0; i < srvs_; i++) {
-    s = Mkfls1(bc->ctx, *lease->value, Slice(), bc->mode, true, i,
+    s = Mkfls1(bc->ctx, *lease->rep, Slice(), bc->mode, true, i,
                &bc->wribufs[i]);
     if (!s.ok()) {
       break;
@@ -311,7 +311,7 @@ Status FilesystemCli::Mkfle(  ///
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Mkfle1(ctx, *parent_dir->value, tgt, mode, stat);
+        status = Mkfle1(ctx, *parent_dir->rep, tgt, mode, stat);
       }
     } else {
       status = Status::FileExpected("Path is dir");
@@ -336,7 +336,7 @@ Status FilesystemCli::Mkdir(  ///
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Mkdir1(ctx, *parent_dir->value, tgt, mode, stat);
+        status = Mkdir1(ctx, *parent_dir->rep, tgt, mode, stat);
       }
     } else {  // Special case: pathname is root
       status = Status::AlreadyExists(Slice());
@@ -361,7 +361,7 @@ Status FilesystemCli::Lstat(  ///
       if (parent_dir->batch != NULL) {
         status = Status::AccessDenied("Dir locked for batch file creates");
       } else {
-        status = Lstat1(ctx, *parent_dir->value, tgt, stat);
+        status = Lstat1(ctx, *parent_dir->rep, tgt, stat);
         if (has_tailing_slashes) {
           if (!S_ISDIR(stat->FileMode())) {
             status = Status::DirExpected("Not a dir");
@@ -467,7 +467,7 @@ Status FilesystemCli::Resolv(  ///
     }
     current_name = Slice(p + 1, q - p - 1);
     p = c - 1;
-    status = Lokup(ctx, *current_parent->value, current_name, kRegular, &tmp);
+    status = Lokup(ctx, *current_parent->rep, current_name, kRegular, &tmp);
     if (status.ok()) {
       Release(current_parent);
       current_parent = tmp;
@@ -747,7 +747,7 @@ Status FilesystemCli::Lokup2(  ///
   LeaseHandl* h = lru->Lookup(name, hash);
   if (h != NULL) {  // It's a hit!
     lease = h->value;
-    if (lease->value->LeaseDue() < CurrentMicros()) {
+    if (lease->rep->LeaseDue() < CurrentMicros()) {
       ht->Remove(lease);  // Lease expired; remove it from the partition
       lru->Erase(h);
       lease->out = true;
@@ -762,7 +762,7 @@ Status FilesystemCli::Lokup2(  ///
     lease = *ht->FindPointer(name, hash);
     if (lease == NULL) {
       // Do nothing
-    } else if (lease->value->LeaseDue() < CurrentMicros()) {
+    } else if (lease->rep->LeaseDue() < CurrentMicros()) {
       ht->Remove(lease);
       lease->out = true;
     } else {
@@ -783,7 +783,7 @@ Status FilesystemCli::Lokup2(  ///
   h = lru->Lookup(name, hash);
   if (h != NULL) {
     lease = h->value;
-    if (lease->value->LeaseDue() < CurrentMicros()) {
+    if (lease->rep->LeaseDue() < CurrentMicros()) {
       ht->Remove(lease);  // Lease expired; remove it from the partition
       lru->Erase(h);
       lease->out = true;
@@ -796,7 +796,7 @@ Status FilesystemCli::Lokup2(  ///
     lease = *ht->FindPointer(name, hash);
     if (lease == NULL) {
       // Do nothing
-    } else if (lease->value->LeaseDue() < CurrentMicros()) {
+    } else if (lease->rep->LeaseDue() < CurrentMicros()) {
       ht->Remove(lease);
       lease->out = true;
     } else {
@@ -842,7 +842,7 @@ Status FilesystemCli::Lokup2(  ///
       lease->part = part;
       lease->out = false;
       lease->batch = tmpbat;
-      lease->value = tmp;
+      lease->rep = tmp;
       Lease* old = ht->Insert(lease);
       // Because we synchronize and check before each insert, there is no
       // conflict.
@@ -851,7 +851,7 @@ Status FilesystemCli::Lokup2(  ///
 
       h = lru->Insert(name, hash, lease, 1, DeleteLease);
       lease->lru_handle = h;
-      if (lease->value->LeaseDue() == 0) {
+      if (lease->rep->LeaseDue() == 0) {
         // Lease cannot be cached; remove it from the partition
         ht->Remove(lease);
         lru->Erase(h);
@@ -999,12 +999,13 @@ void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
     part->leases->Remove(lease);
   // Any batch context should already be closed by now
   assert(lease->batch == NULL);
-  delete lease->value;
+  delete lease->rep;
   free(lease);
 }
 
 // Remove a reference to a lease. Also remove a reference to the lease's parent
-// partition.
+// partition. The lease will be deleted when the last reference to it is
+// removed.
 void FilesystemCli::Release(Lease* lease) {
   if (lease == &rtlease_) return;  // Root lease is static...
   Partition* const part = lease->part;
@@ -1294,7 +1295,7 @@ FilesystemCli::FilesystemCli(const FilesystemCliOptions& options)
 
   rtlokupstat_.CopyFrom(rtstat_);
   rtlokupstat_.SetLeaseDue(-1);
-  rtlease_.value = &rtlokupstat_;
+  rtlease_.rep = &rtlokupstat_;
   rtlease_.batch = NULL;
 }
 

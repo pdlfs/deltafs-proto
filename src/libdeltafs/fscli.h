@@ -225,13 +225,16 @@ class FilesystemCli {
   // A lease to a pathname lookup stat. Struct doubles as a hash table entry.
   struct Lease {
     LeaseHandl* lru_handle;
-    LookupStat* value;
+    LookupStat* rep;
     BatchedCreates* batch;
+    // Each non-LRU reference to the lease additionally requires a reference to
+    // the parent partition. This prevents the parent partition from being
+    // removed from the memory.
     Partition* part;
     Lease* next_hash;
     size_t key_length;
     uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
-    unsigned char out;
+    bool out;
     char key_data[1];  // Beginning of key
 
     Slice key() const {  // Return key of the lease.
