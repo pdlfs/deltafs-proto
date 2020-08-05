@@ -256,17 +256,24 @@ TEST(FilesystemCliTest, BatchCtx) {
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
   ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 1);
+  // Directory locked for batch creates
   ASSERT_ERR(Mkdir("/a/1"));
   ASSERT_ERR(Exist("/a/2"));
   ASSERT_ERR(Creat("/a/3"));
   ASSERT_OK(BatchEnd(bat));
   ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 0);
-  ASSERT_NOTFOUND(BatchStart("/b", &bat));
-  ASSERT_OK(Mkdir("/c"));
-  ASSERT_OK(BatchStart("/c", &bat1));
-  ASSERT_OK(BatchStart("/c", &bat2));
+  ASSERT_OK(Mkdir("/b"));
+  ASSERT_OK(BatchStart("/b", &bat1));
+  ASSERT_OK(BatchStart("/b", &bat2));
   ASSERT_OK(BatchEnd(bat1));
+  ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 1);
   ASSERT_OK(BatchEnd(bat2));
+  ASSERT_EQ(fscli_->TEST_TotalLeasesAtPartition(DirId(0), 0), 0);
+  ASSERT_NOTFOUND(BatchStart("/c", &bat));  // Target directory not found
+  ASSERT_OK(Mkdir("/c"));
+  ASSERT_OK(Creat("/c/1"));
+  // Directory locked for regular operations
+  ASSERT_ERR(BatchStart("/c", &bat));
 }
 
 TEST(FilesystemCliTest, BatchCreats) {
