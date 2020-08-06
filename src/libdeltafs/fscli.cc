@@ -758,6 +758,14 @@ Status FilesystemCli::Lokup1(  ///
   return s;
 }
 
+Status FilesystemCli::Bukin1(  ///
+    FilesystemCliCtx* const ctx, const LookupStat& p, const std::string& bkdir,
+    const int i, BulkIn* const in) {
+  Status s;
+  // TODO
+  return s;
+}
+
 Status FilesystemCli::Mkfls1(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
     const uint32_t mode, const bool force_flush, const int i,

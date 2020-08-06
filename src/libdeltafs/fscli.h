@@ -158,8 +158,9 @@ class FilesystemCli {
   uint32_t TEST_TotalDirsInMemory();
 
  private:
-  struct WriBuf;
+  struct BulkIn;
   struct BulkInserts;
+  struct WriBuf;
   struct BatchedCreates;
   struct Lease;
   struct Partition;
@@ -197,6 +198,8 @@ class FilesystemCli {
   Status Lokup1(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& name, LokupMode mode, Partition* part,
                 Lease** stat);
+  Status Bukin1(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const std::string& bkdir, int srv_idx, BulkIn* in);
   Status Mkfls1(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& name, uint32_t mode, bool force_flush, int srv_idx,
                 WriBuf* buf);
