@@ -393,7 +393,7 @@ Status BlkinOperation::operator()(If::Message& in, If::Message& out) {
       !GetUser(&input, &options.me)) {
     s = Status::InvalidArgument("Bad rpc input data");
   } else {
-    Status ss = fs_->Blkin(options.me, pa, options.dir.ToString());
+    Status ss = fs_->Bukin(options.me, pa, options.dir.ToString());
     char* dst = &out.buf[0];
     EncodeFixed32(dst, ss.err_code());
     if (ss.ok()) {

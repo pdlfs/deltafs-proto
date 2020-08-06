@@ -79,7 +79,7 @@ class Filesystem : public FilesystemIf {
   explicit Filesystem(const FilesystemOptions& options);
   virtual ~Filesystem();
 
-  virtual Status Blkin(const User& who, const LookupStat& parent,
+  virtual Status Bukin(const User& who, const LookupStat& parent,
                        const std::string& table_dir) OVERRIDE;
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode,

@@ -48,7 +48,7 @@ class FilesystemIf {
  public:
   FilesystemIf() {}
   virtual ~FilesystemIf();
-  virtual Status Blkin(const User& who, const LookupStat& parent,
+  virtual Status Bukin(const User& who, const LookupStat& parent,
                        const std::string& table_dir) = 0;
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode, uint32_t* n) = 0;
@@ -71,7 +71,7 @@ class FilesystemWrapper : public FilesystemIf {
  public:
   FilesystemWrapper() {}
   virtual ~FilesystemWrapper();
-  virtual Status Blkin(const User& who, const LookupStat& parent,
+  virtual Status Bukin(const User& who, const LookupStat& parent,
                        const std::string& table_dir) OVERRIDE;
   virtual Status Mkfls(const User& who, const LookupStat& parent,
                        const Slice& namearr, uint32_t mode,

@@ -1006,7 +1006,7 @@ Status FilesystemCli::Bukin2(  ///
     return Status::AccessDenied("No write perm");
   Status s;
   if (fs_ != NULL) {
-    s = fs_->Blkin(ctx->who, p, bkdir);
+    s = fs_->Bukin(ctx->who, p, bkdir);
   } else if (rpc_ != NULL) {
     BlkinOptions opts;
     opts.parent = &p;
