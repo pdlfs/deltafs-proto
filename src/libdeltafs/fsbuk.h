@@ -36,7 +36,11 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/fsdbx.h"
-
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 namespace pdlfs {
 
 class FilterPolicy;
@@ -93,11 +97,6 @@ struct BukDbStats {
   uint64_t puts;
 };
 
-#if __cplusplus >= 201103L
-#define OVERRIDE override
-#else
-#define OVERRIDE
-#endif
 class BukDbEnvWrapper : public EnvWrapper {
  public:
   BukDbEnvWrapper(const BukDbOptions& options, Env* base);
@@ -109,7 +108,6 @@ class BukDbEnvWrapper : public EnvWrapper {
   const BukDbOptions options_;
   std::string dbprefix_;
 };
-#undef OVERRIDE
 
 // Client-side filesystem bulk db context.
 class BukDb {
@@ -138,3 +136,4 @@ class BukDb {
 };
 
 }  // namespace pdlfs
+#undef OVERRIDE
