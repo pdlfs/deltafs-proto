@@ -265,7 +265,7 @@ Status FilesystemCli::BatchCommit(BAT* bat) {
   return s;
 }
 
-Status FilesystemCli::BatchDestroy(BAT* bat) {
+Status FilesystemCli::Destroy(BAT* bat) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);
@@ -285,6 +285,7 @@ Status FilesystemCli::BatchDestroy(BAT* bat) {
     // or the cache. This, however, only matters when it is possible for one
     // (for example, the lease LRU cache) to reference a lease without also
     // referencing a batch context.
+    // XXX: We could remove the lease as early as the batch context is committed
     // XXX: We could skip caching non-regular leases and only put these special
     // leases in the lease table.
     part->cached_leases->Erase(lease->lru_handle);
