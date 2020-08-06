@@ -43,9 +43,17 @@
 
 namespace pdlfs {
 
-struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
+struct FilesystemDbStats;
+// Options controlling the behavior of client bulk operations
+struct BulkInOptions {
+  // Bulk insertion storage prefix
+  // Default: "/tmp/bulk"
+  std::string db_prefix;
+
+  BulkInOptions();
+};
 
 class FilesystemCli;
 class Filesystem;
@@ -55,7 +63,7 @@ class DB;
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
  public:
-  explicit FilesystemCliCtx(int seed = 301) : rnd_(seed), stubs_(NULL), n_(0) {}
+  explicit FilesystemCliCtx(int seed) : rnd_(seed), stubs_(NULL), n_(0) {}
 
   ~FilesystemCliCtx() {
     if (stubs_) {
@@ -66,6 +74,7 @@ class FilesystemCliCtx {
     delete[] stubs_;
   }
 
+  BulkInOptions bio;
   User who;
 
  private:

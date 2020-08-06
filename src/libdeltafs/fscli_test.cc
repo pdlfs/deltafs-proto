@@ -68,6 +68,7 @@ class FilesystemCliTest {
       : fsdb_(NULL),
         fs_(NULL),
         fscli_(NULL),
+        myctx_(301),
         fsloc_(test::TmpDir() + "/fscli_test") {
     DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;

@@ -746,7 +746,7 @@ class Benchmark {
   void DoWrite(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    FilesystemCliCtx ctx;
+    FilesystemCliCtx ctx(thread->tid);
     ctx.who = me_;
     char tmp[20];
     for (int i = 0; i < FLAGS_num; i++) {
@@ -821,7 +821,7 @@ class Benchmark {
   void DoRead(ThreadState* thread) {
     const uint64_t tid = uint64_t(thread->tid) << 32;
     FilesystemDbStats stats;
-    FilesystemCliCtx ctx;
+    FilesystemCliCtx ctx(thread->tid);
     ctx.who = me_;
     char tmp[20];
     Stat buf;

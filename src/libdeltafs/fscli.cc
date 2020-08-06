@@ -48,6 +48,8 @@ Status Nofs() {  ///
 }
 }  // namespace
 
+BulkInOptions::BulkInOptions() : db_prefix("/tmp/bulk") {}
+
 FilesystemCli::UriMapper::~UriMapper() {}
 
 Status FilesystemCli::TEST_Mkfle(  ///
