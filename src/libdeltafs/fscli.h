@@ -50,6 +50,7 @@ struct DirId;
 class FilesystemCli;
 class Filesystem;
 class DirIndex;
+class DB;
 
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
