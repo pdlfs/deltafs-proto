@@ -174,8 +174,8 @@ Status FilesystemCli::Atdir(  ///
 
 void FilesystemCli::Destroy(AT* at) { delete at; }
 
-// Each batch instance is a reference to a server-issued lease with bulk
-// insertion permissions.
+// Each batch instance is backed by a reference to a server-issued lease with
+// batch creation permissions.
 struct FilesystemCli::BAT {
   Lease* dir_lease;
 };
@@ -184,7 +184,8 @@ struct FilesystemCli::BAT {
 // of the target directory and a reference to the internal batch context object
 // associated with the lease.
 Status FilesystemCli::BatchInit(  ///
-    FilesystemCliCtx* ctx, const AT* at, const char* pathname, BAT** result) {
+    FilesystemCliCtx* const ctx, const AT* at, const char* pathname,
+    BAT** result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
@@ -204,7 +205,7 @@ Status FilesystemCli::BatchInit(  ///
         bat->dir_lease = dir_lease;
         *result = bat;
       }
-    } else {  // Special case for root
+    } else {  // Special handling for the root dir
       status = Status::NotSupported(Slice());
     }
   }
@@ -274,7 +275,7 @@ Status FilesystemCli::Destroy(BAT* bat) {
   part->mu->Lock();
   assert(bc->refs != 0);
   bc->refs--;
-  uint32_t r = bc->refs;
+  const uint32_t r = bc->refs;
   if (!r) {
     // Non-regular leases are defined by their batch contexts. Once the context
     // is destroyed, the lease is effectively invalidated and therefore can be
@@ -305,6 +306,74 @@ Status FilesystemCli::Destroy(BAT* bat) {
     delete bc;
   }
   delete bat;
+  return Status::OK();
+}
+
+// Each bulk instance is backed by a reference to a server-issued lease with
+// bulk insertion permissions.
+struct FilesystemCli::BULK {
+  Lease* dir_lease;
+};
+
+Status FilesystemCli::BulkInit(  ///
+    FilesystemCliCtx* const ctx, const AT* at, const char* pathname,
+    BULK** result) {
+  bool has_tailing_slashes(false);
+  Lease* parent_dir(NULL);
+  Slice tgt;
+  Status status =
+      Resolu(ctx, at, pathname, &parent_dir, &tgt, &has_tailing_slashes);
+  if (status.ok()) {
+    if (!tgt.empty()) {
+      Lease* dir_lease;
+      // XXX: This should ideally be a special mkdir operation.
+      status = Lokup(ctx, *parent_dir->rep, tgt, kBulkIn, &dir_lease);
+      if (status.ok()) {
+        assert(dir_lease->mode == kBulkIn && dir_lease->bk != NULL);
+        BULK* bulk = new BULK;
+        bulk->dir_lease = dir_lease;
+        *result = bulk;
+      }
+    } else {  // Special handling for the root dir
+      status = Status::NotSupported(Slice());
+    }
+  }
+  if (parent_dir) {
+    Release(parent_dir);
+  }
+  return status;
+}
+
+Status FilesystemCli::Destroy(BULK* bulk) {
+  assert(bulk->dir_lease != NULL);
+  Lease* const lease = bulk->dir_lease;
+  assert(lease->bk != NULL);
+  BulkInserts* const bi = lease->bk;
+  Partition* part = lease->part;
+  part->mu->Lock();
+  assert(bi->refs != 0);
+  bi->refs--;
+  const uint32_t r = bi->refs;
+  if (!r && !lease->out) {
+    part->cached_leases->Erase(lease->lru_handle);
+    part->leases->Remove(lease);
+    lease->out = true;
+    // Dissociate the bulk context from the lease facilitating subsequent sanity
+    // checking
+    lease->bk = NULL;
+  }
+  part->cached_leases->Release(lease->lru_handle);
+  part->mu->Unlock();
+  {
+    MutexLock lock(&mutex_);
+    if (!r) Release(bi->dir);
+    Release(part);
+  }
+  if (!r) {
+    delete[] bi->bulks;
+    delete bi;
+  }
+  delete bulk;
   return Status::OK();
 }
 
@@ -645,9 +714,9 @@ Status FilesystemCli::Fetch1(  ///
 // lease requires adding a reference to its parent directory partition. Caller
 // of this function must be holding an active reference to this parent partition
 // when making this call and then transfer the reference to the returned lease
-// immediately after receiving it following the call. When looking up under the
-// "kBatchedCreats" mode, each returned lease will additionally carry a
-// reference to a batch create context embedded within the lease. Such a
+// immediately after receiving it following the call. When looking up under a
+// non-regular lookup mode, each returned lease will additionally carry a
+// reference to an internal batch context embedded within the lease. Such a
 // reference must also be released after use.
 Status FilesystemCli::Lokup1(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
@@ -669,10 +738,19 @@ Status FilesystemCli::Lokup1(  ///
                                "creates, or bulk insertion");
     } else {
       // Pending partition reference increment
-      if (mode == kBatchedCreats) {
-        assert(lease->batch != NULL);
-        lease->batch->refs++;
+      switch (mode) {
+        case kBulkIn:
+          assert(lease->bk != NULL);
+          lease->bk->refs++;
+          break;
+        case kBatchedCreats:
+          assert(lease->batch != NULL);
+          lease->batch->refs++;
+          break;
+        default:
+          break;
       }
+
       *stat = lease;
     }
   }
@@ -766,10 +844,11 @@ Status FilesystemCli::Lstat1(  ///
 // Look for a lease. Dynamically instantiate a new lease when none can be found
 // locally or the one we find has already expired. When dynamically
 // instantiating a lease, the specified lookup mode will be checked and the
-// lease will be created accordingly. Otherwise, the mode is not checked and the
-// returned lease may have a different mode. Return OK on success, or a non-OK
-// status on errors. After a successful call, the returned lease must be
-// released through the LRU cache of the lease's parent directory partition.
+// lease will be initialized accordingly. Otherwise, the mode is not checked and
+// the returned lease may have a different mode. A caller should check whether
+// the returned lease has a desired mode. In either case, a caller should
+// release the returned lease after use. If the returned lease has an internal
+// batch context, a reference may need to be added to such an internal context.
 // REQUIRES: part->mu has been locked.
 Status FilesystemCli::Lokup2(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
@@ -888,7 +967,7 @@ Status FilesystemCli::Lokup2(  ///
       lease->part = part;
       lease->out = false;
       lease->batch = tmpbat;
-      lease->bulk = tmpin;
+      lease->bk = tmpin;
       lease->rep = tmp;
       Lease* old = ht->Insert(lease);
 #ifndef NDEBUG
@@ -1038,18 +1117,18 @@ rpc::If* FilesystemCli::PrepareStub(  ///
   return ctx->stubs_[i];
 }
 
-// This function is called when the last reference to a directory lease is
-// released. It deletes the lease by freeing its memory and removing its record
-// from its parent partition. Future lookups to the directory will result in new
-// fs or rpc lookups and new leases.
+// This function is called when the last reference to a lease of a parent
+// directory is released. It deletes the lease by freeing its memory and
+// removing its record from its parent lease table. Future lookups to the
+// directory will result in new fs or rpc lookups and new leases.
 void FilesystemCli::DeleteLease(const Slice& key, Lease* lease) {
   assert(lease->key() == key);
+  // Any batch context should have been dissociated by now
+  assert(lease->bk == NULL && lease->batch == NULL);
   Partition* const part = lease->part;
   part->mu->AssertHeld();
   if (!lease->out)  // Skip if lease has already been removed from the table
     part->leases->Remove(lease);
-  // Any batch context should already be closed by now
-  assert(lease->batch == NULL);
   delete lease->rep;
   free(lease);
 }

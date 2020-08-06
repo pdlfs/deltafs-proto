@@ -126,14 +126,21 @@ class FilesystemCli {
   Status Lstat(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                Stat* stat);
 
-  // Reference to a batch of create operations buffered at the client under a
-  // server-issued parent dir lease
+  // Reference to a batch of create operations buffered at the client guarded by
+  // a server-issued parent dir lease
   struct BAT;
   Status BatchInit(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                    BAT** result);
   Status BatchInsert(BAT* bat, const char* name);
   Status BatchCommit(BAT* bat);
   Status Destroy(BAT* bat);
+
+  // Reference to a client bulk context guarded by a server-issued parent
+  // dir lease
+  struct BULK;
+  Status BulkInit(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
+                  BULK** result);
+  Status Destroy(BULK* bk);
 
   Status TEST_Mkfle(FilesystemCliCtx* ctx, const LookupStat& parent,
                     const Slice& fname, const Stat& stat,
@@ -264,8 +271,10 @@ class FilesystemCli {
   struct Lease {
     LeaseHandl* lru_handle;
     LookupStat* rep;
+    // The following pointers enable one to discover the batch context
+    // associated with a lease when looking up a lease
     BatchedCreates* batch;
-    BulkInserts* bulk;
+    BulkInserts* bk;
     // Each non-LRU reference to the lease additionally requires a reference to
     // the parent partition. This prevents the parent partition from being
     // removed from the memory.
