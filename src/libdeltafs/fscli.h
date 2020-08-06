@@ -129,8 +129,8 @@ class FilesystemCli {
   // Reference to a batch of create operations buffered at the client under a
   // server-issued parent dir lease
   struct BAT;
-  Status BatchStart(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
-                    BAT** bat);
+  Status BatchInit(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
+                   BAT** result);
   Status BatchInsert(BAT* bat, const char* name);
   Status BatchCommit(BAT* bat);
   Status BatchEnd(BAT* bat);

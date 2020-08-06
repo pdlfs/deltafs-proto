@@ -183,8 +183,8 @@ struct FilesystemCli::BAT {
 // On success, the returned batch handle contains a reference to a special lease
 // of the target directory and a reference to the internal batch context object
 // associated with the lease.
-Status FilesystemCli::BatchStart(  ///
-    FilesystemCliCtx* const ctx, const AT* const at, const char* pathname,
+Status FilesystemCli::BatchInit(  ///
+    FilesystemCliCtx* ctx, const AT* at, const char* pathname,
     BAT** result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);

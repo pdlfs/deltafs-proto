@@ -110,7 +110,7 @@ class FilesystemCliTest {
   }
 
   Status BatchStart(const char* path, BATCH** result, const AT* at = NULL) {
-    return fscli_->BatchStart(&myctx_, at, path, result);
+    return fscli_->BatchInit(&myctx_, at, path, result);
   }
 
   Status BatchInsert(const char* name, BATCH* batch) {

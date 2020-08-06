@@ -693,7 +693,7 @@ class Client {
     const uint64_t pid = uint64_t(FLAGS_rank) << 32;
     FilesystemCli::BAT* batch = NULL;
     state->pathbuf.resize(state->prefix_length);
-    fscli_->BatchStart(&state->ctx, NULL, state->pathbuf.c_str(), &batch);
+    fscli_->BatchInit(&state->ctx, NULL, state->pathbuf.c_str(), &batch);
     char tmp[30];
     memset(tmp, 0, sizeof(tmp));
     for (int i = 0; i < FLAGS_num; i++) {
