@@ -513,6 +513,26 @@ Status FilesystemCli::Lokup(  ///
   return s;
 }
 
+// Prepare the client context for bulk insertion.
+Status FilesystemCli::CreateBulkContext(  ///
+    FilesystemCliCtx* const ctx, const LookupStat& parent,
+    BulkInserts** result) {
+  MutexLock lock(&mutex_);
+  Dir* dir;
+  Status s = AcquireAndFetch(ctx, parent, Slice(), &dir, NULL);
+  if (s.ok()) {
+    BulkInserts* in = new BulkInserts;
+    *result = in;
+    in->commit_status = 0;
+    in->refs = 0;  // To be incremented by the caller
+    in->bulks = new BulkIn[srvs_];
+    in->dir = dir;
+    in->ctx = ctx;
+  }
+  return s;
+}
+
+// Prepare the client context for batch operations.
 Status FilesystemCli::CreateBatch(  ///
     FilesystemCliCtx* const ctx, const LookupStat& parent,
     BatchedCreates** result) {
@@ -526,7 +546,7 @@ Status FilesystemCli::CreateBatch(  ///
     // of virtual servers.
     bc->mode = 0660;
     bc->commit_status = 0;
-    bc->refs = 0;  // To be increased by the caller
+    bc->refs = 0;  // To be incremented by the caller
     bc->wribufs = new WriBuf[srvs_];
     bc->dir = dir;
     bc->ctx = ctx;
@@ -841,9 +861,17 @@ Status FilesystemCli::Lokup2(  ///
     }
 
     BatchedCreates* tmpbat = NULL;
+    BulkInserts* tmpin = NULL;
     if (s.ok()) {
-      if (mode == kBatchedCreats) {
-        s = CreateBatch(ctx, *tmp, &tmpbat);
+      switch (mode) {
+        case kBulkIn:
+          s = CreateBulkContext(ctx, *tmp, &tmpin);
+          break;
+        case kBatchedCreats:
+          s = CreateBatch(ctx, *tmp, &tmpbat);
+          break;
+        default:
+          break;
       }
     }
 
@@ -858,20 +886,25 @@ Status FilesystemCli::Lokup2(  ///
       lease->part = part;
       lease->out = false;
       lease->batch = tmpbat;
+      lease->bulk = tmpin;
       lease->rep = tmp;
       Lease* old = ht->Insert(lease);
-      // Because we synchronize and check before each insert, there is no
+#ifndef NDEBUG
+      // Because we synchronize and check before each insert, there shall be no
       // conflict.
       assert(old == NULL);
+#else
       (void)old;
-
+#endif
       h = lru->Insert(name, hash, lease, 1, DeleteLease);
       lease->lru_handle = h;
       if (lease->rep->LeaseDue() == 0) {
-        // Lease cannot be cached; remove it from the partition
+        // Lease cannot be cached; we remove it from the lease table forcing
+        // a new lease to be instantiated the next time the directory is
+        // accessed.
         ht->Remove(lease);
-        lru->Erase(h);
         lease->out = true;
+        lru->Erase(h);
       }
 
       *stat = lease;

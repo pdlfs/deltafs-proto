@@ -142,6 +142,7 @@ class FilesystemCli {
 
  private:
   struct WriBuf;
+  struct BulkInserts;
   struct BatchedCreates;
   struct Lease;
   struct Partition;
@@ -167,6 +168,8 @@ class FilesystemCli {
 
   Status Lokup(FilesystemCliCtx* ctx, const LookupStat& parent,
                const Slice& name, LokupMode mode, Lease** stat);
+  Status CreateBulkContext(FilesystemCliCtx* ctx, const LookupStat& parent,
+                           BulkInserts**);
   Status CreateBatch(FilesystemCliCtx* ctx, const LookupStat& parent,
                      BatchedCreates**);
   Status AcquireAndFetch(FilesystemCliCtx* ctx, const LookupStat& parent,
@@ -212,6 +215,7 @@ class FilesystemCli {
   };
   struct BatchedCreates {
     FilesystemCliCtx* ctx;
+    WriBuf* wribufs;
     uint32_t mode;
     // Currently, each reference to a batch context must be accompanied by
     // a reference to its parent lease (as well as a reference to the lease's
@@ -229,7 +233,20 @@ class FilesystemCli {
     // 0 if not committed, 1 if being committed, or 2 if committed
     unsigned char commit_status;
     Status bg_status;
-    WriBuf* wribufs;
+    Dir* dir;
+  };
+  struct BulkIn {
+    DB* db;
+  };
+  struct BulkInserts {
+    FilesystemCliCtx* ctx;
+    BulkIn* bulks;
+    uint32_t refs;  // Serialized via the parent lease's parent dir partition
+    // State below protected by mu
+    port::Mutex mu;
+    // 0 if not committed, 1 if being committed, or 2 if committed
+    unsigned char commit_status;
+    Status bg_status;
     Dir* dir;
   };
   typedef LRUEntry<Lease> LeaseHandl;
@@ -238,6 +255,7 @@ class FilesystemCli {
     LeaseHandl* lru_handle;
     LookupStat* rep;
     BatchedCreates* batch;
+    BulkInserts* bulk;
     // Each non-LRU reference to the lease additionally requires a reference to
     // the parent partition. This prevents the parent partition from being
     // removed from the memory.
