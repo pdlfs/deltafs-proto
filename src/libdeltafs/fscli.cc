@@ -184,8 +184,7 @@ struct FilesystemCli::BAT {
 // of the target directory and a reference to the internal batch context object
 // associated with the lease.
 Status FilesystemCli::BatchInit(  ///
-    FilesystemCliCtx* ctx, const AT* at, const char* pathname,
-    BAT** result) {
+    FilesystemCliCtx* ctx, const AT* at, const char* pathname, BAT** result) {
   bool has_tailing_slashes(false);
   Lease* parent_dir(NULL);
   Slice tgt;
@@ -266,7 +265,7 @@ Status FilesystemCli::BatchCommit(BAT* bat) {
   return s;
 }
 
-Status FilesystemCli::BatchEnd(BAT* bat) {
+Status FilesystemCli::BatchDestroy(BAT* bat) {
   assert(bat->dir_lease != NULL);
   Lease* const lease = bat->dir_lease;
   assert(lease->batch != NULL);

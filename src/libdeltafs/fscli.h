@@ -133,7 +133,7 @@ class FilesystemCli {
                    BAT** result);
   Status BatchInsert(BAT* bat, const char* name);
   Status BatchCommit(BAT* bat);
-  Status BatchEnd(BAT* bat);
+  Status BatchDestroy(BAT* bat);
 
   Status TEST_Mkfle(FilesystemCliCtx* ctx, const LookupStat& parent,
                     const Slice& fname, const Stat& stat,

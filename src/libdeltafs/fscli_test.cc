@@ -122,7 +122,7 @@ class FilesystemCliTest {
   }
 
   Status BatchEnd(BATCH* batch) {  ///
-    return fscli_->BatchEnd(batch);
+    return fscli_->BatchDestroy(batch);
   }
 
   Stat tmp_;

@@ -716,7 +716,7 @@ class Client {
         MPI_Abort(MPI_COMM_WORLD, 1);
       }
     }
-    fscli_->BatchEnd(batch);
+    fscli_->BatchDestroy(batch);
     if (FLAGS_fs_use_local) {
       if (fsdb_) {
         fsdb_->Flush(false);
