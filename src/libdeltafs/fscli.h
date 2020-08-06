@@ -210,6 +210,8 @@ class FilesystemCli {
   Status Lokup2(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& name, uint32_t hash, LokupMode mode,
                 Partition* part, Lease** stat);
+  Status Bukin2(FilesystemCliCtx* ctx, const LookupStat& parent,
+                const std::string& bkdir, int srv_idx);
   Status Mkfls2(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& namearr, uint32_t n, uint32_t mode, int srv_idx);
   Status Mkfle2(FilesystemCliCtx* ctx, const LookupStat& parent,

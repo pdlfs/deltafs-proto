@@ -999,6 +999,29 @@ Status FilesystemCli::Lokup2(  ///
   return s;
 }
 
+Status FilesystemCli::Bukin2(  ///
+    FilesystemCliCtx* const ctx, const LookupStat& p, const std::string& bkdir,
+    const int i) {
+  if (!IsDirWriteOk(options_, p, ctx->who))  // Parental perm checks
+    return Status::AccessDenied("No write perm");
+  Status s;
+  if (fs_ != NULL) {
+    s = fs_->Blkin(ctx->who, p, bkdir);
+  } else if (rpc_ != NULL) {
+    BlkinOptions opts;
+    opts.parent = &p;
+    opts.dir = bkdir;
+    opts.me = ctx->who;
+    BlkinRet ret;
+    rpc::If* const stub = PrepareStub(ctx, i);
+    s = rpc::BlkinCli(stub)(opts, &ret);
+  } else {
+    s = Nofs();
+  }
+
+  return s;
+}
+
 Status FilesystemCli::Mkfls2(  ///
     FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& namearr,
     uint32_t n, const uint32_t mode, const int i) {
