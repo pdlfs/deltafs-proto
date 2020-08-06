@@ -36,11 +36,13 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/fsdbx.h"
+
 #if __cplusplus >= 201103L
 #define OVERRIDE override
 #else
 #define OVERRIDE
 #endif
+
 namespace pdlfs {
 
 class FilterPolicy;
@@ -97,6 +99,7 @@ struct BukDbStats {
   uint64_t puts;
 };
 
+// For write-back buffering underneath a bulk db.
 class BukDbEnvWrapper : public EnvWrapper {
  public:
   BukDbEnvWrapper(const BukDbOptions& options, Env* base);
