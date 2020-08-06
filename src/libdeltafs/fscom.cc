@@ -382,10 +382,10 @@ Status Mkfls(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
 }
 
 namespace rpc {
-Status BlkinOperation::operator()(If::Message& in, If::Message& out) {
+Status BukinOperation::operator()(If::Message& in, If::Message& out) {
   Status s;
   uint32_t op;
-  BlkinOptions options;
+  BukinOptions options;
   LookupStat pa;
   Slice input = in.contents;
   if (!GetFixed32(&input, &op) || !GetLookupStat(&input, &pa) ||
@@ -404,12 +404,12 @@ Status BlkinOperation::operator()(If::Message& in, If::Message& out) {
   return s;
 }
 
-Status BlkinCli::operator()(  ///
-    const BlkinOptions& options, BlkinRet* ret) {
+Status BukinCli::operator()(  ///
+    const BukinOptions& options, BukinRet* ret) {
   Status s;
   If::Message in;
   char* const dst = &in.buf[0];
-  EncodeFixed32(dst, kBlkin);
+  EncodeFixed32(dst, kBukin);
   char* p = dst + 4;
   p = EncodeLookupStat(p, *options.parent);
   p = EncodeLengthPrefixedSlice(p, options.dir);
@@ -432,8 +432,8 @@ Status BlkinCli::operator()(  ///
   }
 }
 }  // namespace rpc
-Status Blkin(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
-  return rpc::BlkinOperation(fs)(in, out);
+Status Bukin(FilesystemIf* fs, rpc::If::Message& in, rpc::If::Message& out) {
+  return rpc::BukinOperation(fs)(in, out);
 }
 
 namespace rpc {

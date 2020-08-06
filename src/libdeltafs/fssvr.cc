@@ -58,7 +58,7 @@ FilesystemServer::FilesystemServer(  ///
   hmap_[rpc::kMkdir] = Mkdir;
   hmap_[rpc::kMkfle] = Mkfle;
   hmap_[rpc::kMkfls] = Mkfls;
-  hmap_[rpc::kBlkin] = Blkin;
+  hmap_[rpc::kBukin] = Bukin;
   hmap_[rpc::kLstat] = Lstat;
   if (!options_.info_log) {
     options_.info_log = Logger::Default();

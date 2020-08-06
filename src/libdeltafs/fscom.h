@@ -39,7 +39,7 @@
 
 namespace pdlfs {
 namespace rpc {
-enum { kLokup = 0, kMkdir, kMkfle, kMkfls, kBlkin, kLstat, kNumOps };
+enum { kLokup = 0, kMkdir, kMkfle, kMkfls, kBukin, kLstat, kNumOps };
 }
 
 struct LokupOptions {
@@ -142,26 +142,26 @@ struct MkflsCli {
 };
 }  // namespace rpc
 
-struct BlkinOptions {
+struct BukinOptions {
   const LookupStat* parent;
   Slice dir;
   User me;
 };
-struct BlkinRet {
+struct BukinRet {
   // Empty
 };
 namespace rpc {
-struct BlkinOperation {
-  BlkinOperation(FilesystemIf* fs) : fs_(fs) {}
+struct BukinOperation {
+  BukinOperation(FilesystemIf* fs) : fs_(fs) {}
   Status operator()(If::Message& in, If::Message& out);
   FilesystemIf* fs_;
 };
 }  // namespace rpc
-Status Blkin(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
+Status Bukin(FilesystemIf*, rpc::If::Message& in, rpc::If::Message& out);
 namespace rpc {
-struct BlkinCli {
-  BlkinCli(If* rpc) : rpc_(rpc) {}
-  Status operator()(const BlkinOptions&, BlkinRet*);
+struct BukinCli {
+  BukinCli(If* rpc) : rpc_(rpc) {}
+  Status operator()(const BukinOptions&, BukinRet*);
   If* rpc_;
 };
 }  // namespace rpc

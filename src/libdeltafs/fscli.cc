@@ -1008,13 +1008,13 @@ Status FilesystemCli::Bukin2(  ///
   if (fs_ != NULL) {
     s = fs_->Bukin(ctx->who, p, bkdir);
   } else if (rpc_ != NULL) {
-    BlkinOptions opts;
+    BukinOptions opts;
     opts.parent = &p;
     opts.dir = bkdir;
     opts.me = ctx->who;
-    BlkinRet ret;
+    BukinRet ret;
     rpc::If* const stub = PrepareStub(ctx, i);
-    s = rpc::BlkinCli(stub)(opts, &ret);
+    s = rpc::BukinCli(stub)(opts, &ret);
   } else {
     s = Nofs();
   }
