@@ -380,6 +380,23 @@ class Client {
   }
 #endif
 
+  static void PrintBkSettings() {
+    fprintf(stdout, "Snappy:             %d (bk)\n", FLAGS_bkopts.compression);
+    fprintf(stdout, "Blk size:           %-4d KB (bk)\n",
+            int(FLAGS_bkopts.block_size >> 10));
+    fprintf(stdout, "Bloom bits:         %d (bk)\n",
+            int(FLAGS_bkopts.filter_bits_per_key));
+    fprintf(stdout, "Memtable size:      %-4d MB (bk)\n",
+            int(FLAGS_bkopts.memtable_size >> 20));
+    fprintf(stdout, "Wal off:            %d (bk)\n",
+            FLAGS_bkopts.disable_write_ahead_logging);
+    fprintf(stdout, "Wal write size:     %-4d KB (bk)\n",
+            int(FLAGS_bkopts.write_ahead_log_buffer >> 10));
+    fprintf(stdout, "Tbl write size:     %-4d KB (bk)\n",
+            int(FLAGS_bkopts.table_buffer >> 10));
+    fprintf(stdout, "Bk: %s/b<dir>\n", FLAGS_db_prefix);
+  }
+
   static void PrintDbSettings() {
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
     fprintf(stdout, "Blk cache size:     %-4d MB\n",
@@ -413,10 +430,6 @@ class Client {
             FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dbopts.l1_compaction_trigger);
-#if defined(PDLFS_RADOS)
-    fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
-    if (FLAGS_env_use_rados) PrintRadosSettings();
-#endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
   }
@@ -450,8 +463,15 @@ class Client {
             FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Random key order:   %d\n", FLAGS_random_order);
     fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
+    if (FLAGS_bk) PrintBkSettings();
     if (FLAGS_fs_use_local) {
       PrintDbSettings();
+    }
+    if (FLAGS_bk || FLAGS_fs_use_local) {
+#if defined(PDLFS_RADOS)
+      fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
+      if (FLAGS_env_use_rados) PrintRadosSettings();
+#endif
     }
     fprintf(stdout, "------------------------------------------------\n");
   }
