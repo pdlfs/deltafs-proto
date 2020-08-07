@@ -557,6 +557,11 @@ class Client {
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
 #if defined(PDLFS_RADOS)
+      if (myenv_) {
+        return myenv_;
+      }
+      FLAGS_dbopts.attach_dir_on_bulk = true;
+      FLAGS_dbopts.detach_dir_on_bulk_end = true;
       FLAGS_dbopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
