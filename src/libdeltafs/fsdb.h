@@ -67,7 +67,7 @@ struct FilesystemDbOptions {
   // Default: 4MB
   size_t table_size;
   // Size for a table block.
-  // Default: 4KB
+  // Default: 2KB
   size_t block_size;
   // Max number of table files we open.
   // Setting to 0 disables caching effectively.
@@ -75,7 +75,7 @@ struct FilesystemDbOptions {
   size_t table_cache_size;
   // Bloom filter bits per key.
   // Use 0 to disable filters altogether.
-  // Default: 14
+  // Default: 10
   size_t filter_bits_per_key;
   // Block cache size.
   // Setting to 0 disables caching effectively.
