@@ -71,16 +71,17 @@ class FilesystemCliTest {
         fscli_(NULL),
         myctx_(301),
         fsloc_(test::TmpDir() + "/fscli_test") {
+    myctx_.bkrt = fsloc_;
     me_.gid = me_.uid = 1;
     myctx_.who = me_;
   }
 
   Status OpenFilesystemCli() {
-    Status s = OpenFilesystemCli(fsloc_);
+    Status s = Reopen(fsloc_);
     return s;
   }
 
-  Status OpenFilesystemCli(const std::string& fsloc) {
+  Status Reopen(const std::string& fsloc) {
     delete fscli_;
     fscli_ = NULL;
     delete fs_;
@@ -129,13 +130,21 @@ class FilesystemCliTest {
     return fscli_->BatchInsert(batch, name);
   }
 
-  Status BatchCommit(BATCH* batch) {  ///
-    return fscli_->BatchCommit(batch);
+  Status BatchCommit(BATCH* batch) { return fscli_->BatchCommit(batch); }
+
+  Status BatchEnd(BATCH* batch) { return fscli_->Destroy(batch); }
+
+  Status BulkStart(const char* path, BUK** result, const AT* at = NULL) {
+    return fscli_->BulkInit(&myctx_, at, path, result);
   }
 
-  Status BatchEnd(BATCH* batch) {  ///
-    return fscli_->Destroy(batch);
+  Status BulkInsert(const char* name, BUK* buk) {
+    return fscli_->BulkInsert(buk, name);
   }
+
+  Status BulkCommit(BUK* buk) { return fscli_->BulkCommit(buk); }
+
+  Status BulkEnd(BUK* buk) { return fscli_->Destroy(buk); }
 
   Stat tmp_;
   FilesystemDbOptions fsdbopts_;
@@ -295,15 +304,48 @@ TEST(FilesystemCliTest, BatchCreats) {
   ASSERT_OK(Mkdir("/a"));
   ASSERT_OK(BatchStart("/a", &bat));
   ASSERT_OK(BatchInsert("1", bat));
-  ASSERT_ERR(Exist("/a/1"));
   ASSERT_OK(BatchInsert("2", bat));
-  ASSERT_ERR(Exist("/a/2"));
   ASSERT_OK(BatchInsert("3", bat));
+  ASSERT_ERR(Exist("/a/1"));
+  ASSERT_ERR(Exist("/a/2"));
   ASSERT_ERR(Exist("/a/3"));
+  ASSERT_ERR(Creat("/a/4"));
+  ASSERT_ERR(Creat("/a/5"));
+  ASSERT_ERR(Creat("/a/6"));
   ASSERT_OK(BatchCommit(bat));
   ASSERT_ERR(BatchInsert("4", bat));
   ASSERT_OK(BatchCommit(bat));
   ASSERT_OK(BatchEnd(bat));
+  ASSERT_OK(Exist("/a/1"));
+  ASSERT_OK(Exist("/a/2"));
+  ASSERT_OK(Exist("/a/3"));
+}
+
+TEST(FilesystemCliTest, EmptyBuk) {
+  ASSERT_OK(OpenFilesystemCli());
+  BUK* buk;
+  ASSERT_OK(Mkdir("/a"));
+  ASSERT_OK(BulkStart("/a", &buk));
+  ASSERT_OK(BulkCommit(buk));
+  ASSERT_OK(BulkEnd(buk));
+}
+
+TEST(FilesystemCliTest, Buk) {
+  ASSERT_OK(OpenFilesystemCli());
+  BUK* buk;
+  ASSERT_OK(Mkdir("/a"));
+  ASSERT_OK(BulkStart("/a", &buk));
+  ASSERT_OK(BulkInsert("1", buk));
+  ASSERT_OK(BulkInsert("2", buk));
+  ASSERT_OK(BulkInsert("3", buk));
+  ASSERT_ERR(Exist("/a/1"));
+  ASSERT_ERR(Exist("/a/2"));
+  ASSERT_ERR(Exist("/a/3"));
+  ASSERT_ERR(Creat("/a/4"));
+  ASSERT_ERR(Creat("/a/5"));
+  ASSERT_ERR(Creat("/a/6"));
+  ASSERT_OK(BulkCommit(buk));
+  ASSERT_OK(BulkEnd(buk));
   ASSERT_OK(Exist("/a/1"));
   ASSERT_OK(Exist("/a/2"));
   ASSERT_OK(Exist("/a/3"));

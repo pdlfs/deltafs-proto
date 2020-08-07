@@ -648,6 +648,7 @@ Status FilesystemCli::CreateBulkContext(  ///
     in->refs = 0;  // To be incremented by the caller
     in->bulks = new BulkIn[srvs_];
     for (int i = 0; i < srvs_; i++) {
+      in->bulks[i].db = NULL;
       char bkid[50];
       snprintf(bkid, sizeof(bkid), "/b-%llu-%llu-%d",
                static_cast<unsigned long long>(dir->id->dno),
