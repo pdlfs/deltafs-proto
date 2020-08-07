@@ -65,6 +65,9 @@ namespace {
 // Db options.
 FilesystemDbOptions FLAGS_dbopts;
 
+// Bk options.
+BukDbOptions FLAGS_bkopts;
+
 // True iff rados env should be used.
 bool FLAGS_env_use_rados = false;
 
@@ -127,6 +130,9 @@ bool FLAGS_share_dir = false;
 
 // Instantiate and use a local fs instead of connecting to a remote one.
 bool FLAGS_fs_use_local = false;
+
+// Enable client bulk insertion.
+bool FLAGS_bk = false;
 
 // Combine multiple writes into a single rpc.
 bool FLAGS_batched_writes = false;
@@ -602,7 +608,9 @@ class Client {
 
   void OpenLocal() {
     Env* env = OpenEnv();
-    env->CreateDir(FLAGS_db_prefix);
+    if (!FLAGS_env_use_rados) {
+      env->CreateDir(FLAGS_db_prefix);
+    }
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
     char dbid[100];
     snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
@@ -887,6 +895,16 @@ class Client {
 
   void RunSteps() {
     RankState state;
+    if (FLAGS_bk) {
+      Env* env = OpenEnv();
+      FilesystemCliCtx* const ctx = &state.ctx;
+      if (!FLAGS_env_use_rados) {
+        env->CreateDir(FLAGS_db_prefix);
+      }
+      ctx->bkrt = FLAGS_db_prefix;
+      ctx->bkoptions = FLAGS_bkopts;
+      ctx->bkenv = env;
+    }
     if (FLAGS_rank == 0) {
       fprintf(stdout, "preparing run...\n");
     }
@@ -1015,6 +1033,8 @@ void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
   pdlfs::FLAGS_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_bkopts.use_default_logger = true;
+  pdlfs::FLAGS_bkopts.ReadFromEnv();
   pdlfs::FLAGS_abort_on_errors = true;
   pdlfs::FLAGS_udp = true;
 
@@ -1064,6 +1084,9 @@ void BM_Main(int* const argc, char*** const argv) {
                       &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
+    } else if (sscanf((*argv)[i], "--bk=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_bk = n;
     } else if (sscanf((*argv)[i], "--batched_writes=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_batched_writes = n;
