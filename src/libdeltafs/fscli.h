@@ -56,7 +56,10 @@ class DirIndex;
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
  public:
-  explicit FilesystemCliCtx(int seed) : rnd_(seed), stubs_(NULL), n_(0) {}
+  explicit FilesystemCliCtx(int seed) : rnd_(seed), stubs_(NULL), n_(0) {
+    bkenv = Env::Default();
+    bkdno = 0;
+  }
 
   ~FilesystemCliCtx() {
     if (stubs_) {
