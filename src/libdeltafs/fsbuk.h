@@ -81,6 +81,9 @@ struct BukDbOptions {
   // the directory.
   // Default: false
   bool detach_dir_on_close;
+  // Log to stderr.
+  // Default: false
+  bool use_default_logger;
   // Disable write ahead logging.
   // Default: false
   bool disable_write_ahead_logging;

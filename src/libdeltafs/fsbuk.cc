@@ -58,6 +58,7 @@ BukDbOptions::BukDbOptions()
       filter_bits_per_key(10),
       block_restart_interval(16),
       detach_dir_on_close(false),
+      use_default_logger(false),
       disable_write_ahead_logging(false),
       compression(false) {}
 
@@ -124,6 +125,7 @@ void BukDbOptions::ReadFromEnv() {
                            &filter_bits_per_key);
   ReadIntegerOptionFromEnv("DELTAFS_Bk_block_restart_interval",
                            &block_restart_interval);
+  ReadBoolFromEnv("DELTAFS_Bk_use_default_logger", &use_default_logger);
   ReadBoolFromEnv("DELTAFS_Bk_disable_write_ahead_logging",
                   &disable_write_ahead_logging);
   ReadBoolFromEnv("DELTAFS_Bk_compression", &compression);
@@ -147,7 +149,7 @@ Status BukDb::Open(const std::string& dbloc) {
   dbopts.block_size = options_.block_size;
   dbopts.block_restart_interval = options_.block_restart_interval;
   dbopts.max_mem_compact_level = 0;
-  dbopts.info_log = Logger::Default();
+  dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
   dbopts.error_if_exists = true;
