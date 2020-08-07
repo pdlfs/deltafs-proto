@@ -46,15 +46,25 @@ class FilesystemTest {
  public:
   FilesystemTest()
       : fsdb_(NULL), fs_(NULL), fsloc_(test::TmpDir() + "/fs_test") {
-    DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
     dirmode_ = 0777;
     due_ = -1;
   }
 
   Status OpenFilesystem() {
-    fsdb_ = new FilesystemDb(fsdbopts_, Env::GetUnBufferedIoEnv());
-    Status s = fsdb_->Open(fsloc_);
+    Status s = ReopenFilesystem(fsloc_);
+    return s;
+  }
+
+  Status ReopenFilesystem(const std::string& fsloc) {
+    delete fs_;
+    fs_ = NULL;
+    delete fsdb_;
+    fsdb_ = NULL;
+    DestroyDB(fsloc, DBOptions());
+    Env* env = Env::GetUnBufferedIoEnv();
+    fsdb_ = new FilesystemDb(fsdbopts_, env);
+    Status s = fsdb_->Open(fsloc);
     if (s.ok()) {
       fs_ = new Filesystem(fsopts_);
       fs_->SetDb(fsdb_);
@@ -79,6 +89,19 @@ class FilesystemTest {
     p.AssertAllSet();
     Stat tmp;
     return fs_->Lstat(me_, p, name, &tmp);
+  }
+
+  Status BulkIn(uint64_t dir_id, const std::string& table_dir) {
+    LookupStat p;
+    p.SetDnodeNo(0);
+    p.SetInodeNo(dir_id);
+    p.SetZerothServer(0);
+    p.SetDirMode(dirmode_);
+    p.SetUserId(0);
+    p.SetGroupId(0);
+    p.SetLeaseDue(due_);
+    p.AssertAllSet();
+    return fs_->Bukin(me_, p, table_dir);
   }
 
   Status BatchedCreat(uint64_t dir_id, const std::string& namearr,
@@ -199,7 +222,7 @@ TEST(FilesystemTest, BatchedCreats) {
   ASSERT_EQ(fs_->TEST_LastIno(), 5);
 }
 
-TEST(FilesystemTest, ErrInBatch) {
+TEST(FilesystemTest, ErrorInBatch) {
   ASSERT_OK(OpenFilesystem());
   std::string namearr;
   PutLengthPrefixedSlice(&namearr, "a");
@@ -219,6 +242,25 @@ TEST(FilesystemTest, ErrInBatch) {
   ASSERT_CONFLICT(Creat(0, "c"));
   ASSERT_OK(Creat(0, "d"));
   ASSERT_EQ(fs_->TEST_LastIno(), 4);
+}
+
+TEST(FilesystemTest, EmptyBulkIn) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(ReopenFilesystem(fsloc_ + "/fs2"));
+  ASSERT_OK(BulkIn(0, fsloc_));
+}
+
+TEST(FilesystemTest, BulkIn) {
+  ASSERT_OK(OpenFilesystem());
+  ASSERT_OK(Creat(0, "a"));
+  ASSERT_OK(Creat(0, "b"));
+  ASSERT_OK(Creat(0, "c"));
+  ASSERT_OK(fsdb_->Flush(false));
+  ASSERT_OK(ReopenFilesystem(fsloc_ + "/fs2"));
+  ASSERT_OK(BulkIn(0, fsloc_));
+  ASSERT_OK(Exist(0, "a"));
+  ASSERT_OK(Exist(0, "b"));
+  ASSERT_OK(Exist(0, "c"));
 }
 
 }  // namespace pdlfs
