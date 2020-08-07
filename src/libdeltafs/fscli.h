@@ -33,6 +33,7 @@
  */
 #pragma once
 
+#include "fsbuk.h"
 #include "fscom.h"
 
 #include "pdlfs-common/hashmap.h"
@@ -41,24 +42,16 @@
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/rpc.h"
 
+#include <string>
+
 namespace pdlfs {
 
 struct DirIndexOptions;
-struct DirId;
 struct FilesystemDbStats;
-// Options controlling the behavior of client bulk operations
-struct BulkInOptions {
-  // Bulk insertion storage prefix
-  // Default: "/tmp/bulk"
-  std::string db_prefix;
-
-  BulkInOptions();
-};
 
 class FilesystemCli;
 class Filesystem;
 class DirIndex;
-class DB;
 
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
@@ -74,7 +67,10 @@ class FilesystemCliCtx {
     delete[] stubs_;
   }
 
-  BulkInOptions bio;
+  uint64_t bkdno;  // Not used at the moment
+  Env* bkenv;
+  BukDbOptions bkoptions;
+  std::string bkrt;
   User who;
 
  private:
@@ -199,7 +195,7 @@ class FilesystemCli {
                 const Slice& name, LokupMode mode, Partition* part,
                 Lease** stat);
   Status Bukin1(FilesystemCliCtx* ctx, const LookupStat& parent,
-                const std::string& bkdir, int srv_idx, BulkIn* in);
+                const Slice& name, bool force_flush, int srv_idx, BulkIn* buk);
   Status Mkfls1(FilesystemCliCtx* ctx, const LookupStat& parent,
                 const Slice& name, uint32_t mode, bool force_flush, int srv_idx,
                 WriBuf* buf);
@@ -258,7 +254,12 @@ class FilesystemCli {
     Dir* dir;
   };
   struct BulkIn {
-    DB* db;
+    std::string dbloc;
+    BukDb* db;
+    port::Mutex mu;
+    // State below protected by mu
+    BukDbStats stats;
+    Stat stat;
   };
   struct BulkInserts {
     FilesystemCliCtx* ctx;

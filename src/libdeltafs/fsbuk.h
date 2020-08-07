@@ -118,6 +118,7 @@ class BukDb {
   BukDb(const BukDbOptions& options, Env* base);
   ~BukDb();
 
+  static Status DestroyDb(const std::string& dbloc, Env* env);
   DB* TEST_GetDbRep() { return db_; }
   Status Open(const std::string& dbloc);
   Status Put(const DirId& id, const Slice& fname, const Stat& stat,

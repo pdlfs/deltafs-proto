@@ -44,8 +44,8 @@
 
 namespace pdlfs {
 
-BukDbEnvWrapper::BukDbEnvWrapper(const BukDbOptions& options, Env* const base)
-    : EnvWrapper(base), options_(options) {}
+BukDbEnvWrapper::BukDbEnvWrapper(const BukDbOptions& options, Env* base)
+    : EnvWrapper(base != NULL ? base : Env::Default()), options_(options) {}
 
 BukDbStats::BukDbStats() : putkeybytes(0), putbytes(0), puts(0) {}
 
@@ -172,6 +172,23 @@ Status BukDb::Flush() {
   FlushOptions opts;
   opts.force_flush_l0 = false;
   return db_->FlushMemTable(opts);
+}
+
+Status BukDb::DestroyDb(const std::string& dbloc, Env* env) {
+  if (env) {
+    // XXX: The following code forces the db dir to be mounted in case where the
+    // underlying env is an object store instead of a POSIX filesystem.
+    // Created dir will eventually be deleted by the subsequent DestroyDB() call
+    // so no harm will be done.
+    //
+    // When env is NULL, this step is unnecessary because Env::Default() will be
+    // used which does not require a pre-mount.
+    env->CreateDir(dbloc.c_str());
+  }
+  DBOptions dbopts;
+  dbopts.skip_lock_file = true;
+  dbopts.env = env;
+  return DestroyDB(dbloc, dbopts);
 }
 
 namespace {

@@ -48,8 +48,6 @@ Status Nofs() {  ///
 }
 }  // namespace
 
-BulkInOptions::BulkInOptions() : db_prefix("/tmp/bulk") {}
-
 FilesystemCli::UriMapper::~UriMapper() {}
 
 Status FilesystemCli::TEST_Mkfle(  ///
@@ -597,6 +595,23 @@ Status FilesystemCli::CreateBulkContext(  ///
     in->commit_status = 0;
     in->refs = 0;  // To be incremented by the caller
     in->bulks = new BulkIn[srvs_];
+    for (int i = 0; i < srvs_; i++) {
+      char bkid[50];
+      snprintf(bkid, sizeof(bkid), "/b-%llu-%llu-%d",
+               static_cast<unsigned long long>(dir->id->dno),
+               static_cast<unsigned long long>(dir->id->ino), i);
+      in->bulks[i].dbloc = ctx->bkrt + bkid;
+      Stat* const stat = &in->bulks[i].stat;
+      stat->SetDnodeNo(0);
+      stat->SetInodeNo(0);
+      stat->SetChangeTime(0);
+      stat->SetModifyTime(0);
+      stat->SetUserId(ctx->who.uid);
+      stat->SetGroupId(ctx->who.gid);
+      stat->SetFileSize(0);
+      stat->SetFileMode(S_IFREG | (0660 & ACCESSPERMS));
+      stat->SetZerothServer(-1);
+    }
     in->dir = dir;
     in->ctx = ctx;
   }
@@ -759,10 +774,26 @@ Status FilesystemCli::Lokup1(  ///
 }
 
 Status FilesystemCli::Bukin1(  ///
-    FilesystemCliCtx* const ctx, const LookupStat& p, const std::string& bkdir,
-    const int i, BulkIn* const in) {
+    FilesystemCliCtx* const ctx, const LookupStat& p, const Slice& name,
+    const bool force_flush, const int i, BulkIn* const buk) {
   Status s;
-  // TODO
+  MutexLock lock(&buk->mu);
+  if (!buk->db) {
+    BukDb::DestroyDb(buk->dbloc, ctx->bkenv);
+    buk->db = new BukDb(ctx->bkoptions, ctx->bkenv);
+    s = buk->db->Open(buk->dbloc);
+  }
+  if (s.ok() && !name.empty()) {
+    s = buk->db->Put(DirId(p), name, buk->stat, &buk->stats);
+  }
+  if (s.ok() && force_flush) {
+    s = buk->db->Flush();
+    if (s.ok()) {
+      delete buk->db;
+      buk->db = NULL;
+      s = Bukin2(ctx, p, buk->dbloc, i);
+    }
+  }
   return s;
 }
 
