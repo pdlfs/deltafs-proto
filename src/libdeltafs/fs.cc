@@ -687,9 +687,11 @@ void Filesystem::SetDb(FilesystemDb* db) {
 }
 
 Filesystem::~Filesystem() {
+  mutex_.Lock();
   delete dlru_;
   assert(dirs_->Empty());
   delete dirs_;
+  mutex_.Unlock();
 }
 
 }  // namespace pdlfs

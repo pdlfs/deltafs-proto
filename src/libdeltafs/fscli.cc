@@ -1432,11 +1432,15 @@ void FilesystemCli::DeletePartition(const Slice& key, Partition* part) {
   FilesystemCli* const cli = part->dir->fscli;
   cli->mutex_.AssertHeld();
   cli->pars_->Remove(key, part->hash);
+  cli->mutex_.Unlock();
+  part->mu->Lock();
   delete part->cached_leases;
   assert(part->leases->Empty());
   delete part->leases;
+  part->mu->Unlock();
   delete part->cv;
   delete part->mu;
+  cli->mutex_.Lock();
   cli->Release(part->dir);
   free(part);
 }
@@ -1563,6 +1567,7 @@ void FilesystemCli::SetLocalFs(Filesystem* fs) {
 }
 
 FilesystemCli::~FilesystemCli() {
+  mutex_.Lock();
   delete plru_;
   assert(pars_->Empty());
   delete pars_;
@@ -1570,6 +1575,7 @@ FilesystemCli::~FilesystemCli() {
   assert(dirlist_.prev == &dirlist_);
   assert(dirs_->Empty());
   delete dirs_;
+  mutex_.Unlock();
 }
 
 }  // namespace pdlfs
