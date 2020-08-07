@@ -136,6 +136,8 @@ class FilesystemCli {
   struct BULK;
   Status BulkInit(FilesystemCliCtx* ctx, const AT* at, const char* pathname,
                   BULK** result);
+  Status BulkInsert(BULK* bk, const char* name);
+  Status BulkCommit(BULK* bk);
   Status Destroy(BULK* bk);
 
   Status TEST_Mkfle(FilesystemCliCtx* ctx, const LookupStat& parent,

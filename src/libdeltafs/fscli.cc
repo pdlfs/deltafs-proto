@@ -342,16 +342,65 @@ Status FilesystemCli::BulkInit(  ///
   return status;
 }
 
-Status FilesystemCli::Destroy(BULK* bulk) {
-  assert(bulk->dir_lease != NULL);
-  Lease* const lease = bulk->dir_lease;
+Status FilesystemCli::BulkInsert(BULK* hdl, const char* name) {
+  assert(hdl->dir_lease != NULL);
+  Lease* const lease = hdl->dir_lease;
   assert(lease->bk != NULL);
-  BulkInserts* const bi = lease->bk;
+  BulkInserts* const bk = lease->bk;
+  MutexLock lock(&bk->mu);
+  if (bk->commit_status != 0) {
+    return Status::AssertionFailed("Already committed");
+  } else if (!bk->bg_status.ok()) {
+    return bk->bg_status;
+  }
+  const int i = bk->dir->giga->SelectServer(name);
+  bk->mu.Unlock();
+  Status s = Bukin1(bk->ctx, *lease->rep, name, false, i, &bk->bulks[i]);
+  bk->mu.Lock();
+  if (!s.ok() && bk->bg_status.ok()) {
+    bk->bg_status = s;
+  }
+  return s;
+}
+
+Status FilesystemCli::BulkCommit(BULK* hdl) {
+  assert(hdl->dir_lease != NULL);
+  Lease* const lease = hdl->dir_lease;
+  assert(lease->bk != NULL);
+  BulkInserts* const bk = lease->bk;
+  MutexLock lock(&bk->mu);
+  if (bk->commit_status == 1) {
+    return Status::AssertionFailed("Bulk context is being committed");
+  } else if (bk->commit_status == 2 || !bk->bg_status.ok()) {
+    return bk->bg_status;
+  }
+  bk->commit_status = 1;
+  bk->mu.Unlock();
+  Status s;
+  for (int i = 0; i < srvs_; i++) {
+    s = Bukin1(bk->ctx, *lease->rep, Slice(), true, i, &bk->bulks[i]);
+    if (!s.ok()) {
+      break;
+    }
+  }
+  bk->mu.Lock();
+  bk->commit_status = 2;
+  if (!s.ok() && bk->bg_status.ok()) {
+    bk->bg_status = s;
+  }
+  return s;
+}
+
+Status FilesystemCli::Destroy(BULK* hdl) {
+  assert(hdl->dir_lease != NULL);
+  Lease* const lease = hdl->dir_lease;
+  assert(lease->bk != NULL);
+  BulkInserts* const bk = lease->bk;
   Partition* part = lease->part;
   part->mu->Lock();
-  assert(bi->refs != 0);
-  bi->refs--;
-  const uint32_t r = bi->refs;
+  assert(bk->refs != 0);
+  bk->refs--;
+  const uint32_t r = bk->refs;
   if (!r && !lease->out) {
     part->cached_leases->Erase(lease->lru_handle);
     part->leases->Remove(lease);
@@ -364,14 +413,17 @@ Status FilesystemCli::Destroy(BULK* bulk) {
   part->mu->Unlock();
   {
     MutexLock lock(&mutex_);
-    if (!r) Release(bi->dir);
+    if (!r) Release(bk->dir);
     Release(part);
   }
   if (!r) {
-    delete[] bi->bulks;
-    delete bi;
+    for (int i = 0; i < srvs_; i++) {
+      delete bk->bulks[i].db;
+    }
+    delete[] bk->bulks;
+    delete bk;
   }
-  delete bulk;
+  delete hdl;
   return Status::OK();
 }
 
