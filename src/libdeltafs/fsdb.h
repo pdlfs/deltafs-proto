@@ -102,6 +102,12 @@ struct FilesystemDbOptions {
   // Detach db directory on db closing.
   // Default: false
   bool detach_dir_on_close;
+  // Detach bulk dir on bulk insertion end.
+  // Default: false
+  bool detach_dir_on_bulk_end;
+  // Attach bulk dir on bulk insertion start.
+  // Default: false
+  bool attach_dir_on_bulk;
   // Collect performance stats for db table files.
   // Default: false
   bool enable_io_monitoring;

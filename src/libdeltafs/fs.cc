@@ -56,7 +56,17 @@ uint32_t Filesystem::PickupServer(const DirId& id) {
 
 Status Filesystem::Bukin(  ///
     const User& who, const LookupStat& parent, const std::string& table_dir) {
-  return Status::NotSupported(Slice());
+  DirId at(parent);
+  Dir* dir;
+  MutexLock lock(&mutex_);
+  Status s = AcquireDir(at, &dir);
+  if (s.ok()) {
+    mutex_.Unlock();
+    s = Bukin1(who, at, parent, dir, table_dir);
+    mutex_.Lock();
+    Release(dir);
+  }
+  return s;
 }
 
 Status Filesystem::Lokup(  ///
@@ -436,6 +446,37 @@ Status Filesystem::Mknos1(  ///
   *n = m;
   dir->mu->Lock();
   dir->stats->Merge(*stats);
+  for (uint32_t i = 0; i < kWays; i++) {
+    dir->busy[i] = false;
+  }
+  dir->cv->SignalAll();
+  return s;
+}
+
+Status Filesystem::Bukin1(  ///
+    const User& who, const DirId& at, const LookupStat& p, Dir* const dir,
+    const std::string& table_dir) {
+  if (!IsLeaseOk(options_, p, CurrentMicros()))
+    return Status::AssertionFailed("Lease has expired");
+  if (!IsDirWriteOk(options_, p, who))
+    return Status::AccessDenied("No write perm");
+  MutexLock lock(dir->mu);
+  Status s = MaybeFetchDir(dir);
+  if (!s.ok()) {
+    return s;
+  }
+  dir->mu->AssertHeld();  // XXX: lock down directory split status
+  // Lock all name subsets. Do I really need to lock? It's a bulk insertion so
+  // we already assume that there are no conflicts!
+  for (uint32_t i = 0; i < kWays; i++) {
+    while (dir->busy[i]) {
+      dir->cv->Wait();
+    }
+    dir->busy[i] = true;
+  }
+  dir->mu->Unlock();
+  s = db_->BulkInsert(table_dir);
+  dir->mu->Lock();
   for (uint32_t i = 0; i < kWays; i++) {
     dir->busy[i] = false;
   }

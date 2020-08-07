@@ -112,6 +112,8 @@ class Filesystem : public FilesystemIf {
  private:
   struct Dir;
 
+  Status Bukin1(const User& who, const DirId& at, const LookupStat& parent,
+                Dir* dir, const std::string& table_dir);
   Status Mknos1(const User& who, const DirId& at, const Slice& namearr,
                 uint64_t startino, const LookupStat& parent, Dir* dir,
                 Stat* stat, uint32_t* n, FilesystemDbStats* stats);
