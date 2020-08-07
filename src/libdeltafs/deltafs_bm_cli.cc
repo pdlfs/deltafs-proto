@@ -381,20 +381,20 @@ class Client {
 #endif
 
   static void PrintBkSettings() {
-    fprintf(stdout, "Snappy:             %d (bk)\n", FLAGS_bkopts.compression);
-    fprintf(stdout, "Blk size:           %-4d KB (bk)\n",
+    fprintf(stdout, "Snappy:             %d\n", FLAGS_bkopts.compression);
+    fprintf(stdout, "Blk size:           %-4d KB\n",
             int(FLAGS_bkopts.block_size >> 10));
-    fprintf(stdout, "Bloom bits:         %d (bk)\n",
+    fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_bkopts.filter_bits_per_key));
-    fprintf(stdout, "Memtable size:      %-4d MB (bk)\n",
+    fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_bkopts.memtable_size >> 20));
-    fprintf(stdout, "Wal off:            %d (bk)\n",
+    fprintf(stdout, "Wal off:            %d\n",
             FLAGS_bkopts.disable_write_ahead_logging);
-    fprintf(stdout, "Wal write size:     %-4d KB (bk)\n",
+    fprintf(stdout, "Wal write size:     %-4d KB\n",
             int(FLAGS_bkopts.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "Tbl write size:     %-4d KB (bk)\n",
+    fprintf(stdout, "Tbl write size:     %-4d KB\n",
             int(FLAGS_bkopts.table_buffer >> 10));
-    fprintf(stdout, "Bk: %s/b<dir>\n", FLAGS_db_prefix);
+    fprintf(stdout, "Db: %s/b<dir>\n", FLAGS_db_prefix);
   }
 
   static void PrintDbSettings() {
@@ -451,6 +451,8 @@ class Client {
     fprintf(stdout, "Num files:          %d per rank\n", FLAGS_num);
     fprintf(stdout, "Reads:              %d x %d per rank\n", FLAGS_reads,
             FLAGS_read_phases);
+    fprintf(stdout, "Bulk in:            %s\n", FLAGS_bk ? "1 >>>" : "OFF");
+    if (FLAGS_bk) PrintBkSettings();
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
              FLAGS_batched_writes, FLAGS_batch_size);
@@ -463,7 +465,6 @@ class Client {
             FLAGS_mon_destination_uri ? mon_info : "OFF");
     fprintf(stdout, "Random key order:   %d\n", FLAGS_random_order);
     fprintf(stdout, "Share dir:          %d\n", FLAGS_share_dir);
-    if (FLAGS_bk) PrintBkSettings();
     if (FLAGS_fs_use_local) {
       PrintDbSettings();
     }
