@@ -62,8 +62,7 @@ class FilesystemTest {
     delete fsdb_;
     fsdb_ = NULL;
     DestroyDB(fsloc, DBOptions());
-    Env* env = Env::GetUnBufferedIoEnv();
-    fsdb_ = new FilesystemDb(fsdbopts_, env);
+    fsdb_ = new FilesystemDb(fsdbopts_, Env::GetUnBufferedIoEnv());
     Status s = fsdb_->Open(fsloc);
     if (s.ok()) {
       fs_ = new Filesystem(fsopts_);

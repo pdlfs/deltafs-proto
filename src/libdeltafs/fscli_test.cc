@@ -62,6 +62,7 @@ namespace pdlfs {
 
 class FilesystemCliTest {
  public:
+  typedef FilesystemCli::BULK BUK;
   typedef FilesystemCli::BAT BATCH;
   typedef FilesystemCli::AT AT;
   FilesystemCliTest()
@@ -70,14 +71,25 @@ class FilesystemCliTest {
         fscli_(NULL),
         myctx_(301),
         fsloc_(test::TmpDir() + "/fscli_test") {
-    DestroyDB(fsloc_, DBOptions());
     me_.gid = me_.uid = 1;
     myctx_.who = me_;
   }
 
   Status OpenFilesystemCli() {
+    Status s = OpenFilesystemCli(fsloc_);
+    return s;
+  }
+
+  Status OpenFilesystemCli(const std::string& fsloc) {
+    delete fscli_;
+    fscli_ = NULL;
+    delete fs_;
+    fs_ = NULL;
+    delete fsdb_;
+    fsdb_ = NULL;
+    DestroyDB(fsloc, DBOptions());
     fsdb_ = new FilesystemDb(fsdbopts_, Env::GetUnBufferedIoEnv());
-    Status s = fsdb_->Open(fsloc_);
+    Status s = fsdb_->Open(fsloc);
     if (s.ok()) {
       fscli_ = new FilesystemCli(fscliopts_);
       fs_ = new Filesystem(fsopts_);
