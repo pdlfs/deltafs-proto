@@ -702,6 +702,41 @@ class Client {
     }
   }
 
+  void DoBk(RankState* const state) {
+    const uint64_t pid = uint64_t(FLAGS_rank) << 32;
+    FilesystemCli::BULK* buk = NULL;
+    state->pathbuf.resize(state->prefix_length);
+    fscli_->BulkInit(&state->ctx, NULL, state->pathbuf.c_str(), &buk);
+    char tmp[30];
+    memset(tmp, 0, sizeof(tmp));
+    for (int i = 0; i < FLAGS_num; i++) {
+      Slice fname = Base64Enc(tmp, pid | state->fids[i]);
+      Status s = fscli_->BulkInsert(buk, fname.c_str());
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot add name for bulk insertion: %s\n",
+                FLAGS_rank, s.ToString().c_str());
+        if (FLAGS_abort_on_errors) {
+          MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+      }
+      state->stats.FinishedSingleOp(FLAGS_num);
+    }
+    Status s = fscli_->BulkCommit(buk);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Fail to bulk insert names: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      if (FLAGS_abort_on_errors) {
+        MPI_Abort(MPI_COMM_WORLD, 1);
+      }
+    }
+    fscli_->Destroy(buk);
+    if (FLAGS_fs_use_local) {
+      if (fsdb_) {
+        fsdb_->Flush(false);
+      }
+    }
+  }
+
   void DoBatchedWrites(RankState* const state) {
     const uint64_t pid = uint64_t(FLAGS_rank) << 32;
     FilesystemCli::BAT* batch = NULL;
@@ -869,7 +904,9 @@ class Client {
     if (FLAGS_num == 0) {
       return 0;
     }
-    if (FLAGS_batched_writes) {
+    if (FLAGS_bk) {
+      RunStep("insert", state, &Client::DoBk);
+    } else if (FLAGS_batched_writes) {
       RunStep("insert", state, &Client::DoBatchedWrites);
     } else {
       RunStep("insert", state, &Client::DoWrites);
