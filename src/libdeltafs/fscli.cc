@@ -650,7 +650,7 @@ Status FilesystemCli::CreateBulkContext(  ///
     for (int i = 0; i < srvs_; i++) {
       in->bulks[i].db = NULL;
       char bkid[50];
-      snprintf(bkid, sizeof(bkid), "/b-%llu-%llu-%d",
+      snprintf(bkid, sizeof(bkid), "/b%d-%llu-%llu-%d", ctx->bkid,
                static_cast<unsigned long long>(dir->id->dno),
                static_cast<unsigned long long>(dir->id->ino), i);
       in->bulks[i].dbloc = ctx->bkrt + bkid;

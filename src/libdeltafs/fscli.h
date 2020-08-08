@@ -58,7 +58,7 @@ class FilesystemCliCtx {
  public:
   explicit FilesystemCliCtx(int seed) : rnd_(seed), stubs_(NULL), n_(0) {
     bkenv = Env::Default();
-    bkdno = 0;
+    bkdno = bkid = 0;
   }
 
   ~FilesystemCliCtx() {
@@ -70,6 +70,7 @@ class FilesystemCliCtx {
     delete[] stubs_;
   }
 
+  int bkid;
   uint64_t bkdno;  // Not used at the moment
   Env* bkenv;
   BukDbOptions bkoptions;
