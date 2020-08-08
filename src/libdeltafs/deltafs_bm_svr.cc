@@ -402,7 +402,7 @@ class Server : public FilesystemWrapper {
         opts.skip_lease_due_checks = opts.skip_name_collision_checks =
             FLAGS_skip_fs_checks;
     opts.vsrvs = opts.nsrvs = FLAGS_comm_size;
-    opts.srvid = FLAGS_rank;
+    opts.mydno = opts.srvid = FLAGS_rank;
     fs_ = new Filesystem(opts);
     fs_->SetDb(fsdb_);
     return fs_;
