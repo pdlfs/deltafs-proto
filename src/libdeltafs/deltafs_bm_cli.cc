@@ -962,6 +962,7 @@ class Client {
       }
       ctx->bkrt = FLAGS_db_prefix;
       ctx->bkoptions = FLAGS_bkopts;
+      ctx->bkid = FLAGS_rank;
       ctx->bkenv = env;
     }
     if (FLAGS_rank == 0) {
