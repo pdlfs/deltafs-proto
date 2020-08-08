@@ -336,6 +336,8 @@ class Server : public FilesystemWrapper {
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
 #if defined(PDLFS_RADOS)
+      FLAGS_dbopts.attach_dir_on_bulk = true;
+      FLAGS_dbopts.detach_dir_on_bulk_end = true;
       FLAGS_dbopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
@@ -376,7 +378,9 @@ class Server : public FilesystemWrapper {
 
   FilesystemIf* OpenFilesystem() {
     Env* env = OpenEnv();
-    env->CreateDir(FLAGS_db_prefix);
+    if (!FLAGS_env_use_rados) {
+      env->CreateDir(FLAGS_db_prefix);
+    }
     fsdb_ = new FilesystemDb(FLAGS_dbopts, env);
     char dbid[100];
     snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);

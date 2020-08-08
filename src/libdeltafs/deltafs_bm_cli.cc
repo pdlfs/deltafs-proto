@@ -590,6 +590,7 @@ class Client {
       FLAGS_dbopts.attach_dir_on_bulk = true;
       FLAGS_dbopts.detach_dir_on_bulk_end = true;
       FLAGS_dbopts.detach_dir_on_close = true;
+      FLAGS_bkopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
       options.force_syncio = FLAGS_rados_force_syncio;
