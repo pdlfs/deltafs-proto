@@ -71,7 +71,7 @@ struct FilesystemOptions {
   // Server id.
   int srvid;
   // My dnode no.
-  int mydno;
+  uint64_t mydno;
 };
 
 class Filesystem : public FilesystemIf {
