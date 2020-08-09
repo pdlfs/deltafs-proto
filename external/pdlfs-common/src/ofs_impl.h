@@ -12,9 +12,9 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/log_writer.h"
-#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/ofs.h"
 #include "pdlfs-common/osd.h"
 #include "pdlfs-common/port.h"
@@ -143,10 +143,15 @@ class FileSet {
 
 class Ofs::Impl {
  public:
-  explicit Impl(Osd* osd) : osd_(osd) {}
+  Impl(const OfsOptions& options, Osd* osd) : options_(options), osd_(osd) {
+    if (options_.info_log == NULL) {
+      options_.info_log = Logger::Default();
+    }
+  }
 
   ~Impl() {
-    // All file sets should be unmounted
+    // All file sets should have be unmounted
+    // at this point
     assert(mtable_.Empty());
   }
 
@@ -178,6 +183,7 @@ class Ofs::Impl {
   void operator=(const Impl&);
   Impl(const Impl&);
 
+  OfsOptions options_;
   Osd* osd_;
 };
 

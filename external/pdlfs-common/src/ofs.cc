@@ -14,7 +14,9 @@ namespace pdlfs {
 
 OfsOptions::OfsOptions() : sync_log_on_close(false), info_log(NULL) {}
 
-Ofs::Ofs(const OfsOptions& options, Osd* osd) { impl_ = new Impl(osd); }
+Ofs::Ofs(const OfsOptions& options, Osd* osd) {
+  impl_ = new Impl(options, osd);
+}
 
 Ofs::~Ofs() { delete impl_; }
 
