@@ -111,7 +111,8 @@ Status Ofs::MountFileSet(const MountOptions& options, const char* dirname) {
       return PathError(dirname);
     }
   }
-  FileSet* const fset = new FileSet(options, name);
+  FileSet* const fset =
+      new FileSet(options, name, impl_->options_.sync_log_on_close);
   Status s = impl_->LinkFileSet(dirname, fset);
   if (!s.ok()) delete fset;
   return s;

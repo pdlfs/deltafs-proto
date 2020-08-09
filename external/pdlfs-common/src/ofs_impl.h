@@ -37,12 +37,12 @@ class FileSet {
     kDelFile = 0xf2
   };
 
-  explicit FileSet(const MountOptions& options, const Slice& name)
+  FileSet(const MountOptions& options, const Slice& name, bool sync_on_close)
       : paranoid_checks(options.paranoid_checks),
         read_only(options.read_only),
         create_if_missing(options.create_if_missing),
         error_if_exists(options.error_if_exists),
-        sync_on_close(false),
+        sync_on_close(sync_on_close),
         sync(options.sync),
         name(name.ToString()),
         xfile(NULL),
@@ -183,6 +183,7 @@ class Ofs::Impl {
   void operator=(const Impl&);
   Impl(const Impl&);
 
+  friend class Ofs;
   OfsOptions options_;
   Osd* osd_;
 };
