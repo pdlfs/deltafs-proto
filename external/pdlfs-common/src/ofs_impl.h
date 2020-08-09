@@ -209,7 +209,7 @@ inline void PutOp(  ///
 inline std::string FileSet::LogRecord(  ///
     FileSet::RecordType type, const Slice& fname1, const Slice& fname2) {
   std::string rec;
-  size_t max_record_size = 8 + 4 + 1 + 4;
+  size_t max_record_size = 8 + 4 + 1 + 5 + 5;
   max_record_size += fname1.size();
   max_record_size += fname2.size();
   rec.reserve(max_record_size);
