@@ -23,7 +23,7 @@ namespace pdlfs {
 class SequentialFile;
 class RandomAccessFile;
 class WritableFile;
-
+class Logger;
 class Osd;
 class Env;
 
@@ -85,6 +85,17 @@ extern Status WriteStringToFileSync(Osd* osd, const Slice& data,
 // The file is actually backed by an object.
 extern Status ReadFileToString(Osd* osd, const char* name, std::string* data);
 
+// Options controlling an ofs.
+struct OfsOptions {
+  OfsOptions();
+  // Sync log when unmounting a directory.
+  // Default: false
+  bool sync_log_on_close;
+  // Logger for ofs internal/error information.
+  // Default: NULL
+  Logger* info_log;
+};
+
 // We use Ofs to bridge the Osd world to the traditional file system world. This
 // is achieved by mapping each "file" to an underlying object and each
 // "directory" to a special container object that holds references to other
@@ -93,7 +104,7 @@ extern Status ReadFileToString(Osd* osd, const char* name, std::string* data);
 // or allow nested containers.
 class Ofs {
  public:
-  Ofs(Osd* osd);
+  Ofs(const OfsOptions& options, Osd* osd);
   ~Ofs();
 
   // Return true iff the named file exists in a mounted file set.

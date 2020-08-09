@@ -8,12 +8,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
-#include "pdlfs-common/testharness.h"
+#include "pdlfs-common/ofs.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/osd.h"
+#include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
 
@@ -22,7 +21,7 @@ class OFS {
   OFS() {
     root_ = test::PrepareTmpDir("ofs_test");
     osd_ = Osd::FromEnv(root_.c_str());
-    ofs_ = new Ofs(osd_);
+    ofs_ = new Ofs(options_, osd_);
   }
 
   ~OFS() {
@@ -45,9 +44,10 @@ class OFS {
     return s;
   }
 
+  std::string root_;
   MountOptions mount_opts_;
   UnmountOptions unmount_opts_;
-  std::string root_;
+  OfsOptions options_;
   Ofs* ofs_;
   Osd* osd_;
 };

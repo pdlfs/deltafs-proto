@@ -8,12 +8,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "ofs_impl.h"
 
 namespace pdlfs {
 
-Ofs::Ofs(Osd* osd) { impl_ = new Impl(osd); }
+OfsOptions::OfsOptions() : sync_log_on_close(false), info_log(NULL) {}
+
+Ofs::Ofs(const OfsOptions& options, Osd* osd) { impl_ = new Impl(osd); }
 
 Ofs::~Ofs() { delete impl_; }
 
