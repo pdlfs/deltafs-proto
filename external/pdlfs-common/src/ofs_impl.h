@@ -63,7 +63,7 @@ class FileSet {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(fname, kTryNewFile));
+      Status s = xlog->AddRecord(LogRecord(kTryNewFile, fname));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -76,7 +76,7 @@ class FileSet {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(fname, kNewFile));
+      Status s = xlog->AddRecord(LogRecord(kNewFile, fname));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -92,7 +92,7 @@ class FileSet {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(fname, kTryDelFile));
+      Status s = xlog->AddRecord(LogRecord(kTryDelFile, fname));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -108,7 +108,7 @@ class FileSet {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(fname, kDelFile));
+      Status s = xlog->AddRecord(LogRecord(kDelFile, fname));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -130,14 +130,15 @@ class FileSet {
   HashSet files;  // Children files
 
   // File set logging
-  static std::string LogRecord(const Slice& fname, RecordType type);
+  static std::string LogRecord(  ///
+      RecordType type, const Slice& fname1, const Slice& fname2 = Slice());
   WritableFile* xfile;  // The file backing the write-ahead log
   typedef log::Writer Log;
   Log* xlog;  // Write-ahead logger
 
  private:
   // No copying allowed
-  void operator=(const FileSet&);
+  void operator=(const FileSet& other);
   FileSet(const FileSet&);
 };
 
@@ -188,27 +189,34 @@ class Ofs::Impl {
   Osd* osd_;
 };
 
-inline void PutOp(std::string* dst, const Slice& fname,
-                  FileSet::RecordType type) {
+inline void PutOp(  ///
+    std::string* dst, FileSet::RecordType type, const Slice& fname1,
+    const Slice& fname2 = Slice()) {
   dst->push_back(static_cast<unsigned char>(type));
-  PutLengthPrefixedSlice(dst, fname);
+  PutLengthPrefixedSlice(dst, fname1);
+  PutLengthPrefixedSlice(dst, fname2);
 }
 
-// Format each record in the following way:
+// Each record is formatted as defined below:
 //   timestamp: uint64_t
 //   num_ops: uint32_t
+//  For each op:
 //   op_type: uint8_t
-//   fname_len: varint32_t
-//   fname: char[n]
-inline std::string FileSet::LogRecord(const Slice& fname,
-                                      FileSet::RecordType type) {
-  size_t max_record_size = 8 + 4 + 1 + 4 + fname.size();
-  std::string record;
-  record.reserve(max_record_size);
-  PutFixed64(&record, CurrentMicros());
-  PutFixed32(&record, 1);
-  PutOp(&record, fname, type);
-  return record;
+//   fname1_len: varint32_t
+//   fname1: char[n]
+//   fname2_len: varint32_t
+//   fname2: char[n]
+inline std::string FileSet::LogRecord(  ///
+    FileSet::RecordType type, const Slice& fname1, const Slice& fname2) {
+  std::string rec;
+  size_t max_record_size = 8 + 4 + 1 + 4;
+  max_record_size += fname1.size();
+  max_record_size += fname2.size();
+  rec.reserve(max_record_size);
+  PutFixed64(&rec, CurrentMicros());
+  PutFixed32(&rec, 1);
+  PutOp(&rec, type, fname1, fname2);
+  return rec;
 }
 
 }  // namespace pdlfs

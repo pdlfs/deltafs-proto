@@ -8,7 +8,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "ofs_impl.h"
 
 #include "pdlfs-common/log_scanner.h"
@@ -59,27 +58,29 @@ static bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
   }
   unsigned char type = static_cast<unsigned char>((*input)[0]);
   input->remove_prefix(1);
-  Slice fname;
-  if (!GetLengthPrefixedSlice(input, &fname)) {
+  Slice fname1;
+  Slice fname2;
+  if (!GetLengthPrefixedSlice(input, &fname1) ||
+      !GetLengthPrefixedSlice(input, &fname2)) {
     return false;
   }
-  if (fname.empty()) {
+  if (fname1.empty()) {
     return false;
   }
   switch (type) {
     case FileSet::kTryNewFile:
-      garbage->Insert(fname);
+      garbage->Insert(fname1);
       return true;
     case FileSet::kTryDelFile:
-      files->Erase(fname);
-      garbage->Insert(fname);
+      files->Erase(fname1);
+      garbage->Insert(fname1);
       return true;
     case FileSet::kNewFile:
-      files->Insert(fname);
-      garbage->Erase(fname);
+      files->Insert(fname1);
+      garbage->Erase(fname1);
       return true;
     case FileSet::kDelFile:
-      garbage->Erase(fname);
+      garbage->Erase(fname1);
       return true;
     case FileSet::kNoOp:
       return true;
@@ -177,7 +178,7 @@ static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
     std::string* scratch;
     FileSet::RecordType type;
     virtual void visit(const Slice& fname) {
-      PutOp(scratch, fname, type);
+      PutOp(scratch, type, fname);
       *num_ops = *num_ops + 1;
     }
   };
