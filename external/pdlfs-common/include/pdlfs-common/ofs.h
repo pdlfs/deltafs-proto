@@ -88,6 +88,9 @@ extern Status ReadFileToString(Osd* osd, const char* name, std::string* data);
 // Options controlling an ofs.
 struct OfsOptions {
   OfsOptions();
+  // Defer garbage collection until the next directory mount.
+  // Default: false
+  bool deferred_gc;
   // Sync log when unmounting a directory.
   // Default: false
   bool sync_log_on_close;

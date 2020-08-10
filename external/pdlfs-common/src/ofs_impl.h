@@ -27,14 +27,16 @@ class FileSet {
   enum RecordType {
     kNoOp = 0x00,  // Paddings that should be ignored
 
-    // Undo required during recovery
-    kTryNewFile = 0x01,
-    // Redo required during recovery
-    kTryDelFile = 0x02,
+    // Will perform garbage collection (undo) if operation is not committed
+    kTryCreateObj = 0x01,
+    // Will redo if operation is not committed
+    kUnlinkAndDel = 0x02,
+    kDelObj = 0x03,
 
-    // Operation committed
-    kNewFile = 0xf1,
-    kDelFile = 0xf2
+    kUnlink = 0xf0,  // Metadata-only operation
+    // Mark operation as committed, canceling undo and preventing redo
+    kLink = 0xf1,
+    kObjDeleted = 0xf2
   };
 
   FileSet(const MountOptions& options, const Slice& name, bool sync_on_close)
@@ -49,21 +51,30 @@ class FileSet {
         xlog(NULL) {}
 
   ~FileSet() {
+    struct Visitor : public FileSet::Visitor {
+      virtual void visit(const Slice& k, char* const v) {
+        if (v) {
+          free(v);
+        }
+      }
+    };
+    Visitor v;
+    files.VisitAll(&v);
     delete xlog;
     if (xfile != NULL) {
-      Status s;
-      if (sync_on_close) s = xfile->Sync();
-      if (s.ok()) xfile->Close();
-      delete xfile;
+      if (sync_on_close) {
+        xfile->Sync();
+      }
+      delete xfile;  // This will close the file
     }
   }
 
-  Status TryNewFile(const Slice& fname) {
+  Status TryCreateObject(const Slice& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(kTryNewFile, fname));
+      Status s = xlog->AddRecord(LogRecord(kTryCreateObj, underlying_obj));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -71,44 +82,71 @@ class FileSet {
     }
   }
 
-  Status NewFile(const Slice& fname) {
+  Status Link(const Slice& lname, const Slice& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(kNewFile, fname));
-      if (s.ok() && sync) {
-        s = xfile->Sync();
-      }
-      if (s.ok()) {
-        files.Insert(fname);
-      }
-      return s;
-    }
-  }
-
-  Status TryDeleteFile(const Slice& fname) {
-    if (xlog == NULL) {
-      return Status::ReadOnly(Slice());
-    } else {
-      assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(kTryDelFile, fname));
+      Status s = xlog->AddRecord(LogRecord(kLink, lname, underlying_obj));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
       if (s.ok()) {
-        files.Erase(fname);
+        char* obj = strndup(underlying_obj.data(), underlying_obj.size());
+        char* const c = files.Insert(lname, obj);
+        if (c) {
+          free(c);
+        }
       }
       return s;
     }
   }
 
-  Status DeleteFile(const Slice& fname) {
+  Status UnlinkAndDelete(const Slice& lname, const Slice& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
       assert(!read_only);
-      Status s = xlog->AddRecord(LogRecord(kDelFile, fname));
+      Status s =
+          xlog->AddRecord(LogRecord(kUnlinkAndDel, lname, underlying_obj));
+      if (s.ok() && sync) {
+        s = xfile->Sync();
+      }
+      if (s.ok()) {
+        char* const c = files.Erase(lname);
+        if (c) {
+          free(c);
+        }
+      }
+      return s;
+    }
+  }
+
+  Status Unlink(const Slice& lname) {
+    if (xlog == NULL) {
+      return Status::ReadOnly(Slice());
+    } else {
+      assert(!read_only);
+      Status s = xlog->AddRecord(LogRecord(kUnlink, lname));
+      if (s.ok() && sync) {
+        s = xfile->Sync();
+      }
+      if (s.ok()) {
+        char* const c = files.Erase(lname);
+        if (c) {
+          free(c);
+        }
+      }
+      return s;
+    }
+  }
+
+  Status DeletedObject(const Slice& underlying_obj) {
+    if (xlog == NULL) {
+      return Status::ReadOnly(Slice());
+    } else {
+      assert(!read_only);
+      Status s = xlog->AddRecord(LogRecord(kObjDeleted, underlying_obj));
       if (s.ok() && sync) {
         s = xfile->Sync();
       }
@@ -129,9 +167,9 @@ class FileSet {
   std::string name;     // Internal name of the file set
   HashMap<char> files;  // Children files
 
-  // File set logging
+  // Atomically write a log record
   static std::string LogRecord(  ///
-      RecordType type, const Slice& fname, const Slice& underobj = Slice());
+      RecordType type, const Slice& name1, const Slice& name2 = Slice());
   WritableFile* xfile;  // The file backing the write-ahead log
   typedef log::Writer Log;
   Log* xlog;  // Write-ahead logger
@@ -177,9 +215,7 @@ class Ofs::Impl {
   port::Mutex mutex_;
   HashMap<FileSet> mtable_;
 
-  static std::string OfsName(const FileSet*, const Slice& name);
   typedef ResolvedPath OfsPath;
-
   // No copying allowed
   void operator=(const Impl&);
   Impl(const Impl&);
@@ -190,11 +226,11 @@ class Ofs::Impl {
 };
 
 inline void PutOp(  ///
-    std::string* dst, FileSet::RecordType type, const Slice& fname,
-    const Slice& underobj = Slice()) {
+    std::string* dst, FileSet::RecordType type, const Slice& name1,
+    const Slice& name2 = Slice()) {
   dst->push_back(static_cast<unsigned char>(type));
-  PutLengthPrefixedSlice(dst, fname);
-  PutLengthPrefixedSlice(dst, underobj);
+  PutLengthPrefixedSlice(dst, name1);
+  PutLengthPrefixedSlice(dst, name2);
 }
 
 // Each record is formatted as defined below:
@@ -202,20 +238,21 @@ inline void PutOp(  ///
 //   num_ops: uint32_t
 //  For each op:
 //   op_type: uint8_t
-//   fname_len: varint32_t
-//   fname: char[n]
-//   underobj_len: varint32_t
-//   underobj: char[n]
+//   name1_len: varint32_t
+//   name1: char[n]
+//   name2_len: varint32_t
+//   name2: char[n]
+//  Note: both name1 and name2 may be empty
 inline std::string FileSet::LogRecord(  ///
-    FileSet::RecordType type, const Slice& fname, const Slice& underobj) {
+    FileSet::RecordType type, const Slice& name1, const Slice& name2) {
   std::string rec;
   size_t max_record_size = 8 + 4 + 1 + 5 + 5;
-  max_record_size += fname.size();
-  max_record_size += underobj.size();
+  max_record_size += name1.size();
+  max_record_size += name2.size();
   rec.reserve(max_record_size);
   PutFixed64(&rec, CurrentMicros());
   PutFixed32(&rec, 1);
-  PutOp(&rec, type, fname, underobj);
+  PutOp(&rec, type, name1, name2);
   return rec;
 }
 

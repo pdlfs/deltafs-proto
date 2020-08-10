@@ -14,19 +14,32 @@
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
-
-std::string Ofs::Impl::OfsName(const FileSet* fset, const Slice& name) {
-  Slice parent = fset->name;
-  size_t n = parent.size() + name.size() + 1;
-  std::string result;
-  result.reserve(n);
-  result.append(parent.data(), parent.size());
-  result.push_back('_');
-  result.append(name.data(), name.size());
-  return result;
+std::string Ofs::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
+  MutexLock l(&mutex_);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
+  if (!fset) {
+    return std::string();
+  } else {
+    std::string r;
+    char* c = fset->files.Lookup(fp.base);
+    if (!c) {
+      r = c;
+    }
+    return r;
+  }
 }
 
 namespace {
+inline std::string ObjName(const FileSet* fset, const Slice& base) {
+  std::string rv;
+  const size_t n = fset->name.size() + 1 + base.size();
+  rv.reserve(n);
+  rv += fset->name;
+  rv.push_back('_');
+  rv.append(base.data(), base.size());
+  return rv;
+}
+
 Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   *time = 0;
   SequentialFile* file;
@@ -53,35 +66,53 @@ Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   }
 }
 
-bool Execute(Slice* input, HashMap<char>* files, HashMap<char>* garbage) {
+bool Execute(Slice* input, HashMap<char>* const files, HashSet* const garbage) {
   if (input->empty()) {
     return false;
   }
   unsigned char type = static_cast<unsigned char>((*input)[0]);
   input->remove_prefix(1);
-  Slice fname;
-  Slice underobj;
-  if (!GetLengthPrefixedSlice(input, &fname) ||
-      !GetLengthPrefixedSlice(input, &underobj)) {
-    return false;
-  }
-  if (fname.empty()) {
+  Slice name1;
+  Slice name2;
+  if (!GetLengthPrefixedSlice(input, &name1) ||
+      !GetLengthPrefixedSlice(input, &name2)) {
     return false;
   }
   switch (type) {
-    case FileSet::kTryNewFile:
-      garbage->Insert(fname);
+    case FileSet::kTryCreateObj:
+    case FileSet::kDelObj:
+      if (name1.empty()) return false;
+      garbage->Insert(name1);
       return true;
-    case FileSet::kTryDelFile:
-      files->Erase(fname);
-      garbage->Insert(fname);
+    case FileSet::kLink: {
+      if (name1.empty() || name2.empty()) return false;
+      char* const c = files->Insert(name1, strndup(name2.data(), name2.size()));
+      if (c) {
+        free(c);
+      }
+      garbage->Erase(name2);
       return true;
-    case FileSet::kNewFile:
-      files->Insert(fname);
-      garbage->Erase(fname);
+    }
+    case FileSet::kUnlinkAndDel: {
+      if (name1.empty() || name2.empty()) return false;
+      char* const c = files->Erase(name1);
+      if (c) {
+        free(c);
+      }
+      garbage->Insert(name2);
       return true;
-    case FileSet::kDelFile:
-      garbage->Erase(fname);
+    }
+    case FileSet::kUnlink: {
+      if (name1.empty()) return false;
+      char* const c = files->Erase(name1);
+      if (c) {
+        free(c);
+      }
+      return true;
+    }
+    case FileSet::kObjDeleted:
+      if (name1.empty()) return false;
+      garbage->Erase(name1);
       return true;
     case FileSet::kNoOp:
       return true;
@@ -90,7 +121,7 @@ bool Execute(Slice* input, HashMap<char>* files, HashMap<char>* garbage) {
   }
 }
 
-Status Redo(const Slice& record, FileSet* fset, HashMap<char>* garbage) {
+Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
   Slice input = record;
   if (input.size() < 8) {
     return Status::Corruption("Too short to be a record");
@@ -120,7 +151,7 @@ Status Redo(const Slice& record, FileSet* fset, HashMap<char>* garbage) {
   }
 }
 
-Status RecoverFileSet(Osd* osd, FileSet* fset, HashMap<char>* garbage,
+Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
                       std::string* next_log_name) {
   Status s;
   const std::string& fset_name = fset->name;
@@ -171,36 +202,47 @@ Status RecoverFileSet(Osd* osd, FileSet* fset, HashMap<char>* garbage,
   return s;
 }
 
-void MakeSnapshot(std::string* result, FileSet* fset, HashMap<char>* garbage) {
+void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   result->resize(8 + 4);
-
-  struct Visitor : public FileSet::Visitor {
-    FileSet::RecordType type;
-    std::string* scratch;
-    int* num_ops;
-    virtual void visit(const Slice& fname, char* underobj) {
-      PutOp(scratch, type, fname);
-      *num_ops = *num_ops + 1;
-    }
-  };
   int num_ops = 0;
-  Visitor v;
-  v.num_ops = &num_ops;
-  v.scratch = result;
-  v.type = FileSet::kNewFile;
-  HashMap<char>* files = &fset->files;
-  files->VisitAll(&v);
-  v.type = FileSet::kTryDelFile;
-  garbage->VisitAll(&v);
-
-  uint64_t time = CurrentMicros();
-  EncodeFixed64(&(*result)[0], time);
+  {
+    struct Visitor : public FileSet::Visitor {
+      std::string* scratch;
+      int* num_ops;
+      virtual void visit(const Slice& key, char* value) {
+        if (value) {
+          PutOp(scratch, FileSet::kLink, key, value);
+          *num_ops = *num_ops + 1;
+        }
+      }
+    };
+    Visitor v;
+    v.num_ops = &num_ops;
+    v.scratch = result;
+    HashMap<char>* files = &fset->files;
+    files->VisitAll(&v);
+  }
+  {
+    struct Visitor : public HashSet::Visitor {
+      std::string* scratch;
+      int* num_ops;
+      virtual void visit(const Slice& key) {
+        PutOp(scratch, FileSet::kDelObj, key);
+        *num_ops = *num_ops + 1;
+      }
+    };
+    Visitor v;
+    v.num_ops = &num_ops;
+    v.scratch = result;
+    garbage->VisitAll(&v);
+  }
+  EncodeFixed64(&(*result)[0], CurrentMicros());
   EncodeFixed32(&(*result)[8], num_ops);
 }
 
 Status OpenFileSetForWriting(  ///
-    const std::string& log_name, Osd* osd, FileSet* fset,
-    HashMap<char>* garbage) {
+    const std::string& log_name, Osd* osd, FileSet* const fset,
+    HashSet* const garbage) {
   Status s;
   WritableFile* file;
   s = osd->NewWritableObj(log_name.c_str(), &file);
@@ -219,20 +261,16 @@ Status OpenFileSetForWriting(  ///
     osd->Delete(log_name.c_str());
     return s;
   }
-
   // Perform a garbage collection pass. If things go well, all garbage can be
   // purged here. Otherwise, we will re-attempt another pass the next time the
   // set is loaded.
-  struct Visitor : public FileSet::Visitor {
+  struct Visitor : public HashSet::Visitor {
     Osd* osd;
     FileSet* fset;
-    virtual void visit(const Slice& fname, char* underobj) {
-      const std::string f = fname.ToString();
-      Status s = osd->Delete(f.c_str());
-      if (s.ok()) {
-        fset->DeleteFile(f);  // Mark as deleted
-      } else if (s.IsNotFound()) {
-        fset->DeleteFile(f);  // Mark as deleted
+    virtual void visit(const Slice& key) {
+      Status s = osd->Delete(key.ToString().c_str());
+      if (s.ok() || s.IsNotFound()) {
+        fset->DeletedObject(key);  // Mark as deleted
       } else {
         // Empty
       }
@@ -264,7 +302,7 @@ bool Ofs::Impl::HasFile(const ResolvedPath& fp) {
   if (fset == NULL) {
     return false;
   } else {
-    std::string internal_name = OfsName(fset, fp.base);
+    std::string internal_name = ObjName(fset, fp.base);
     if (!fset->files.Contains(internal_name)) {
       return false;
     } else {
@@ -314,10 +352,10 @@ Status Ofs::Impl::ListFileSet(  ///
 Status Ofs::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
   MutexLock l(&mutex_);
   if (mtable_.Contains(mntptr)) {
-    return Status::AlreadyExists(Slice());
+    return Status::AlreadyExists("Dir already mounted", mntptr);
   } else {
     // Try recovering from previous logs and determines the next log name.
-    HashMap<char> garbage;
+    HashSet garbage;
     std::string next_log_name;
     Status s = RecoverFileSet(osd_, fset, &garbage, &next_log_name);
     if (s.ok()) {
@@ -347,12 +385,12 @@ Status Ofs::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
 Status Ofs::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
+  if (!fset) {
+    return Status::NotFound("Dir not mounted", mntptr);
   } else {
     if (deletion) {
       if (!fset->files.Empty()) {
-        return Status::DirNotEmpty(Slice());
+        return Status::DirNotEmpty(mntptr);
       }
     }
     std::string parent = fset->name;
@@ -380,30 +418,36 @@ Status Ofs::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
   }
 }
 
-std::string Ofs::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
-  MutexLock l(&mutex_);
-  FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset != NULL) {
-    return OfsName(fset, fp.base);
-  } else {
-    return std::string();
-  }
-}
-
+// Atomically insert a named file into an underlying object store. Return OK on
+// success, or a non-OK status on errors.
 Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
+  if (!fset) {
+    return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    const std::string name = OfsName(fset, fp.base);
-    Status s = fset->TryNewFile(name);
+    std::string objname_stor;
+    Slice objname;
+    char* const c = fset->files.Lookup(fp.base);
+    if (!c) {
+      objname_stor = ObjName(fset, fp.base);
+      objname = objname_stor;
+    } else {
+      objname = c;
+    }
+    Status s = fset->TryCreateObject(objname);
     if (s.ok()) {
-      s = osd_->Put(name.c_str(), data);
+      s = osd_->Put(objname.c_str(), data);
       if (s.ok()) {
-        s = fset->NewFile(name);
+        s = fset->Link(fp.base, objname);
         if (!s.ok()) {
-          osd_->Delete(name.c_str());
+          Log(options_.info_log, 0,
+              "Cannot commit the mapping of a newly created file %s->%s: %s",
+              fp.base.ToString().c_str(), objname.c_str(),
+              s.ToString().c_str());
+          if (!options_.deferred_gc) {
+            osd_->Delete(objname.c_str());
+          }
         }
       }
     }
@@ -414,47 +458,66 @@ Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
 Status Ofs::Impl::DeleteFile(const OfsPath& fp) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
+  if (!fset) {
+    return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    const std::string name = OfsName(fset, fp.base);
-    if (!fset->files.Contains(name)) {
-      return Status::NotFound(Slice());
+    Slice objname;
+    char* const c = fset->files.Lookup(fp.base);
+    if (!c) {
+      return Status::NotFound("No such file", fp.base);
     } else {
-      Status s = fset->TryDeleteFile(name);
-      if (s.ok()) {
-        // OK if we fail in the following steps as we will redo
-        // this delete operation the next time the file set is reloaded.
-        s = osd_->Delete(name.c_str());
-        if (s.ok()) {
-          fset->DeleteFile(name);
-        } else {
-          s = Status::OK();
-        }
-      }
-      return s;
+      objname = c;
     }
+    Status s = fset->UnlinkAndDelete(fp.base, objname);
+    if (s.ok()) {
+      // It's okay if we fail the deletion or the logging of it as we can
+      // redo these operations the next time the fileset is mounted.
+      s = osd_->Delete(c);
+      if (s.ok()) {
+        fset->DeletedObject(objname);
+      } else {
+        Log(options_.info_log, 0,
+            "Fail to delete object %s: %s; will retry at the next mount",
+            fp.base.ToString().c_str(), s.ToString().c_str());
+        s = Status::OK();
+      }
+    }
+    return s;
   }
 }
 
 Status Ofs::Impl::NewWritableFile(const OfsPath& fp, WritableFile** r) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
+  if (!fset) {
+    return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    const std::string name = OfsName(fset, fp.base);
-    Status s = fset->TryNewFile(name);
+    std::string objname_stor;
+    Slice objname;
+    char* const c = fset->files.Lookup(fp.base);
+    if (!c) {
+      objname_stor = ObjName(fset, fp.base);
+      objname = objname_stor;
+    } else {
+      objname = c;
+    }
+    Status s = fset->TryCreateObject(objname);
     if (s.ok()) {
-      s = osd_->NewWritableObj(name.c_str(), r);
+      s = osd_->NewWritableObj(objname.c_str(), r);
       if (s.ok()) {
-        s = fset->NewFile(name);
+        s = fset->Link(fp.base, objname);
         if (!s.ok()) {
-          osd_->Delete(name.c_str());
-          WritableFile* f = *r;
+          Log(options_.info_log, 0,
+              "Cannot commit the object mapping of a newly created file "
+              "%s->%s: %s",
+              fp.base.ToString().c_str(), objname.c_str(),
+              s.ToString().c_str());
+          WritableFile* const f = *r;
+          delete f;  // This will close the file
           *r = NULL;
-          f->Close();
-          delete f;
+          if (!options_.deferred_gc) {
+            osd_->Delete(objname.c_str());
+          }
         }
       }
     }
@@ -465,57 +528,74 @@ Status Ofs::Impl::NewWritableFile(const OfsPath& fp, WritableFile** r) {
 Status Ofs::Impl::GetFile(const OfsPath& fp, std::string* data) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) return Status::NotFound(Slice());
-  const std::string name = OfsName(fset, fp.base);
-  if (fset->files.Contains(name)) return osd_->Get(name.c_str(), data);
-  return Status::NotFound(Slice());
+  if (!fset) return Status::NotFound("Parent dir not mounted", fp.mntptr);
+  char* const c = fset->files.Lookup(fp.base);
+  if (!c) return Status::NotFound("No such file", fp.base);
+  return osd_->Get(c, data);
 }
 
 Status Ofs::Impl::FileSize(const OfsPath& fp, uint64_t* result) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) return Status::NotFound(Slice());
-  const std::string name = OfsName(fset, fp.base);
-  if (fset->files.Contains(name)) return osd_->Size(name.c_str(), result);
-  return Status::NotFound(Slice());
+  if (!fset) return Status::NotFound("Parent dir not mounted", fp.mntptr);
+  char* const c = fset->files.Lookup(fp.base);
+  if (!c) return Status::NotFound("No such file", fp.base);
+  return osd_->Size(c, result);
 }
 
 Status Ofs::Impl::NewSequentialFile(const OfsPath& fp, SequentialFile** r) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) return Status::NotFound(Slice());
-  const std::string name = OfsName(fset, fp.base);
-  if (!fset->files.Contains(name)) return Status::NotFound(Slice());
-  return osd_->NewSequentialObj(name.c_str(), r);
+  if (!fset) return Status::NotFound("Parent dir not mounted", fp.mntptr);
+  char* const c = fset->files.Lookup(fp.base);
+  if (!c) return Status::NotFound("No such file", fp.base);
+  return osd_->NewSequentialObj(c, r);
 }
 
 Status Ofs::Impl::NewRandomAccessFile(const OfsPath& fp, RandomAccessFile** r) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) return Status::NotFound(Slice());
-  const std::string name = OfsName(fset, fp.base);
-  if (!fset->files.Contains(name)) return Status::NotFound(Slice());
-  return osd_->NewRandomAccessObj(name.c_str(), r);
+  if (!fset) return Status::NotFound("Parent dir not mounted", fp.mntptr);
+  char* const c = fset->files.Lookup(fp.base);
+  if (!c) return Status::NotFound("No such file", fp.base);
+  return osd_->NewRandomAccessObj(c, r);
 }
 
 Status Ofs::Impl::CopyFile(const OfsPath& sp, const OfsPath& dp) {
   MutexLock l(&mutex_);
   FileSet* const sset = mtable_.Lookup(sp.mntptr);
-  if (sset == NULL) return Status::NotFound(Slice());
+  if (!sset) return Status::NotFound("Parent dir not mounted", sp.mntptr);
   FileSet* const dset = mtable_.Lookup(dp.mntptr);
-  if (dset == NULL) return Status::NotFound(Slice());
-
-  const std::string src = OfsName(sset, sp.base);
-  if (!sset->files.Contains(src)) return Status::NotFound(Slice());
-  const std::string dst = OfsName(dset, dp.base);
-
-  Status s = dset->TryNewFile(dst);
+  if (!dset) return Status::NotFound("Parent dir not mounted", dp.mntptr);
+  Slice sname;
+  char* const c = sset->files.Lookup(sp.base);
+  if (!c) {
+    return Status::NotFound("No such file", sp.base);
+  } else {
+    sname = c;
+  }
+  std::string dname_stor;
+  Slice dname;
+  char* const d = dset->files.Lookup(dp.base);
+  if (!d) {
+    dname_stor = ObjName(dset, dp.base);
+    dname = dname_stor;
+  } else {
+    dname = d;
+  }
+  Status s = dset->TryCreateObject(dname);
   if (s.ok()) {
-    s = osd_->Copy(src.c_str(), dst.c_str());
+    s = osd_->Copy(sname.c_str(), dname.c_str());
     if (s.ok()) {
-      s = dset->NewFile(dst);
+      s = dset->Link(dp.base, dname);
       if (!s.ok()) {
-        osd_->Delete(dst.c_str());
+        Log(options_.info_log, 0,
+            "Cannot commit the object mapping of a newly created file "
+            "%s->%s: %s",
+            dp.base.ToString().c_str(), dname.c_str(), s.ToString().c_str());
+        if (!options_.deferred_gc) {
+          osd_->Delete(dname.c_str());
+        }
       }
     }
   }
