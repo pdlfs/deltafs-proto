@@ -315,7 +315,7 @@ Status Ofs::Impl::SynFileSet(const Slice& mntptr) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
-    return Status::NotFound(Slice());
+    return Status::NotFound("Dir not mounted", mntptr);
   } else {
     if (fset->xfile != NULL) {
       return fset->xfile->Sync();
@@ -327,22 +327,18 @@ Status Ofs::Impl::SynFileSet(const Slice& mntptr) {
 
 Status Ofs::Impl::ListFileSet(  ///
     const Slice& mntptr, std::vector<std::string>* names) {
-  struct Visitor : public FileSet::Visitor {
-    size_t prefix;
-    std::vector<std::string>* names;
-    virtual void visit(const Slice& fname, char* underobj) {
-      names->push_back(fname.substr(prefix));
-    }
-  };
-
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
-    return Status::NotFound(Slice());
+    return Status::NotFound("Dir not mounted", mntptr);
   } else {
-    const size_t prefix = fset->name.size() + 1;
+    struct Visitor : public FileSet::Visitor {
+      std::vector<std::string>* names;
+      virtual void visit(const Slice& key, char* const c) {
+        names->push_back(key.ToString());
+      }
+    };
     Visitor v;
-    v.prefix = prefix;
     v.names = names;
     fset->files.VisitAll(&v);
     return Status::OK();
