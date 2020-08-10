@@ -125,12 +125,13 @@ class FileSet {
   bool sync_on_close;
   bool sync;
 
-  std::string name;  // Internal name of the file set
-  HashSet files;     // Children files
+  typedef HashMap<char>::Visitor Visitor;
+  std::string name;     // Internal name of the file set
+  HashMap<char> files;  // Children files
 
   // File set logging
   static std::string LogRecord(  ///
-      RecordType type, const Slice& fname1, const Slice& fname2 = Slice());
+      RecordType type, const Slice& fname, const Slice& underobj = Slice());
   WritableFile* xfile;  // The file backing the write-ahead log
   typedef log::Writer Log;
   Log* xlog;  // Write-ahead logger
@@ -189,11 +190,11 @@ class Ofs::Impl {
 };
 
 inline void PutOp(  ///
-    std::string* dst, FileSet::RecordType type, const Slice& fname1,
-    const Slice& fname2 = Slice()) {
+    std::string* dst, FileSet::RecordType type, const Slice& fname,
+    const Slice& underobj = Slice()) {
   dst->push_back(static_cast<unsigned char>(type));
-  PutLengthPrefixedSlice(dst, fname1);
-  PutLengthPrefixedSlice(dst, fname2);
+  PutLengthPrefixedSlice(dst, fname);
+  PutLengthPrefixedSlice(dst, underobj);
 }
 
 // Each record is formatted as defined below:
@@ -201,20 +202,20 @@ inline void PutOp(  ///
 //   num_ops: uint32_t
 //  For each op:
 //   op_type: uint8_t
-//   fname1_len: varint32_t
-//   fname1: char[n]
-//   fname2_len: varint32_t
-//   fname2: char[n]
+//   fname_len: varint32_t
+//   fname: char[n]
+//   underobj_len: varint32_t
+//   underobj: char[n]
 inline std::string FileSet::LogRecord(  ///
-    FileSet::RecordType type, const Slice& fname1, const Slice& fname2) {
+    FileSet::RecordType type, const Slice& fname, const Slice& underobj) {
   std::string rec;
   size_t max_record_size = 8 + 4 + 1 + 5 + 5;
-  max_record_size += fname1.size();
-  max_record_size += fname2.size();
+  max_record_size += fname.size();
+  max_record_size += underobj.size();
   rec.reserve(max_record_size);
   PutFixed64(&rec, CurrentMicros());
   PutFixed32(&rec, 1);
-  PutOp(&rec, type, fname1, fname2);
+  PutOp(&rec, type, fname, underobj);
   return rec;
 }
 

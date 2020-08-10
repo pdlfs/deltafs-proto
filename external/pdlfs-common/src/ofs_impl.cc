@@ -53,35 +53,35 @@ Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   }
 }
 
-bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
+bool Execute(Slice* input, HashMap<char>* files, HashMap<char>* garbage) {
   if (input->empty()) {
     return false;
   }
   unsigned char type = static_cast<unsigned char>((*input)[0]);
   input->remove_prefix(1);
-  Slice fname1;
-  Slice fname2;
-  if (!GetLengthPrefixedSlice(input, &fname1) ||
-      !GetLengthPrefixedSlice(input, &fname2)) {
+  Slice fname;
+  Slice underobj;
+  if (!GetLengthPrefixedSlice(input, &fname) ||
+      !GetLengthPrefixedSlice(input, &underobj)) {
     return false;
   }
-  if (fname1.empty()) {
+  if (fname.empty()) {
     return false;
   }
   switch (type) {
     case FileSet::kTryNewFile:
-      garbage->Insert(fname1);
+      garbage->Insert(fname);
       return true;
     case FileSet::kTryDelFile:
-      files->Erase(fname1);
-      garbage->Insert(fname1);
+      files->Erase(fname);
+      garbage->Insert(fname);
       return true;
     case FileSet::kNewFile:
-      files->Insert(fname1);
-      garbage->Erase(fname1);
+      files->Insert(fname);
+      garbage->Erase(fname);
       return true;
     case FileSet::kDelFile:
-      garbage->Erase(fname1);
+      garbage->Erase(fname);
       return true;
     case FileSet::kNoOp:
       return true;
@@ -90,7 +90,7 @@ bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
   }
 }
 
-Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
+Status Redo(const Slice& record, FileSet* fset, HashMap<char>* garbage) {
   Slice input = record;
   if (input.size() < 8) {
     return Status::Corruption("Too short to be a record");
@@ -98,7 +98,7 @@ Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
     input.remove_prefix(8);
   }
 
-  HashSet* files = &fset->files;
+  HashMap<char>* files = &fset->files;
   uint32_t num_ops;
   bool error = input.size() < 4;
   if (!error) {
@@ -120,7 +120,7 @@ Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
   }
 }
 
-Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
+Status RecoverFileSet(Osd* osd, FileSet* fset, HashMap<char>* garbage,
                       std::string* next_log_name) {
   Status s;
   const std::string& fset_name = fset->name;
@@ -171,14 +171,14 @@ Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
   return s;
 }
 
-void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
+void MakeSnapshot(std::string* result, FileSet* fset, HashMap<char>* garbage) {
   result->resize(8 + 4);
 
-  struct Visitor : public HashSet::Visitor {
-    int* num_ops;
-    std::string* scratch;
+  struct Visitor : public FileSet::Visitor {
     FileSet::RecordType type;
-    virtual void visit(const Slice& fname) {
+    std::string* scratch;
+    int* num_ops;
+    virtual void visit(const Slice& fname, char* underobj) {
       PutOp(scratch, type, fname);
       *num_ops = *num_ops + 1;
     }
@@ -188,7 +188,7 @@ void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   v.num_ops = &num_ops;
   v.scratch = result;
   v.type = FileSet::kNewFile;
-  HashSet* files = &fset->files;
+  HashMap<char>* files = &fset->files;
   files->VisitAll(&v);
   v.type = FileSet::kTryDelFile;
   garbage->VisitAll(&v);
@@ -198,8 +198,9 @@ void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   EncodeFixed32(&(*result)[8], num_ops);
 }
 
-Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
-                             FileSet* fset, HashSet* garbage) {
+Status OpenFileSetForWriting(  ///
+    const std::string& log_name, Osd* osd, FileSet* fset,
+    HashMap<char>* garbage) {
   Status s;
   WritableFile* file;
   s = osd->NewWritableObj(log_name.c_str(), &file);
@@ -219,21 +220,21 @@ Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
     return s;
   }
 
-  // Perform a garbage collection pass. If things go well,
-  // all garbage can be purged here. Otherwise, we will re-attempt
-  // another pass the next time the set is loaded.
-  struct Visitor : public HashSet::Visitor {
+  // Perform a garbage collection pass. If things go well, all garbage can be
+  // purged here. Otherwise, we will re-attempt another pass the next time the
+  // set is loaded.
+  struct Visitor : public FileSet::Visitor {
     Osd* osd;
     FileSet* fset;
-    virtual void visit(const Slice& key) {
-      const std::string fname = key.ToString();
-      Status s = osd->Delete(fname.c_str());
+    virtual void visit(const Slice& fname, char* underobj) {
+      const std::string f = fname.ToString();
+      Status s = osd->Delete(f.c_str());
       if (s.ok()) {
-        fset->DeleteFile(fname);
+        fset->DeleteFile(f);  // Mark as deleted
       } else if (s.IsNotFound()) {
-        fset->DeleteFile(fname);
+        fset->DeleteFile(f);  // Mark as deleted
       } else {
-        // Future work
+        // Empty
       }
     }
   };
@@ -286,12 +287,12 @@ Status Ofs::Impl::SynFileSet(const Slice& mntptr) {
   }
 }
 
-Status Ofs::Impl::ListFileSet(const Slice& mntptr,
-                              std::vector<std::string>* names) {
-  struct Visitor : public HashSet::Visitor {
+Status Ofs::Impl::ListFileSet(  ///
+    const Slice& mntptr, std::vector<std::string>* names) {
+  struct Visitor : public FileSet::Visitor {
     size_t prefix;
     std::vector<std::string>* names;
-    virtual void visit(const Slice& fname) {
+    virtual void visit(const Slice& fname, char* underobj) {
       names->push_back(fname.substr(prefix));
     }
   };
@@ -316,7 +317,7 @@ Status Ofs::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
     return Status::AlreadyExists(Slice());
   } else {
     // Try recovering from previous logs and determines the next log name.
-    HashSet garbage;
+    HashMap<char> garbage;
     std::string next_log_name;
     Status s = RecoverFileSet(osd_, fset, &garbage, &next_log_name);
     if (s.ok()) {
