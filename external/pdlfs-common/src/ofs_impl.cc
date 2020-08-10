@@ -121,7 +121,7 @@ bool Execute(Slice* input, HashMap<char>* const files, HashSet* const garbage) {
   }
 }
 
-Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
+Status RedoUndo(const Slice& record, FileSet* fset, HashSet* garbage) {
   Slice input = record;
   if (input.size() < 8) {
     return Status::Corruption("Too short to be a record");
@@ -189,7 +189,7 @@ Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
   }
   log::Scanner sc(file);
   for (; sc.Valid() && s.ok(); sc.Next()) {
-    s = Redo(sc.record(), fset, garbage);
+    s = RedoUndo(sc.record(), fset, garbage);
   }
   if (s.ok()) {
     s = sc.status();
