@@ -126,8 +126,7 @@ class FileSet {
   bool sync;
 
   std::string name;  // Internal name of the file set
-
-  HashSet files;  // Children files
+  HashSet files;     // Children files
 
   // File set logging
   static std::string LogRecord(  ///

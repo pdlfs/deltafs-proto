@@ -26,7 +26,8 @@ std::string Ofs::Impl::OfsName(const FileSet* fset, const Slice& name) {
   return result;
 }
 
-static Status Access(const std::string& name, Osd* osd, uint64_t* time) {
+namespace {
+Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   *time = 0;
   SequentialFile* file;
   Status s = osd->NewSequentialObj(name.c_str(), &file);
@@ -52,7 +53,7 @@ static Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   }
 }
 
-static bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
+bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
   if (input->empty()) {
     return false;
   }
@@ -89,7 +90,7 @@ static bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
   }
 }
 
-static Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
+Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
   Slice input = record;
   if (input.size() < 8) {
     return Status::Corruption("Too short to be a record");
@@ -119,8 +120,8 @@ static Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
   }
 }
 
-static Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
-                             std::string* next_log_name) {
+Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
+                      std::string* next_log_name) {
   Status s;
   const std::string& fset_name = fset->name;
   assert(!fset_name.empty());
@@ -170,7 +171,7 @@ static Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
   return s;
 }
 
-static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
+void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   result->resize(8 + 4);
 
   struct Visitor : public HashSet::Visitor {
@@ -197,8 +198,8 @@ static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   EncodeFixed32(&(*result)[8], num_ops);
 }
 
-static Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
-                                    FileSet* fset, HashSet* garbage) {
+Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
+                             FileSet* fset, HashSet* garbage) {
   Status s;
   WritableFile* file;
   s = osd->NewWritableObj(log_name.c_str(), &file);
@@ -244,6 +245,7 @@ static Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
   garbage->VisitAll(&v);
   return s;
 }
+}  // namespace
 
 bool Ofs::Impl::HasFileSet(const Slice& mntptr) {
   MutexLock l(&mutex_);
