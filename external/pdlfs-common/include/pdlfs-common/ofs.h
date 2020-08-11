@@ -147,6 +147,9 @@ class Ofs {
   // Copy src to dst.
   Status CopyFile(const char* src, const char* dst);
 
+  // Rename src to dst.
+  Status Rename(const char* src, const char* dst);
+
   // Sync a specific file set mounted at the given path.
   // Return OK on success, and a non-OK status on errors.
   Status SynFileSet(const char* dirname);

@@ -102,6 +102,13 @@ Status Ofs::CopyFile(const char* src, const char* dst) {
   return impl_->CopyFile(sfp, dfp);
 }
 
+Status Ofs::Rename(const char* src, const char* dst) {
+  ResolvedPath sfp, dfp;
+  if (!ResolvePath(src, &sfp.mntptr, &sfp.base)) return PathError(src);
+  if (!ResolvePath(dst, &dfp.mntptr, &dfp.base)) return PathError(dst);
+  return impl_->Rename(sfp, dfp);
+}
+
 Status Ofs::MountFileSet(const MountOptions& options, const char* dirname) {
   Slice ignored_parent;
   Slice name;

@@ -183,6 +183,7 @@ class FileSet {
 
 class Ofs::Impl {
  public:
+  typedef ResolvedPath OfsPath;
   Impl(const OfsOptions& options, Osd* osd) : options_(options), osd_(osd) {
     if (options_.info_log == NULL) {
       options_.info_log = Logger::Default();
@@ -201,22 +202,21 @@ class Ofs::Impl {
   Status ListFileSet(const Slice& mntptr, std::vector<std::string>* names);
   Status SynFileSet(const Slice& mntptr);
 
-  bool HasFile(const ResolvedPath& fp);
-  Status GetFile(const ResolvedPath& fp, std::string* data);
-  Status PutFile(const ResolvedPath& fp, const Slice& data);
-  Status FileSize(const ResolvedPath& fp, uint64_t* size);
-  Status DeleteFile(const ResolvedPath& fp);
-  Status NewSequentialFile(const ResolvedPath& fp, SequentialFile** result);
-  Status NewRandomAccessFile(const ResolvedPath& fp, RandomAccessFile** result);
-  Status NewWritableFile(const ResolvedPath& fp, WritableFile** result);
-  std::string TEST_GetObjectName(const ResolvedPath& fp);
-  Status CopyFile(const ResolvedPath& sp, const ResolvedPath& dp);
+  bool HasFile(const OfsPath& fp);
+  Status GetFile(const OfsPath& fp, std::string* data);
+  Status PutFile(const OfsPath& fp, const Slice& data);
+  Status FileSize(const OfsPath& fp, uint64_t* size);
+  Status DeleteFile(const OfsPath& fp);
+  Status NewSequentialFile(const OfsPath& fp, SequentialFile** result);
+  Status NewRandomAccessFile(const OfsPath& fp, RandomAccessFile** result);
+  Status NewWritableFile(const OfsPath& fp, WritableFile** result);
+  std::string TEST_GetObjectName(const OfsPath& fp);
+  Status CopyFile(const OfsPath& sp, const OfsPath& dp);
+  Status Rename(const OfsPath& sp, const OfsPath& dp);
 
  private:
   port::Mutex mutex_;
   HashMap<FileSet> mtable_;
-
-  typedef ResolvedPath OfsPath;
   // No copying allowed
   void operator=(const Impl&);
   Impl(const Impl&);

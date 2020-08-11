@@ -554,6 +554,29 @@ Status Ofs::Impl::NewRandomAccessFile(const OfsPath& fp, RandomAccessFile** r) {
   return osd_->NewRandomAccessObj(c, r);
 }
 
+Status Ofs::Impl::Rename(const OfsPath& sp, const OfsPath& dp) {
+  MutexLock l(&mutex_);
+  FileSet* const sset = mtable_.Lookup(sp.mntptr);
+  if (!sset) return Status::NotFound("Parent dir not mounted", sp.mntptr);
+  FileSet* const dset = mtable_.Lookup(dp.mntptr);
+  if (!dset) return Status::NotFound("Parent dir not mounted", dp.mntptr);
+  std::string objname;
+  char* const c = sset->files.Lookup(sp.base);
+  if (!c) {
+    return Status::NotFound("No such file", sp.base);
+  } else {
+    objname = c;
+  }
+  if (dset->files.Contains(dp.base)) {
+    return Status::AlreadyExists("File already exists", dp.base);
+  }
+  Status s = dset->Link(dp.base, objname);
+  if (s.ok()) {
+    s = sset->Unlink(sp.base);
+  }
+  return s;
+}
+
 Status Ofs::Impl::CopyFile(const OfsPath& sp, const OfsPath& dp) {
   MutexLock l(&mutex_);
   FileSet* const sset = mtable_.Lookup(sp.mntptr);
