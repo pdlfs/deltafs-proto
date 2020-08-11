@@ -69,7 +69,7 @@ class FileSet {
     }
   }
 
-  Status TryCreateObject(const Slice& underlying_obj) {
+  Status TryCreateObject(const std::string& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
@@ -82,7 +82,7 @@ class FileSet {
     }
   }
 
-  Status Link(const Slice& lname, const Slice& underlying_obj) {
+  Status Link(const Slice& lname, const std::string& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
@@ -92,8 +92,7 @@ class FileSet {
         s = xfile->Sync();
       }
       if (s.ok()) {
-        char* obj = strndup(underlying_obj.data(), underlying_obj.size());
-        char* const c = files.Insert(lname, obj);
+        char* const c = files.Insert(lname, strdup(underlying_obj.c_str()));
         if (c) {
           free(c);
         }
@@ -102,7 +101,8 @@ class FileSet {
     }
   }
 
-  Status UnlinkAndDelete(const Slice& lname, const Slice& underlying_obj) {
+  Status UnlinkAndDelete(  ///
+      const Slice& lname, const std::string& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {
