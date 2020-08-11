@@ -14,7 +14,7 @@
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
-std::string Ofs::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
+std::string Ofs::Impl::TEST_GetObjectName(const OfsPath& fp) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (!fset) {
@@ -297,14 +297,13 @@ bool Ofs::Impl::HasFileSet(const Slice& mntptr) {
   }
 }
 
-bool Ofs::Impl::HasFile(const ResolvedPath& fp) {
+bool Ofs::Impl::HasFile(const OfsPath& fp) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return false;
   } else {
-    std::string internal_name = ObjName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    if (!fset->files.Contains(fp.base)) {
       return false;
     } else {
       return true;
@@ -417,7 +416,7 @@ Status Ofs::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
 
 // Atomically insert a named file into an underlying object store. Return OK on
 // success, or a non-OK status on errors.
-Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
+Status Ofs::Impl::PutFile(const OfsPath& fp, const Slice& data) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (!fset) {
