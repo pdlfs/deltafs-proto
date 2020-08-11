@@ -587,6 +587,8 @@ class Client {
       if (myenv_) {
         return myenv_;
       }
+      FLAGS_dbopts.bulk_use_copy = false;
+      FLAGS_dbopts.create_dir_on_bulk = true;
       FLAGS_dbopts.attach_dir_on_bulk = true;
       FLAGS_dbopts.detach_dir_on_bulk_end = true;
       FLAGS_dbopts.detach_dir_on_close = true;
