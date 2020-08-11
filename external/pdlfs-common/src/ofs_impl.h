@@ -92,7 +92,8 @@ class FileSet {
         s = xfile->Sync();
       }
       if (s.ok()) {
-        char* const c = files.Insert(lname, strdup(underlying_obj.c_str()));
+        char* c = strdup(underlying_obj.c_str());
+        c = files.Insert(lname, c);
         if (c) {
           free(c);
         }
@@ -141,7 +142,7 @@ class FileSet {
     }
   }
 
-  Status DeletedObject(const Slice& underlying_obj) {
+  Status DeletedObject(const std::string& underlying_obj) {
     if (xlog == NULL) {
       return Status::ReadOnly(Slice());
     } else {

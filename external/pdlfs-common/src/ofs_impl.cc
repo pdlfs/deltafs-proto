@@ -268,9 +268,10 @@ Status OpenFileSetForWriting(  ///
     Osd* osd;
     FileSet* fset;
     virtual void visit(const Slice& key) {
-      Status s = osd->Delete(key.ToString().c_str());
+      const std::string objname = key.ToString();
+      Status s = osd->Delete(objname.c_str());
       if (s.ok() || s.IsNotFound()) {
-        fset->DeletedObject(key);  // Mark as deleted
+        fset->DeletedObject(objname);  // Mark as deleted
       } else {
         // Empty
       }
