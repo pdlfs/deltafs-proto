@@ -422,12 +422,10 @@ Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   if (!fset) {
     return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    std::string objname_stor;
-    Slice objname;
+    std::string objname;
     char* const c = fset->files.Lookup(fp.base);
     if (!c) {
-      objname_stor = ObjName(fset, fp.base);
-      objname = objname_stor;
+      objname = ObjName(fset, fp.base);
     } else {
       objname = c;
     }
@@ -457,7 +455,7 @@ Status Ofs::Impl::DeleteFile(const OfsPath& fp) {
   if (!fset) {
     return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    Slice objname;
+    std::string objname;
     char* const c = fset->files.Lookup(fp.base);
     if (!c) {
       return Status::NotFound("No such file", fp.base);
@@ -468,7 +466,7 @@ Status Ofs::Impl::DeleteFile(const OfsPath& fp) {
     if (s.ok()) {
       // It's okay if we fail the deletion or the logging of it as we can
       // redo these operations the next time the fileset is mounted.
-      s = osd_->Delete(c);
+      s = osd_->Delete(objname.c_str());
       if (s.ok()) {
         fset->DeletedObject(objname);
       } else {
@@ -488,12 +486,10 @@ Status Ofs::Impl::NewWritableFile(const OfsPath& fp, WritableFile** r) {
   if (!fset) {
     return Status::NotFound("Parent dir not mounted", fp.mntptr);
   } else {
-    std::string objname_stor;
-    Slice objname;
+    std::string objname;
     char* const c = fset->files.Lookup(fp.base);
     if (!c) {
-      objname_stor = ObjName(fset, fp.base);
-      objname = objname_stor;
+      objname = ObjName(fset, fp.base);
     } else {
       objname = c;
     }
@@ -563,19 +559,17 @@ Status Ofs::Impl::CopyFile(const OfsPath& sp, const OfsPath& dp) {
   if (!sset) return Status::NotFound("Parent dir not mounted", sp.mntptr);
   FileSet* const dset = mtable_.Lookup(dp.mntptr);
   if (!dset) return Status::NotFound("Parent dir not mounted", dp.mntptr);
-  Slice sname;
+  std::string sname;
   char* const c = sset->files.Lookup(sp.base);
   if (!c) {
     return Status::NotFound("No such file", sp.base);
   } else {
     sname = c;
   }
-  std::string dname_stor;
-  Slice dname;
+  std::string dname;
   char* const d = dset->files.Lookup(dp.base);
   if (!d) {
-    dname_stor = ObjName(dset, dp.base);
-    dname = dname_stor;
+    dname = ObjName(dset, dp.base);
   } else {
     dname = d;
   }
