@@ -78,6 +78,12 @@ class OFS {
     return ofs_->CopyFile(f1.c_str(), f2.c_str());
   }
 
+  Status Rename(const char* fname1, const char* fname2) {
+    std::string f1 = fsetpath_ + "/" + fname1;
+    std::string f2 = fsetpath_ + "/" + fname2;
+    return ofs_->Rename(f1.c_str(), f2.c_str());
+  }
+
   Status Delete(const char* fname) {
     std::string f = fsetpath_ + "/" + fname;
     return ofs_->DeleteFile(f.c_str());
@@ -203,6 +209,18 @@ TEST(OFS, Copy) {
   ASSERT_OK(Access("b"));
   ASSERT_OK(Delete("a"));
   ASSERT_OK(Delete("b"));
+  unmount_opts_.deletion = true;
+  ASSERT_OK(Unmount());
+}
+
+TEST(OFS, Rename) {
+  ASSERT_OK(Mount());
+  ASSERT_OK(Create("a"));
+  ASSERT_OK(Rename("a", "b"));
+  ASSERT_OK(Access("b"));
+  ASSERT_OK(Delete("b"));
+  ASSERT_TRUE(!Exists("a"));
+  ASSERT_TRUE(!Exists("b"));
   unmount_opts_.deletion = true;
   ASSERT_OK(Unmount());
 }
