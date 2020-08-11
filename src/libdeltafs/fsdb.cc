@@ -85,6 +85,8 @@ FilesystemDbOptions::FilesystemDbOptions()
       detach_dir_on_close(false),
       detach_dir_on_bulk_end(false),
       attach_dir_on_bulk(false),
+      create_dir_on_bulk(false),
+      bulk_use_copy(false),
       enable_io_monitoring(false),
       use_default_logger(false),
       disable_write_ahead_logging(false),
@@ -252,7 +254,10 @@ Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
 }
 
 Status FilesystemDb::BulkInsert(const std::string& dir) {
-  InsertOptions options(kCopy);
+  if (options_.create_dir_on_bulk) {
+    dbenv_->CreateDir(dir.c_str());
+  }
+  InsertOptions options(options_.bulk_use_copy ? kCopy : kRename);
   options.attach_dir_on_start = options_.attach_dir_on_bulk;
   options.detach_dir_on_complete = options_.detach_dir_on_bulk_end;
   return db_->AddL0Tables(options, dir);

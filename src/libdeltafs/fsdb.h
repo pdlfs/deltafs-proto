@@ -108,6 +108,13 @@ struct FilesystemDbOptions {
   // Attach bulk dir on bulk insertion start.
   // Default: false
   bool attach_dir_on_bulk;
+  // Create bulk dir on bulk insertion start forcing a read-write directory
+  // mount.
+  // Default: false
+  bool create_dir_on_bulk;
+  // Use copy instead of rename for bulk insertion.
+  // Default: false
+  bool bulk_use_copy;
   // Collect performance stats for db table files.
   // Default: false
   bool enable_io_monitoring;
