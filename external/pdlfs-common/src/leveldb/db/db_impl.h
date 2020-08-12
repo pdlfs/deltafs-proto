@@ -204,11 +204,11 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // If not zero, will disable the scheduling of compactions that are not simple
+  // If not zero, will disable the scheduling of compactions that are not
   // memtable compactions or manual compactions
   unsigned int bg_compaction_disabled_;
   // If not zero, will stop scheduling any new compactions and will pause the
-  // progress of an ongoing compaction if there is any
+  // progress of an ongoing compaction if there is one
   unsigned int bg_compaction_paused_;
   // Has a background compaction been scheduled and not yet completed?
   bool bg_compaction_scheduled_;
