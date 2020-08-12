@@ -88,6 +88,9 @@ const char* FLAGS_rados_pool = "test";
 const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 #endif
 
+// Number of seconds to sleep between two benchmark steps.
+int FLAGS_step_interval = 5;
+
 // Total number of ranks.
 int FLAGS_comm_size = 1;
 
@@ -951,8 +954,9 @@ class Client {
   }
 
   void Sleep() {
-    if (FLAGS_rank == 0) fprintf(stdout, "sleeping for 5 seconds...\n");
-    SleepForMicroseconds(5 * 1000 * 1000);
+    if (FLAGS_rank == 0)
+      fprintf(stdout, "sleeping for %d seconds...\n", FLAGS_step_interval);
+    SleepForMicroseconds(FLAGS_step_interval * 1000 * 1000);
   }
 
   void RunSteps() {
@@ -1155,6 +1159,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_batched_writes = n;
     } else if (sscanf((*argv)[i], "--batch_size=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_batch_size = n;
+    } else if (sscanf((*argv)[i], "--step_interval=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_step_interval = n;
     } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_num = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
