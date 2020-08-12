@@ -137,7 +137,7 @@ if (DELTAFS_MPI)
     find_package (MPI MODULE REQUIRED)
     string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
 
-    foreach (tgt deltafs_bm_cli deltafs_bm_svr)
+    foreach (tgt deltafs_bm_cli deltafs_bm_svr parallel_compactor)
         add_executable (${tgt} ${tgt}.cc)
         target_link_libraries (${tgt} deltafs)
         foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
@@ -183,7 +183,7 @@ install (FILES
         "${CMAKE_CURRENT_BINARY_DIR}/../../include/deltafs/deltafs_config.h"
         DESTINATION include/deltafs)
 if (DELTAFS_MPI)
-    install (TARGETS deltafs_bm_svr deltafs_bm_cli
+    install (TARGETS deltafs_bm_svr deltafs_bm_cli parallel_compactor
             RUNTIME DESTINATION bin)
 endif()
 
