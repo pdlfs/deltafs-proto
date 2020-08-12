@@ -31,20 +31,88 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/iterator.h"
+#include "pdlfs-common/leveldb/options.h"
+#include "pdlfs-common/leveldb/readonly.h"
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/strutil.h"
+
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 namespace pdlfs {
 namespace {
+DBOptions FLAGS_src_dbopts;
+
+// Compaction input.
+const char* FLAGS_src_prefix = NULL;
+
 // Total number of ranks.
 int FLAGS_comm_size = 1;
 
 // My rank number.
 int FLAGS_rank = 0;
 
+class Mapper {
+ private:
+  Env* env_;  // Not owned by us
+  DB* db_;
+
+  void Open() {
+    DBOptions dbopts = FLAGS_src_dbopts;
+    dbopts.env = env_;
+    char dbid[100];
+    snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
+    std::string dbpath = FLAGS_src_prefix;
+    dbpath += dbid;
+    Status s = ReadonlyDB::Open(dbopts, dbpath, &db_);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  }
+
+ public:
+  explicit Mapper(Env* env) : env_(env), db_(NULL) {
+    if (env_ == NULL) {
+      env_ = Env::Default();
+    }
+  }
+  ~Mapper() { delete db_; }
+
+  void Run() {
+    Open();
+    ReadOptions read_options;
+    read_options.fill_cache = false;
+    Iterator* const iter = db_->NewIterator(read_options);
+    iter->SeekToFirst();
+    while (iter->Valid()) {
+      fprintf(stderr, "%s\n", EscapeString(iter->key()).c_str());
+      iter->Next();
+    }
+    delete iter;
+  }
+};
+
 }  // namespace
 }  // namespace pdlfs
+
+namespace {
+void BM_Main(int* const argc, char*** const argv) {
+  std::string default_src_prefix;
+  if (pdlfs::FLAGS_src_prefix == NULL) {
+    default_src_prefix = "/tmp/deltafs_bm";
+    pdlfs::FLAGS_src_prefix = default_src_prefix.c_str();
+  }
+
+  pdlfs::Mapper mapper(NULL);
+  mapper.Run();
+}
+}  // namespace
 
 int main(int argc, char* argv[]) {
   int rv = MPI_Init(&argc, &argv);
@@ -54,6 +122,7 @@ int main(int argc, char* argv[]) {
   }
   MPI_Comm_size(MPI_COMM_WORLD, &pdlfs::FLAGS_comm_size);
   MPI_Comm_rank(MPI_COMM_WORLD, &pdlfs::FLAGS_rank);
+  BM_Main(&argc, &argv);
   MPI_Finalize();
   return 0;
 }
