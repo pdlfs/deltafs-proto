@@ -214,11 +214,12 @@ class AsyncKVSender {
   }
 
   Status Send(ThreadPool* const pool, const Slice& key, const Slice& val) {
+    in_[i_].extra_buf.resize(0);
     PutLengthPrefixedSlice(&in_[i_].extra_buf, key);
     PutLengthPrefixedSlice(&in_[i_].extra_buf, val);
     in_[i_].contents = in_[i_].extra_buf;
     Status s = stub_->Call(in_[i_], out_);
-    if (s.ok()) {
+    if (!s.ok()) {
       //
     }
     return s;
@@ -409,7 +410,20 @@ class Compactor : public rpc::If {
   }
 
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
-    //
+    Slice input = in.contents;
+    Slice key;
+    Slice val;
+    Status s;
+    if (!GetLengthPrefixedSlice(&input, &key) ||
+        !GetLengthPrefixedSlice(&input, &val)) {
+      s = Status::InvalidArgument(Slice("Bad rpc input"));
+    } else {
+      fprintf(stderr, "%s\n", EscapeString(key).c_str());
+    }
+    char* dst = &out.buf[0];
+    EncodeFixed32(dst, s.err_code());
+    out.contents = Slice(dst, 4);
+    return Status::OK();
   }
 
   void Run() {
@@ -447,7 +461,7 @@ class Compactor : public rpc::If {
     Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
     iter->SeekToFirst();
     while (iter->Valid()) {
-      fprintf(stderr, "%s\n", EscapeString(iter->key()).c_str());
+      async_kv_senders_[0]->Send(sndpool_, iter->key(), iter->value());
       iter->Next();
     }
     delete iter;
