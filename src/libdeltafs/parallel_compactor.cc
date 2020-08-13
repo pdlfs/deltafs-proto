@@ -87,101 +87,104 @@ int FLAGS_comm_size = 1;
 // My rank number.
 int FLAGS_rank = 0;
 
+void PrintWarnings() {
+#if defined(__GNUC__) && !defined(__OPTIMIZE__)
+  fprintf(stdout, "WARNING: C++ optimization disabled\n");
+#endif
+#ifndef NDEBUG
+  fprintf(stdout, "WARNING: C++ assertions are on\n");
+#endif
+
+  // See if snappy is working by attempting to compress a compressible string
+  const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+  std::string compressed;
+  if (!port::Snappy_Compress(text, sizeof(text), &compressed)) {
+    fprintf(stdout, "WARNING: Snappy compression is not enabled\n");
+  } else if (compressed.size() >= sizeof(text)) {
+    fprintf(stdout, "WARNING: Snappy compression is not effective\n");
+  }
+}
+
+#if defined(PDLFS_OS_LINUX)
+Slice TrimSpace(Slice s) {
+  size_t start = 0;
+  while (start < s.size() && isspace(s[start])) {
+    start++;
+  }
+  size_t limit = s.size();
+  while (limit > start && isspace(s[limit - 1])) {
+    limit--;
+  }
+
+  Slice r = s;
+  r.remove_suffix(s.size() - limit);
+  r.remove_prefix(start);
+  return r;
+}
+#endif
+
+void PrintEnvironment() {
+#if defined(PDLFS_OS_LINUX)
+  time_t now = time(NULL);
+  fprintf(stdout, "Date:       %s", ctime(&now));  // ctime() adds newline
+
+  FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
+  if (cpuinfo != NULL) {
+    char line[1000];
+    int num_cpus = 0;
+    std::string cpu_type;
+    std::string cache_size;
+    while (fgets(line, sizeof(line), cpuinfo) != NULL) {
+      const char* sep = strchr(line, ':');
+      if (sep == NULL) {
+        continue;
+      }
+      Slice key = TrimSpace(Slice(line, sep - 1 - line));
+      Slice val = TrimSpace(Slice(sep + 1));
+      if (key == "model name") {
+        ++num_cpus;
+        cpu_type = val.ToString();
+      } else if (key == "cache size") {
+        cache_size = val.ToString();
+      }
+    }
+    fclose(cpuinfo);
+    fprintf(stdout, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
+    fprintf(stdout, "CPUCache:   %s\n", cache_size.c_str());
+  }
+#endif
+}
+
+#if defined(PDLFS_RADOS)
+void PrintRadosSettings() {
+  fprintf(stdout, "Disable async io:   %d\n", FLAGS_rados_force_syncio);
+  fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
+  fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
+  fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
+  fprintf(stdout, "Conf: %s\n", FLAGS_rados_conf);
+}
+#endif
+
+void PrintHeader() {
+  PrintWarnings();
+  PrintEnvironment();
+  fprintf(stdout, "DELTAFS PARALLEL COMPACTOR\n");
+  fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+#if defined(PDLFS_RADOS)
+  fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
+  if (FLAGS_env_use_rados) PrintRadosSettings();
+#endif
+  fprintf(stdout, "------------------------------------------------\n");
+}
+
 class Compactor {
  private:
+  DB* dstdb_;
   DB* srcdb_;
 #if defined(PDLFS_RADOS)
   rados::RadosConnMgr* mgr_;
   Env* myenv_;
 #endif
-
-  static void PrintWarnings() {
-#if defined(__GNUC__) && !defined(__OPTIMIZE__)
-    fprintf(stdout, "WARNING: C++ optimization disabled\n");
-#endif
-#ifndef NDEBUG
-    fprintf(stdout, "WARNING: C++ assertions are on\n");
-#endif
-
-    // See if snappy is working by attempting to compress a compressible string
-    const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
-    std::string compressed;
-    if (!port::Snappy_Compress(text, sizeof(text), &compressed)) {
-      fprintf(stdout, "WARNING: Snappy compression is not enabled\n");
-    } else if (compressed.size() >= sizeof(text)) {
-      fprintf(stdout, "WARNING: Snappy compression is not effective\n");
-    }
-  }
-
-#if defined(PDLFS_OS_LINUX)
-  static Slice TrimSpace(Slice s) {
-    size_t start = 0;
-    while (start < s.size() && isspace(s[start])) {
-      start++;
-    }
-    size_t limit = s.size();
-    while (limit > start && isspace(s[limit - 1])) {
-      limit--;
-    }
-
-    Slice r = s;
-    r.remove_suffix(s.size() - limit);
-    r.remove_prefix(start);
-    return r;
-  }
-#endif
-
-  static void PrintEnvironment() {
-#if defined(PDLFS_OS_LINUX)
-    time_t now = time(NULL);
-    fprintf(stdout, "Date:       %s", ctime(&now));  // ctime() adds newline
-
-    FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
-    if (cpuinfo != NULL) {
-      char line[1000];
-      int num_cpus = 0;
-      std::string cpu_type;
-      std::string cache_size;
-      while (fgets(line, sizeof(line), cpuinfo) != NULL) {
-        const char* sep = strchr(line, ':');
-        if (sep == NULL) {
-          continue;
-        }
-        Slice key = TrimSpace(Slice(line, sep - 1 - line));
-        Slice val = TrimSpace(Slice(sep + 1));
-        if (key == "model name") {
-          ++num_cpus;
-          cpu_type = val.ToString();
-        } else if (key == "cache size") {
-          cache_size = val.ToString();
-        }
-      }
-      fclose(cpuinfo);
-      fprintf(stdout, "CPU:        %d * %s\n", num_cpus, cpu_type.c_str());
-      fprintf(stdout, "CPUCache:   %s\n", cache_size.c_str());
-    }
-#endif
-  }
-
-#if defined(PDLFS_RADOS)
-  static void PrintRadosSettings() {
-    fprintf(stdout, "Disable async io:   %d\n", FLAGS_rados_force_syncio);
-    fprintf(stdout, "Cluster name:       %s\n", FLAGS_rados_cluster_name);
-    fprintf(stdout, "Cli name:           %s\n", FLAGS_rados_cli_name);
-    fprintf(stdout, "Storage pool name:  %s\n", FLAGS_rados_pool);
-    fprintf(stdout, "Conf: %s\n", FLAGS_rados_conf);
-  }
-#endif
-
-  static void PrintHeader() {
-    PrintWarnings();
-    PrintEnvironment();
-#if defined(PDLFS_RADOS)
-    fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
-    if (FLAGS_env_use_rados) PrintRadosSettings();
-#endif
-    fprintf(stdout, "------------------------------------------------\n");
-  }
 
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
@@ -228,6 +231,9 @@ class Compactor {
   }
 
   void Open() {
+    if (FLAGS_rank == 0) {
+      PrintHeader();
+    }
     Env* const env = OpenEnv();
     DBOptions dbopts = FLAGS_src_dbopts;
     dbopts.env = env;
@@ -244,7 +250,7 @@ class Compactor {
   }
 
  public:
-  Compactor() : srcdb_(NULL) {
+  Compactor() : dstdb_(NULL), srcdb_(NULL) {
 #if defined(PDLFS_RADOS)
     mgr_ = NULL;
     myenv_ = NULL;
@@ -252,6 +258,7 @@ class Compactor {
   }
 
   ~Compactor() {
+    delete dstdb_;
     delete srcdb_;
 #if defined(PDLFS_RADOS)
     delete myenv_;
