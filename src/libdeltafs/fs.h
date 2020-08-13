@@ -46,14 +46,13 @@
 #endif
 namespace pdlfs {
 
-struct FilesystemDir;
+struct FilesystemDir;  // Opaque handle to an internal Dir structure of the FS
 struct FilesystemDbStats;
 struct DirIndexOptions;
 struct DirId;
-struct User;
 
-class FilesystemDb;
 class DirIndex;
+class FilesystemDb;
 
 // Options for controlling the filesystem.
 struct FilesystemOptions {
@@ -63,7 +62,6 @@ struct FilesystemOptions {
   bool skip_name_collision_checks;
   bool skip_lease_due_checks;
   bool skip_perm_checks;
-  bool rdonly;
   // Total number of virtual servers
   int vsrvs;
   // Number of servers

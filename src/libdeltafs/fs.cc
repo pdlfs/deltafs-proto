@@ -670,7 +670,6 @@ FilesystemOptions::FilesystemOptions()
       skip_name_collision_checks(false),
       skip_lease_due_checks(false),
       skip_perm_checks(false),
-      rdonly(false),
       vsrvs(1),
       nsrvs(1),
       srvid(0),
