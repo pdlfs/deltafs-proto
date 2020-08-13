@@ -31,35 +31,50 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "fsdb.h"
+#include "fsrdo.h"
+
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/iterator.h"
-#include "pdlfs-common/leveldb/options.h"
-#include "pdlfs-common/leveldb/readonly.h"
 
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
 
+#include <arpa/inet.h>
+#include <errno.h>
+#include <ifaddrs.h>
 #include <mpi.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_connmgr.h"
 #endif
 #if defined(PDLFS_OS_LINUX)
 #include <ctype.h>
-#include <sys/resource.h>
-#include <sys/time.h>
 #include <time.h>
 #endif
 
 namespace pdlfs {
 namespace {
-// Options for the db at the input end.
-DBOptions FLAGS_src_dbopts;
+// Options for the db at the compaction input end.
+FilesystemReadonlyDbOptions FLAGS_src_dbopts;
 
-// Compaction input.
+// Compaction input dir.
 const char* FLAGS_src_prefix = NULL;
+
+// Options for the db at the compaction output end.
+FilesystemDbOptions FLAGS_dst_dbopts;
+
+// Compaction output dir.
+const char* FLAGS_dst_prefix = NULL;
+
+// Clean up the db dir at the output end on bootstrapping.
+bool FLAGS_dst_force_cleaning = false;
 
 // True iff rados env should be used.
 bool FLAGS_env_use_rados = false;
@@ -80,6 +95,13 @@ const char* FLAGS_rados_pool = "test";
 // Rados cluster configuration file.
 const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 #endif
+
+// For hosts with multiple ip addresses, use the one starting with the
+// specified prefix.
+const char* FLAGS_ip_prefix = "127.0.0.1";
+
+// Print the ip addresses of all ranks for debugging.
+bool FLAGS_print_ips = false;
 
 // Total number of ranks.
 int FLAGS_comm_size = 1;
@@ -177,14 +199,84 @@ void PrintHeader() {
   fprintf(stdout, "------------------------------------------------\n");
 }
 
-class Compactor {
+class AsyncSender {
  private:
-  DB* dstdb_;
-  DB* srcdb_;
+  rpc::If* stub_;
+  rpc::If::Message in_[2], out_;
+  size_t i_;
+
+ public:
+  explicit AsyncSender(rpc::If* stub) : stub_(stub), i_(0) {}
+  ~AsyncSender() { delete stub_; }
+
+  Status Flush(ThreadPool* const pool) {  ///
+    return Status::OK();
+  }
+
+  Status Send(ThreadPool* const pool, const Slice& key, const Slice& val) {
+    PutLengthPrefixedSlice(&in_[i_].extra_buf, key);
+    PutLengthPrefixedSlice(&in_[i_].extra_buf, val);
+    in_[i_].contents = in_[i_].extra_buf;
+    Status s = stub_->Call(in_[i_], out_);
+    if (s.ok()) {
+      //
+    }
+    return s;
+  }
+};
+
+class Compactor : public rpc::If {
+ private:
+  RPC* rpc_;
+  AsyncSender** sndarray_;
+  ThreadPool* rcvpool_;
+  ThreadPool* sndpool_;
+  FilesystemReadonlyDb* srcdb_;
+  FilesystemDb* dstdb_;
 #if defined(PDLFS_RADOS)
   rados::RadosConnMgr* mgr_;
   Env* myenv_;
 #endif
+
+  static const char* PickAddr(char* dst) {
+    const size_t prefix_len = strlen(FLAGS_ip_prefix);
+
+    struct ifaddrs *ifaddr, *ifa;
+    int rv = getifaddrs(&ifaddr);
+    if (rv != 0) {
+      fprintf(stderr, "%d: Cannot getifaddrs: %s\n", FLAGS_rank,
+              strerror(errno));
+      MPI_Finalize();
+      exit(1);
+    }
+
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+      if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) {
+        continue;
+      }
+      char tmp[INET_ADDRSTRLEN];
+      if (strncmp(
+              inet_ntop(AF_INET,
+                        &reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr)
+                             ->sin_addr,
+                        tmp, sizeof(tmp)),
+              FLAGS_ip_prefix, prefix_len) == 0) {
+        strcpy(dst, tmp);
+        break;
+      }
+    }
+
+    freeifaddrs(ifaddr);
+
+    if (!dst[0]) {
+      fprintf(stderr, "%d: Cannot find a matching addr: %s\n", FLAGS_rank,
+              FLAGS_ip_prefix);
+      MPI_Finalize();
+      exit(1);
+    }
+
+    return dst;
+  }
 
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
@@ -230,23 +322,53 @@ class Compactor {
     }
   }
 
-  void Open() {
-    if (FLAGS_rank == 0) {
-      PrintHeader();
-    }
+  void OpenDbs() {
     Env* const env = OpenEnv();
-    DBOptions dbopts = FLAGS_src_dbopts;
-    dbopts.env = env;
     char dbid[100];
+    srcdb_ = new FilesystemReadonlyDb(FLAGS_src_dbopts, env);
     snprintf(dbid, sizeof(dbid), "/r%d", FLAGS_rank);
     std::string dbpath = FLAGS_src_prefix;
     dbpath += dbid;
-    Status s = ReadonlyDB::Open(dbopts, dbpath, &srcdb_);
+    Status s = srcdb_->Open(dbpath);
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
               s.ToString().c_str());
       MPI_Abort(MPI_COMM_WORLD, 1);
     }
+    if (!FLAGS_env_use_rados) {
+      env->CreateDir(FLAGS_dst_prefix);
+    }
+    dstdb_ = new FilesystemDb(FLAGS_dst_dbopts, env);
+    dbpath = FLAGS_dst_prefix;
+    dbpath += dbid;
+    if (FLAGS_dst_force_cleaning) {
+      FilesystemDb::DestroyDb(dbpath, env);
+    }
+    s = dstdb_->Open(dbpath);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  }
+
+  int OpenPort(const char* ip) {
+    RPCOptions rpcopts;
+    rpcopts.num_rpc_threads = 1;
+    rpcopts.mode = rpc::kServerClient;
+    rpcopts.impl = rpc::kSocketRPC;
+    rpcopts.uri = "udp://";
+    rpcopts.uri += ip;
+    rpcopts.fs = this;
+    rpc_ = RPC::Open(rpcopts);
+    Status s = rpc_->Start();
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open port: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Finalize();
+      exit(1);
+    }
+    return rpc_->GetPort();
   }
 
  public:
@@ -258,6 +380,7 @@ class Compactor {
   }
 
   ~Compactor() {
+    delete rpc_;
     delete dstdb_;
     delete srcdb_;
 #if defined(PDLFS_RADOS)
@@ -266,11 +389,42 @@ class Compactor {
 #endif
   }
 
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
+    //
+  }
+
   void Run() {
-    Open();
+    if (FLAGS_rank == 0) {
+      PrintHeader();
+    }
+    OpenDbs();
+    char ip_str[INET_ADDRSTRLEN];
+    memset(ip_str, 0, sizeof(ip_str));
+    unsigned myip = inet_addr(PickAddr(ip_str));
+    unsigned short port = OpenPort(ip_str);
+    MPI_Barrier(MPI_COMM_WORLD);
+    std::string addr_map;
+    addr_map.resize(FLAGS_comm_size * 6, 0);
+    unsigned short* const port_info =
+        reinterpret_cast<unsigned short*>(&addr_map[0]);
+    unsigned* const ip_info =
+        reinterpret_cast<unsigned*>(&addr_map[2 * FLAGS_comm_size]);
+    MPI_Allgather(&port, 1, MPI_UNSIGNED_SHORT, port_info, 1,
+                  MPI_UNSIGNED_SHORT, MPI_COMM_WORLD);
+    MPI_Allgather(&myip, 1, MPI_UNSIGNED, ip_info, 1, MPI_UNSIGNED,
+                  MPI_COMM_WORLD);
+    if (FLAGS_print_ips) {
+      puts("Dumping fs uri(s) >>>");
+      for (int i = 0; i < FLAGS_comm_size; i++) {
+        struct in_addr tmp_addr;
+        tmp_addr.s_addr = ip_info[i];
+        fprintf(stdout, "%s:%hu\n", inet_ntoa(tmp_addr), port_info[i]);
+      }
+      fflush(stdout);
+    }
     ReadOptions read_options;
     read_options.fill_cache = false;
-    Iterator* const iter = srcdb_->NewIterator(read_options);
+    Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
     iter->SeekToFirst();
     while (iter->Valid()) {
       fprintf(stderr, "%s\n", EscapeString(iter->key()).c_str());
@@ -285,6 +439,18 @@ class Compactor {
 
 namespace {
 void BM_Main(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_src_dbopts.use_default_logger = true;
+  pdlfs::FLAGS_src_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_dst_dbopts.use_default_logger = true;
+  pdlfs::FLAGS_dst_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_dst_force_cleaning = true;
+
+  std::string default_dst_prefix;
+  if (pdlfs::FLAGS_dst_prefix == NULL) {
+    default_dst_prefix = "/tmp/deltafs_bm_out";
+    pdlfs::FLAGS_dst_prefix = default_dst_prefix.c_str();
+  }
+
   std::string default_src_prefix;
   if (pdlfs::FLAGS_src_prefix == NULL) {
     default_src_prefix = "/tmp/deltafs_bm";
