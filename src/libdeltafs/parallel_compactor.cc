@@ -199,15 +199,15 @@ void PrintHeader() {
   fprintf(stdout, "------------------------------------------------\n");
 }
 
-class AsyncSender {
+class AsyncKVSender {
  private:
-  rpc::If* stub_;
+  rpc::If* stub_;  // Owned by us
   rpc::If::Message in_[2], out_;
   size_t i_;
 
  public:
-  explicit AsyncSender(rpc::If* stub) : stub_(stub), i_(0) {}
-  ~AsyncSender() { delete stub_; }
+  explicit AsyncKVSender(rpc::If* stub) : stub_(stub), i_(0) {}
+  ~AsyncKVSender() { delete stub_; }
 
   Status Flush(ThreadPool* const pool) {  ///
     return Status::OK();
@@ -228,7 +228,7 @@ class AsyncSender {
 class Compactor : public rpc::If {
  private:
   RPC* rpc_;
-  AsyncSender** sndarray_;
+  AsyncKVSender** async_kv_senders_;
   ThreadPool* rcvpool_;
   ThreadPool* sndpool_;
   FilesystemReadonlyDb* srcdb_;
@@ -371,8 +371,23 @@ class Compactor : public rpc::If {
     return rpc_->GetPort();
   }
 
+  void OpenSenders(const unsigned short* const port_info,
+                   const unsigned* const ip_info) {
+    async_kv_senders_ = new AsyncKVSender*[FLAGS_comm_size];
+    struct in_addr tmp_addr;
+    char tmp_uri[100];
+    for (int i = 0; i < FLAGS_comm_size; i++) {
+      tmp_addr.s_addr = ip_info[i];
+      snprintf(tmp_uri, sizeof(tmp_uri), "udp://%s:%hu", inet_ntoa(tmp_addr),
+               port_info[i]);
+      rpc::If* c = rpc_->OpenStubFor(tmp_uri);
+      async_kv_senders_[i] = new AsyncKVSender(c);
+    }
+  }
+
  public:
-  Compactor() : dstdb_(NULL), srcdb_(NULL) {
+  Compactor()
+      : rpc_(NULL), async_kv_senders_(NULL), dstdb_(NULL), srcdb_(NULL) {
 #if defined(PDLFS_RADOS)
     mgr_ = NULL;
     myenv_ = NULL;
@@ -380,6 +395,10 @@ class Compactor : public rpc::If {
   }
 
   ~Compactor() {
+    for (int i = 0; i < FLAGS_comm_size; i++) {
+      delete async_kv_senders_[i];
+    }
+    delete[] async_kv_senders_;
     delete rpc_;
     delete dstdb_;
     delete srcdb_;
@@ -422,6 +441,7 @@ class Compactor : public rpc::If {
       }
       fflush(stdout);
     }
+    OpenSenders(port_info, ip_info);
     ReadOptions read_options;
     read_options.fill_cache = false;
     Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
