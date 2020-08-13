@@ -97,6 +97,18 @@ const char* FLAGS_rados_pool = "test";
 const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 #endif
 
+// Use udp.
+bool FLAGS_udp = false;
+
+// Max incoming message size for UDP in bytes.
+size_t FLAGS_udp_max_msgsz = 1432;
+
+// UDP sender buffer size in bytes.
+int FLAGS_udp_sndbuf = 512 * 1024;
+
+// UDP receiver buffer size in bytes.
+int FLAGS_udp_rcvbuf = 512 * 1024;
+
 // For hosts with multiple ip addresses, use the one starting with the
 // specified prefix.
 const char* FLAGS_ip_prefix = "127.0.0.1";
@@ -109,6 +121,12 @@ int FLAGS_comm_size = 1;
 
 // My rank number.
 int FLAGS_rank = 0;
+
+// Number of rpc worker threads to run.
+int FLAGS_rpc_worker_threads = 0;
+
+// Number of rpc threads to run.
+int FLAGS_rpc_threads = 1;
 
 void PrintWarnings() {
 #if defined(__GNUC__) && !defined(__OPTIMIZE__)
@@ -356,10 +374,17 @@ class Compactor : public rpc::If {
 
   int OpenPort(const char* ip) {
     RPCOptions rpcopts;
-    rpcopts.num_rpc_threads = 1;
+    rpcopts.udp_max_unexpected_msgsz = FLAGS_udp_max_msgsz;
+    rpcopts.udp_srv_sndbuf = FLAGS_udp_sndbuf;
+    rpcopts.udp_srv_rcvbuf = FLAGS_udp_rcvbuf;
+    if (FLAGS_rpc_worker_threads != 0) {
+      rcvpool_ = ThreadPool::NewFixed(FLAGS_rpc_worker_threads);
+    }
+    rpcopts.extra_workers = rcvpool_;
+    rpcopts.num_rpc_threads = FLAGS_rpc_threads;
     rpcopts.mode = rpc::kServerClient;
     rpcopts.impl = rpc::kSocketRPC;
-    rpcopts.uri = "udp://";
+    rpcopts.uri = FLAGS_udp ? "udp://" : "tcp://";
     rpcopts.uri += ip;
     rpcopts.fs = this;
     rpc_ = RPC::Open(rpcopts);
@@ -380,8 +405,8 @@ class Compactor : public rpc::If {
     char tmp_uri[100];
     for (int i = 0; i < FLAGS_comm_size; i++) {
       tmp_addr.s_addr = ip_info[i];
-      snprintf(tmp_uri, sizeof(tmp_uri), "udp://%s:%hu", inet_ntoa(tmp_addr),
-               port_info[i]);
+      snprintf(tmp_uri, sizeof(tmp_uri), "%s://%s:%hu",
+               FLAGS_udp ? "udp" : "tcp", inet_ntoa(tmp_addr), port_info[i]);
       rpc::If* c = rpc_->OpenStubFor(tmp_uri);
       async_kv_senders_[i] = new AsyncKVSender(c);
     }
@@ -410,7 +435,11 @@ class Compactor : public rpc::If {
 
  public:
   Compactor()
-      : rpc_(NULL), async_kv_senders_(NULL), dstdb_(NULL), srcdb_(NULL) {
+      : rpc_(NULL),
+        async_kv_senders_(NULL),
+        rcvpool_(NULL),
+        srcdb_(NULL),
+        dstdb_(NULL) {
 #if defined(PDLFS_RADOS)
     mgr_ = NULL;
     myenv_ = NULL;
@@ -423,8 +452,9 @@ class Compactor : public rpc::If {
     }
     delete[] async_kv_senders_;
     delete rpc_;
-    delete dstdb_;
+    delete rcvpool_;
     delete srcdb_;
+    delete dstdb_;
 #if defined(PDLFS_RADOS)
     delete myenv_;
     delete mgr_;
@@ -501,6 +531,52 @@ void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_dst_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dst_dbopts.ReadFromEnv();
   pdlfs::FLAGS_dst_force_cleaning = true;
+  pdlfs::FLAGS_udp = true;
+
+  for (int i = 1; i < (*argc); i++) {
+    int n;
+    char junk;
+    if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_threads = n;
+    } else if (sscanf((*argv)[i], "--rpc_worker_threads=%d%c", &n, &junk) ==
+               1) {
+      pdlfs::FLAGS_rpc_worker_threads = n;
+    } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_print_ips = n;
+    } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_env_use_rados = n;
+    } else if (sscanf((*argv)[i], "--rados_force_syncio=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_rados_force_syncio = n;
+    } else if (sscanf((*argv)[i], "--udp_sndbuf=%dK%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_sndbuf = n << 10;
+    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%dK%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_rcvbuf = n << 10;
+    } else if (sscanf((*argv)[i], "--udp_max_msgsz=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_max_msgsz = n;
+    } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_udp = n;
+    } else if (sscanf((*argv)[i], "--dst_force_cleaning=%d%c", &n, &junk) ==
+                   1 &&
+               (n == 0 || n == 1)) {
+      pdlfs::FLAGS_dst_force_cleaning = n;
+    } else if (strncmp((*argv)[i], "--dst_dir=", 10) == 0) {
+      pdlfs::FLAGS_dst_prefix = (*argv)[i] + 10;
+    } else if (strncmp((*argv)[i], "--src_dir=", 10) == 0) {
+      pdlfs::FLAGS_src_prefix = (*argv)[i] + 10;
+    } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
+      pdlfs::FLAGS_ip_prefix = (*argv)[i] + 5;
+    } else {
+      if (pdlfs::FLAGS_rank == 0) {
+        fprintf(stderr, "%s:\nInvalid flag: '%s'\n", (*argv)[0], (*argv)[i]);
+      }
+      MPI_Finalize();
+      exit(1);
+    }
+  }
 
   std::string default_dst_prefix;
   if (pdlfs::FLAGS_dst_prefix == NULL) {
