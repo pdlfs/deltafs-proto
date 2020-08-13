@@ -44,8 +44,8 @@ class DB;
 class Env;
 class FilterPolicy;
 
-struct ReadonlyDbOptions {
-  ReadonlyDbOptions();
+struct FilesystemReadonlyDbOptions {
+  FilesystemReadonlyDbOptions();
   // Read options from env.
   void ReadFromEnv();
   // Bloom filter bits per key.
@@ -60,17 +60,17 @@ struct ReadonlyDbOptions {
   bool use_default_logger;
 };
 
-class ReadonlyDb {
+class FilesystemReadonlyDb {
  public:
-  ReadonlyDb(const ReadonlyDbOptions& options, Env* base);
+  FilesystemReadonlyDb(const FilesystemReadonlyDbOptions& options, Env* base);
   DB* TEST_GetDbRep() { return db_; }
   Status Open(const std::string& dbloc);
-  ~ReadonlyDb();
+  ~FilesystemReadonlyDb();
 
  private:
-  void operator=(const ReadonlyDb& other);
-  ReadonlyDb(const ReadonlyDb&);
-  ReadonlyDbOptions options_;
+  void operator=(const FilesystemReadonlyDb&);
+  FilesystemReadonlyDb(const FilesystemReadonlyDb& other);
+  FilesystemReadonlyDbOptions options_;
   Env* env_;
   const FilterPolicy* filter_policy_;
   Cache* table_cache_;

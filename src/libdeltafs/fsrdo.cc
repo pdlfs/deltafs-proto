@@ -43,7 +43,7 @@
 
 namespace pdlfs {
 
-ReadonlyDbOptions::ReadonlyDbOptions()
+FilesystemReadonlyDbOptions::FilesystemReadonlyDbOptions()
     : filter_bits_per_key(10),
       detach_dir_on_close(false),
       use_default_logger(false) {}
@@ -60,11 +60,11 @@ void ReadBoolFromEnv(const char* key, bool* dst) {
 }  // namespace
 
 // Read options from system env. All env keys start with "DELTAFS_Rr_".
-void ReadonlyDbOptions::ReadFromEnv() {
+void FilesystemReadonlyDbOptions::ReadFromEnv() {
   ReadBoolFromEnv("DELTAFS_Rr_use_default_logger", &use_default_logger);
 }
 
-Status ReadonlyDb::Open(const std::string& dbloc) {
+Status FilesystemReadonlyDb::Open(const std::string& dbloc) {
   DBOptions dbopts;
   dbopts.create_if_missing = false;
   dbopts.detach_dir_on_close = options_.detach_dir_on_close;
@@ -76,7 +76,8 @@ Status ReadonlyDb::Open(const std::string& dbloc) {
   return ReadonlyDB::Open(dbopts, dbloc, &db_);
 }
 
-ReadonlyDb::ReadonlyDb(const ReadonlyDbOptions& options, Env* base)
+FilesystemReadonlyDb::FilesystemReadonlyDb(
+    const FilesystemReadonlyDbOptions& options, Env* base)
     : options_(options),
       env_(base),
       filter_policy_(options_.filter_bits_per_key != 0
@@ -86,7 +87,7 @@ ReadonlyDb::ReadonlyDb(const ReadonlyDbOptions& options, Env* base)
       block_cache_(NewLRUCache(0)),
       db_(NULL) {}
 
-ReadonlyDb::~ReadonlyDb() {
+FilesystemReadonlyDb::~FilesystemReadonlyDb() {
   delete db_;
   delete block_cache_;
   delete table_cache_;
