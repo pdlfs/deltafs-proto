@@ -33,9 +33,9 @@
  */
 #include "fsrdo.h"
 
-#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/options.h"
+#include "pdlfs-common/leveldb/readonly.h"
 
 #include "pdlfs-common/cache.h"
 #include "pdlfs-common/env.h"
@@ -73,7 +73,7 @@ Status ReadonlyDb::Open(const std::string& dbloc) {
   dbopts.filter_policy = filter_policy_;
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.env = env_;
-  return DB::Open(dbopts, dbloc, &db_);
+  return ReadonlyDB::Open(dbopts, dbloc, &db_);
 }
 
 ReadonlyDb::ReadonlyDb(const ReadonlyDbOptions& options, Env* base)
