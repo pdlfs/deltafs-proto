@@ -39,6 +39,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
@@ -386,6 +387,27 @@ class Compactor : public rpc::If {
     }
   }
 
+  void MapReduce() {
+    DirIndexOptions giga_options;
+    giga_options.num_virtual_servers = FLAGS_comm_size;
+    giga_options.num_servers = FLAGS_comm_size;
+    DirIndex* const giga = new DirIndex(0, &giga_options);
+    ReadOptions read_options;
+    read_options.fill_cache = false;
+    Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
+    iter->SeekToFirst();
+    while (iter->Valid()) {
+      const Slice key = iter->key();
+      assert(key.size() > 16);
+      Slice name(key.data() + 16, key.size() - 16);
+      int i = giga->SelectServer(name);
+      async_kv_senders_[i]->Send(sndpool_, key, iter->value());
+      iter->Next();
+    }
+    delete iter;
+    delete giga;
+  }
+
  public:
   Compactor()
       : rpc_(NULL), async_kv_senders_(NULL), dstdb_(NULL), srcdb_(NULL) {
@@ -429,6 +451,7 @@ class Compactor : public rpc::If {
   void Run() {
     if (FLAGS_rank == 0) {
       PrintHeader();
+      puts("Bootstrapping...");
     }
     OpenDbs();
     char ip_str[INET_ADDRSTRLEN];
@@ -456,15 +479,15 @@ class Compactor : public rpc::If {
       fflush(stdout);
     }
     OpenSenders(port_info, ip_info);
-    ReadOptions read_options;
-    read_options.fill_cache = false;
-    Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
-    iter->SeekToFirst();
-    while (iter->Valid()) {
-      async_kv_senders_[0]->Send(sndpool_, iter->key(), iter->value());
-      iter->Next();
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (FLAGS_rank == 0) {
+      puts("Running...");
     }
-    delete iter;
+    MapReduce();
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (FLAGS_rank == 0) {
+      puts("Done!");
+    }
   }
 };
 
