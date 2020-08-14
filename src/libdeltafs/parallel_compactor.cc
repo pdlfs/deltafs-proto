@@ -226,7 +226,7 @@ void PrintHeader() {
 }
 
 template <typename T>
-static bool GetFixed32(Slice* input, T* rv) {
+inline bool GetFixed32(Slice* input, T* rv) {
   if (input->size() < 4) return false;
   *rv = DecodeFixed32(input->data());
   input->remove_prefix(4);
@@ -560,20 +560,19 @@ class Compactor : public rpc::If {
   }
 
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
-    Slice input = in.contents;
-    Slice key;
-    Slice val;
-    int n = 0;
     Status s;
+    int n = 0;
+    Slice input = in.contents;
     if (!GetFixed32(&input, &n)) {
       s = Status::InvalidArgument("Bad rpc request header");
     } else {
+      Slice key;
+      Slice val;
       for (int i = 0; i < n; i++) {
         if (!GetLengthPrefixedSlice(&input, &key) ||
             !GetLengthPrefixedSlice(&input, &val)) {
           s = Status::InvalidArgument("Bad kv pair");
         } else {
-          fprintf(stderr, "%s\n", EscapeString(key).c_str());
           WriteOptions write_options;
           s = dstdb_->TEST_GetDbRep()->Put(write_options, key, val);
         }
