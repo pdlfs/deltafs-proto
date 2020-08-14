@@ -40,6 +40,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
@@ -121,6 +122,12 @@ int FLAGS_comm_size = 1;
 
 // My rank number.
 int FLAGS_rank = 0;
+
+// Min number of kv pairs that must be buffered before sending an rpc.
+int FLAGS_rpc_batch_min = 1;
+
+// Max number of kv pairs that can be buffered.
+int FLAGS_rpc_batch_max = 2;
 
 // Number of rpc worker threads to run.
 int FLAGS_rpc_worker_threads = 0;
@@ -218,28 +225,117 @@ void PrintHeader() {
   fprintf(stdout, "------------------------------------------------\n");
 }
 
+template <typename T>
+static bool GetFixed32(Slice* input, T* rv) {
+  if (input->size() < 4) return false;
+  *rv = DecodeFixed32(input->data());
+  input->remove_prefix(4);
+  return true;
+}
+
 class AsyncKVSender {
  private:
+  port::Mutex mu_;
+  port::CondVar cv_;
+  bool scheduled_;  // Ture if there is an outstanding rpc pending result
+  Status status_;
   rpc::If* stub_;  // Owned by us
-  rpc::If::Message in_[2], out_;
-  size_t i_;
+  rpc::If::Message in_, out_;
+  std::string buf_;
+  size_t n_;
 
- public:
-  explicit AsyncKVSender(rpc::If* stub) : stub_(stub), i_(0) {}
-  ~AsyncKVSender() { delete stub_; }
-
-  Status Flush(ThreadPool* const pool) {  ///
-    return Status::OK();
+  static void SenderCall(void* arg) {
+    AsyncKVSender* s = reinterpret_cast<AsyncKVSender*>(arg);
+    MutexLock ml(&s->mu_);
+    s->SendIt();
   }
 
-  Status Send(ThreadPool* const pool, const Slice& key, const Slice& val) {
-    in_[i_].extra_buf.resize(0);
-    PutLengthPrefixedSlice(&in_[i_].extra_buf, key);
-    PutLengthPrefixedSlice(&in_[i_].extra_buf, val);
-    in_[i_].contents = in_[i_].extra_buf;
-    Status s = stub_->Call(in_[i_], out_);
-    if (!s.ok()) {
-      //
+  void SendIt() {
+    mu_.AssertHeld();
+    assert(scheduled_);
+    mu_.Unlock();
+    Status s = stub_->Call(in_, out_);
+    if (s.ok()) {
+      Slice reply = out_.contents;
+      uint32_t err_code = 0;
+      if (!GetFixed32(&reply, &err_code)) {
+        s = Status::Corruption("Bad rpc reply header");
+      } else if (err_code != 0) {
+        s = Status::FromCode(err_code);
+      }
+    }
+    mu_.Lock();
+    scheduled_ = false;
+    cv_.SignalAll();
+    if (!s.ok() && status_.ok()) {
+      status_ = s;
+    }
+  }
+
+  void Schedule(ThreadPool* pool) {
+    mu_.AssertHeld();
+    assert(!scheduled_);
+    scheduled_ = true;
+    EncodeFixed32(&buf_[0], n_);
+    in_.extra_buf.swap(buf_);
+    in_.contents = in_.extra_buf;
+    buf_.clear();
+    PutFixed32(&buf_, 0);
+    n_ = 0;
+    if (pool != NULL) {
+      pool->Schedule(AsyncKVSender::SenderCall, this);
+    } else {
+      // Do it using the caller's context
+      SendIt();
+    }
+  }
+
+ public:
+  explicit AsyncKVSender(rpc::If* stub)
+      : cv_(&mu_), scheduled_(false), stub_(stub), n_(0) {
+    PutFixed32(&buf_, 0);
+  }
+  ~AsyncKVSender() { delete stub_; }
+
+  Status Flush(ThreadPool* pool) {
+    Status s;
+    MutexLock ml(&mu_);
+    while (true) {
+      if (!status_.ok()) {
+        s = status_;
+        break;
+      } else if (n_ == 0) {
+        break;  // Done
+      } else if (!scheduled_) {
+        Schedule(pool);
+        break;
+      } else {
+        cv_.Wait();
+      }
+    }
+    return s;
+  }
+
+  Status Send(ThreadPool* pool, const Slice& key, const Slice& val) {
+    Status s;
+    MutexLock ml(&mu_);
+    PutLengthPrefixedSlice(&buf_, key);
+    PutLengthPrefixedSlice(&buf_, val);
+    n_++;
+    while (true) {
+      if (!status_.ok()) {
+        s = status_;
+        break;
+      } else if (n_ < FLAGS_rpc_batch_min) {
+        break;  // Done
+      } else if (!scheduled_) {
+        Schedule(pool);
+        break;
+      } else if (n_ < FLAGS_rpc_batch_max) {
+        break;  // Done
+      } else {
+        cv_.Wait();
+      }
     }
     return s;
   }
@@ -438,6 +534,7 @@ class Compactor : public rpc::If {
       : rpc_(NULL),
         async_kv_senders_(NULL),
         rcvpool_(NULL),
+        sndpool_(NULL),
         srcdb_(NULL),
         dstdb_(NULL) {
 #if defined(PDLFS_RADOS)
@@ -453,6 +550,7 @@ class Compactor : public rpc::If {
     delete[] async_kv_senders_;
     delete rpc_;
     delete rcvpool_;
+    delete sndpool_;
     delete srcdb_;
     delete dstdb_;
 #if defined(PDLFS_RADOS)
@@ -465,12 +563,24 @@ class Compactor : public rpc::If {
     Slice input = in.contents;
     Slice key;
     Slice val;
+    int n = 0;
     Status s;
-    if (!GetLengthPrefixedSlice(&input, &key) ||
-        !GetLengthPrefixedSlice(&input, &val)) {
-      s = Status::InvalidArgument(Slice("Bad rpc input"));
+    if (!GetFixed32(&input, &n)) {
+      s = Status::InvalidArgument("Bad rpc request header");
     } else {
-      fprintf(stderr, "%s\n", EscapeString(key).c_str());
+      for (int i = 0; i < n; i++) {
+        if (!GetLengthPrefixedSlice(&input, &key) ||
+            !GetLengthPrefixedSlice(&input, &val)) {
+          s = Status::InvalidArgument("Bad kv pair");
+        } else {
+          fprintf(stderr, "%s\n", EscapeString(key).c_str());
+          WriteOptions write_options;
+          s = dstdb_->TEST_GetDbRep()->Put(write_options, key, val);
+        }
+        if (!s.ok()) {
+          break;
+        }
+      }
     }
     char* dst = &out.buf[0];
     EncodeFixed32(dst, s.err_code());
@@ -541,6 +651,10 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--rpc_worker_threads=%d%c", &n, &junk) ==
                1) {
       pdlfs::FLAGS_rpc_worker_threads = n;
+    } else if (sscanf((*argv)[i], "--rpc_batch_min=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_batch_min = n;
+    } else if (sscanf((*argv)[i], "--rpc_batch_max=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_batch_max = n;
     } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_print_ips = n;
     } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
