@@ -129,6 +129,9 @@ int FLAGS_rpc_batch_min = 1;
 // Max number of kv pairs that can be buffered.
 int FLAGS_rpc_batch_max = 2;
 
+// Number of async rpc senders.
+int FLAGS_rpc_async_sender_threads = 16;
+
 // Number of rpc worker threads to run.
 int FLAGS_rpc_worker_threads = 0;
 
@@ -285,7 +288,6 @@ class AsyncKVSender {
     if (pool != NULL) {
       pool->Schedule(AsyncKVSender::SenderCall, this);
     } else {
-      // Do it using the caller's context
       SendIt();
     }
   }
@@ -338,6 +340,14 @@ class AsyncKVSender {
       }
     }
     return s;
+  }
+
+  Status WaitForAsyncOperations() {
+    MutexLock ml(&mu_);
+    while (scheduled_) {
+      cv_.Wait();
+    }
+    return status_;
   }
 };
 
@@ -496,6 +506,9 @@ class Compactor : public rpc::If {
 
   void OpenSenders(const unsigned short* const port_info,
                    const unsigned* const ip_info) {
+    if (FLAGS_rpc_async_sender_threads != 0) {
+      sndpool_ = ThreadPool::NewFixed(FLAGS_rpc_async_sender_threads);
+    }
     async_kv_senders_ = new AsyncKVSender*[FLAGS_comm_size];
     struct in_addr tmp_addr;
     char tmp_uri[100];
@@ -509,6 +522,7 @@ class Compactor : public rpc::If {
   }
 
   void MapReduce() {
+    Status s;
     DirIndexOptions giga_options;
     giga_options.num_virtual_servers = FLAGS_comm_size;
     giga_options.num_servers = FLAGS_comm_size;
@@ -522,11 +536,32 @@ class Compactor : public rpc::If {
       assert(key.size() > 16);
       Slice name(key.data() + 16, key.size() - 16);
       int i = giga->SelectServer(name);
-      async_kv_senders_[i]->Send(sndpool_, key, iter->value());
+      s = async_kv_senders_[i]->Send(sndpool_, key, iter->value());
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot send rpc: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Abort(MPI_COMM_WORLD, 1);
+      }
       iter->Next();
     }
     delete iter;
     delete giga;
+    for (int i = 0; i < FLAGS_comm_size; i++) {
+      s = async_kv_senders_[i]->Flush(sndpool_);
+      if (!s.ok()) {
+        fprintf(stderr, "%d: Cannot flush rpc: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Abort(MPI_COMM_WORLD, 1);
+      }
+    }
+    for (int i = 0; i < FLAGS_comm_size; i++) {
+      s = async_kv_senders_[i]->WaitForAsyncOperations();
+      if (!s.ok()) {
+        fprintf(stderr, "%d: RPC errors: %s\n", FLAGS_rank,
+                s.ToString().c_str());
+        MPI_Abort(MPI_COMM_WORLD, 1);
+      }
+    }
   }
 
  public:
@@ -654,6 +689,9 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_rpc_batch_min = n;
     } else if (sscanf((*argv)[i], "--rpc_batch_max=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_rpc_batch_max = n;
+    } else if (sscanf((*argv)[i], "--rpc_async_sender_threads=%d%c", &n,
+                      &junk) == 1) {
+      pdlfs::FLAGS_rpc_async_sender_threads = n;
     } else if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_print_ips = n;
     } else if (sscanf((*argv)[i], "--env_use_rados=%d%c", &n, &junk) == 1 &&
