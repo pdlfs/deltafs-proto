@@ -37,6 +37,7 @@
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/fsdbx.h"
 
+#include <stddef.h>
 #if __cplusplus >= 201103L
 #define OVERRIDE override
 #else
