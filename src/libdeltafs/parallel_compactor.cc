@@ -271,9 +271,9 @@ void PrintHeader() {
   fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
           FLAGS_rpc_worker_threads);
   fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-  fprintf(stdout, "Src:\n");
+  fprintf(stdout, "SRC:\n");
   fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_src_prefix);
-  fprintf(stdout, "Dst:\n");
+  fprintf(stdout, "DST:\n");
   PrintDstSettings();
 #if defined(PDLFS_RADOS)
   fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
