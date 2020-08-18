@@ -58,6 +58,8 @@
 #endif
 #if defined(PDLFS_OS_LINUX)
 #include <ctype.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 #include <time.h>
 #endif
 
@@ -116,6 +118,9 @@ const char* FLAGS_ip_prefix = "127.0.0.1";
 
 // Print the ip addresses of all ranks for debugging.
 bool FLAGS_print_ips = false;
+
+// Print the performance stats of each rank.
+bool FLAGS_print_per_rank_stats = false;
 
 // Total number of ranks.
 int FLAGS_comm_size = 1;
@@ -285,6 +290,123 @@ void PrintHeader() {
 #endif
   fprintf(stdout, "------------------------------------------------\n");
 }
+
+// Per-rank performance stats.
+struct Stats {
+#if defined(PDLFS_OS_LINUX)
+  struct rusage start_rusage_;
+  struct rusage rusage_;
+#endif
+  double start_;
+  double finish_;
+  double seconds_;
+  int done_;
+  int next_report_;
+
+#if defined(PDLFS_OS_LINUX)
+  static uint64_t TimevalToMicros(const struct timeval* tv) {
+    uint64_t t;
+    t = static_cast<uint64_t>(tv->tv_sec) * 1000000;
+    t += tv->tv_usec;
+    return t;
+  }
+#endif
+
+  void Start() {
+    next_report_ = 100;
+    done_ = 0;
+    seconds_ = 0;
+    start_ = CurrentMicros();
+    finish_ = start_;
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &start_rusage_);
+#endif
+  }
+
+  void Stop() {
+#if defined(PDLFS_OS_LINUX)
+    getrusage(RUSAGE_THREAD, &rusage_);
+#endif
+    finish_ = CurrentMicros();
+    seconds_ = (finish_ - start_) * 1e-6;
+  }
+
+  void FinishedSingleOp() {
+    done_++;
+    if (FLAGS_rank == 0 && done_ >= next_report_) {
+      if (next_report_ < 1000)
+        next_report_ += 100;
+      else if (next_report_ < 5000)
+        next_report_ += 500;
+      else if (next_report_ < 10000)
+        next_report_ += 1000;
+      else if (next_report_ < 50000)
+        next_report_ += 5000;
+      else
+        next_report_ += 10000;
+      fprintf(stdout, "%d: Finished %d ops %30s\r", FLAGS_rank, done_, "");
+      fflush(stdout);
+    }
+  }
+
+  void Report() {
+    // Pretend at least one op was done in case we are running a benchmark
+    // that does not call FinishedSingleOp().
+    if (done_ < 1) done_ = 1;
+    // Rate is computed on actual elapsed time, not the sum of per-rank
+    // elapsed times. On the other hand, per-op latency is computed on the sum
+    // of per-rank elapsed times, not the actual elapsed time.
+    double elapsed = (finish_ - start_) * 1e-6;
+    fprintf(stdout,
+            "%-12d: %9.3f micros/op, %9.3f Kop/s, %9.3f Kops, %15d ops\n",
+            FLAGS_rank, seconds_ * 1e6 / done_, done_ / 1000.0 / elapsed,
+            done_ / 1000.0, done_);
+#if defined(PDLFS_OS_LINUX)
+    fprintf(stdout, "Time(usr/sys/wall): %.3f/%.3f/%.3f\n",
+            (TimevalToMicros(&rusage_.ru_utime) -
+             TimevalToMicros(&start_rusage_.ru_utime)) *
+                1e-6,
+            (TimevalToMicros(&rusage_.ru_stime) -
+             TimevalToMicros(&start_rusage_.ru_stime)) *
+                1e-6,
+            (finish_ - start_) * 1e-6);
+#endif
+    fflush(stdout);
+  }
+};
+
+// Global performance stats.
+struct GlobalStats {
+  double start_;
+  double finish_;
+  double seconds_;  // Total seconds of all ranks
+  long done_;       // Total ops done
+
+  void Reduce(const Stats* my) {
+    long done = my->done_;
+    MPI_Reduce(&done, &done_, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&my->seconds_, &seconds_, 1, MPI_DOUBLE, MPI_SUM, 0,
+               MPI_COMM_WORLD);
+    MPI_Reduce(&my->start_, &start_, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&my->finish_, &finish_, 1, MPI_DOUBLE, MPI_MAX, 0,
+               MPI_COMM_WORLD);
+  }
+
+  void Report(const char* name) {
+    // Pretend at least one op was done in case we are running a benchmark
+    // that does not call FinishedSingleOp().
+    if (done_ < 1) done_ = 1;
+    // Rate is computed on actual elapsed time, not the sum of per-rank
+    // elapsed times. On the other hand, per-op latency is computed on the sum
+    // of per-rank elapsed times, not the actual elapsed time.
+    double elapsed = (finish_ - start_) * 1e-6;
+    fprintf(stdout,
+            "==%-10s: %9.3f micros/op, %9.3f Mop/s, %9.3f Mops, %15ld ops\n",
+            name, seconds_ * 1e6 / done_, done_ / 1000000.0 / elapsed,
+            done_ / 1000000.0, done_);
+    fflush(stdout);
+  }
+};
 
 template <typename T>
 inline bool GetFixed32(Slice* input, T* rv) {
@@ -581,7 +703,7 @@ class Compactor : public rpc::If {
     }
   }
 
-  void MapReduce() {
+  void MapReduce(Stats* stats) {
     Status s;
     DirIndexOptions giga_options;
     giga_options.num_virtual_servers = FLAGS_comm_size;
@@ -602,6 +724,7 @@ class Compactor : public rpc::If {
                 s.ToString().c_str());
         MPI_Abort(MPI_COMM_WORLD, 1);
       }
+      stats->FinishedSingleOp();
       iter->Next();
     }
     delete iter;
@@ -713,13 +836,20 @@ class Compactor : public rpc::If {
       fflush(stdout);
     }
     OpenSenders(port_info, ip_info);
+    GlobalStats stats;
     MPI_Barrier(MPI_COMM_WORLD);
-    if (FLAGS_rank == 0) {
-      puts("Running...");
+    Stats per_rank_stats;
+    if (FLAGS_rank == 0) puts("Running...");
+    per_rank_stats.Start();
+    MapReduce(&per_rank_stats);
+    per_rank_stats.Stop();
+    if (FLAGS_print_per_rank_stats) {
+      per_rank_stats.Report();
     }
-    MapReduce();
     MPI_Barrier(MPI_COMM_WORLD);
+    stats.Reduce(&per_rank_stats);
     if (FLAGS_rank == 0) {
+      stats.Report("mr");
       puts("Done!");
     }
   }
