@@ -123,6 +123,9 @@ int FLAGS_comm_size = 1;
 // My rank number.
 int FLAGS_rank = 0;
 
+// RPC timeout in seconds.
+int FLAGS_rpc_timeout = 5;
+
 // Min number of kv pairs that must be buffered before sending an rpc.
 int FLAGS_rpc_batch_min = 1;
 
@@ -266,6 +269,7 @@ void PrintHeader() {
   fprintf(stdout, "Rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
   fprintf(stdout, "Rpc batch:          %d (min), %d (max)\n",
           FLAGS_rpc_batch_min, FLAGS_rpc_batch_max);
+  fprintf(stdout, "Rpc timeout:        %d\n", FLAGS_rpc_timeout);
   fprintf(stdout, "Num sender threads: %d (max outstanding rpcs)\n",
           FLAGS_rpc_async_sender_threads);
   fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
@@ -543,6 +547,7 @@ class Compactor : public rpc::If {
     }
     rpcopts.extra_workers = rcvpool_;
     rpcopts.num_rpc_threads = FLAGS_rpc_threads;
+    rpcopts.rpc_timeout = FLAGS_rpc_timeout * 1000 * 1000;
     rpcopts.mode = rpc::kServerClient;
     rpcopts.impl = rpc::kSocketRPC;
     rpcopts.uri = FLAGS_udp ? "udp://" : "tcp://";
@@ -735,7 +740,9 @@ void BM_Main(int* const argc, char*** const argv) {
   for (int i = 1; i < (*argc); i++) {
     int n;
     char junk;
-    if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
+    if (sscanf((*argv)[i], "--rpc_timeout=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_rpc_timeout = n;
+    } else if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_rpc_threads = n;
     } else if (sscanf((*argv)[i], "--rpc_worker_threads=%d%c", &n, &junk) ==
                1) {
