@@ -33,9 +33,19 @@
  */
 #pragma once
 
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/env_files.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
+#include <list>
 #include <stddef.h>
+#include <string>
+#if __cplusplus >= 201103L
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 
 namespace pdlfs {
 
@@ -52,6 +62,9 @@ struct FilesystemReadonlyDbOptions {
   // Use 0 to disable filters altogether.
   // Default: 10
   size_t filter_bits_per_key;
+  // Collect performance stats for db table files.
+  // Default: false
+  bool enable_io_monitoring;
   // Detach db directory on db closing.
   // Default: false
   bool detach_dir_on_close;
@@ -60,9 +73,26 @@ struct FilesystemReadonlyDbOptions {
   bool use_default_logger;
 };
 
+class FilesystemReadonlyDbEnvWrapper : public EnvWrapper {
+ public:
+  FilesystemReadonlyDbEnvWrapper(const FilesystemReadonlyDbOptions& options,
+                                 Env* base);
+  virtual ~FilesystemReadonlyDbEnvWrapper();
+  virtual Status NewRandomAccessFile(const char* f,
+                                     RandomAccessFile** r) OVERRIDE;
+  void SetDbLoc(const std::string& dbloc);
+
+ private:
+  std::list<RandomAccessFileStats*> randomaccessfile_repo_;
+  std::string dbprefix_;
+  FilesystemReadonlyDbOptions options_;
+  port::Mutex mu_;
+};
+
 class FilesystemReadonlyDb {
  public:
   FilesystemReadonlyDb(const FilesystemReadonlyDbOptions& options, Env* base);
+  FilesystemReadonlyDbEnvWrapper* GetDbEnv() { return env_wrapper_; }
   DB* TEST_GetDbRep() { return db_; }
   Status Open(const std::string& dbloc);
   ~FilesystemReadonlyDb();
@@ -71,7 +101,7 @@ class FilesystemReadonlyDb {
   void operator=(const FilesystemReadonlyDb&);
   FilesystemReadonlyDb(const FilesystemReadonlyDb& other);
   FilesystemReadonlyDbOptions options_;
-  Env* env_;
+  FilesystemReadonlyDbEnvWrapper* env_wrapper_;
   const FilterPolicy* filter_policy_;
   Cache* table_cache_;
   Cache* block_cache_;
@@ -79,3 +109,4 @@ class FilesystemReadonlyDb {
 };
 
 }  // namespace pdlfs
+#undef OVERRIDE
