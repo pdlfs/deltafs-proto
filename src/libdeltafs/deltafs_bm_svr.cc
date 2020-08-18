@@ -105,8 +105,8 @@ int FLAGS_udp_sndbuf = 512 * 1024;
 // UDP receiver buffer size in bytes.
 int FLAGS_udp_rcvbuf = 512 * 1024;
 
-// If a host is configured with 1+ ip addresses, use the one with the following
-// prefix.
+// If a host is configured with 2 or more ip addresses, use the one with the
+// following prefix.
 const char* FLAGS_ip_prefix = "127.0.0.1";
 
 // Listening port for the information server.
