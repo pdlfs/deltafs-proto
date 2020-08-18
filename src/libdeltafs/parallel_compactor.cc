@@ -31,6 +31,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "env_wrapper.h"
 #include "fsdb.h"
 #include "fsrdo.h"
 
@@ -745,6 +746,13 @@ class Compactor : public rpc::If {
         MPI_Abort(MPI_COMM_WORLD, 1);
       }
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    s = dstdb_->Flush(false);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot flush db: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
   }
 
  public:
@@ -849,7 +857,34 @@ class Compactor : public rpc::If {
     MPI_Barrier(MPI_COMM_WORLD);
     stats.Reduce(&per_rank_stats);
     if (FLAGS_rank == 0) {
-      stats.Report("mr");
+      stats.Report("mapreduce");
+      if (dstdb_) {
+        if (FLAGS_dst_dbopts.enable_io_monitoring) {
+          fprintf(stdout, "Total random reads: %llu ",
+                  static_cast<unsigned long long>(
+                      dstdb_->GetDbEnv()->TotalRndTblReads()));
+          fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
+                  1.0 * dstdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
+                      dstdb_->GetDbEnv()->TotalRndTblReads(),
+                  static_cast<unsigned long long>(
+                      dstdb_->GetDbEnv()->TotalRndTblBytesRead()));
+          fprintf(stdout, "Total sequential bytes read: %llu ",
+                  static_cast<unsigned long long>(
+                      dstdb_->GetDbEnv()->TotalSeqTblBytesRead()));
+          fprintf(stdout, "(Avg read size: %.1fK)\n",
+                  1.0 * dstdb_->GetDbEnv()->TotalSeqTblBytesRead() / 1024.0 /
+                      dstdb_->GetDbEnv()->TotalSeqTblReads());
+          fprintf(stdout, "Total bytes written: %llu ",
+                  static_cast<unsigned long long>(
+                      dstdb_->GetDbEnv()->TotalTblBytesWritten()));
+          fprintf(stdout, "(Avg write size: %.1fK)\n",
+                  1.0 * dstdb_->GetDbEnv()->TotalTblBytesWritten() / 1024.0 /
+                      dstdb_->GetDbEnv()->TotalTblWrites());
+        }
+        fprintf(stdout, " - Db stats: >>>\n%s\n", dstdb_->GetDbStats().c_str());
+        fprintf(stdout, " - L0 stats: >>>\n%s\n",
+                dstdb_->GetDbLevel0Events().c_str());
+      }
       puts("Done!");
     }
   }
