@@ -216,6 +216,43 @@ void PrintRadosSettings() {
 }
 #endif
 
+void PrintDstSettings() {
+  fprintf(stdout, "Snappy:             %d\n", FLAGS_dst_dbopts.compression);
+  fprintf(stdout, "Blk cache size:     %-4d MB\n",
+          int(FLAGS_dst_dbopts.block_cache_size >> 20));
+  fprintf(stdout, "Blk size:           %-4d KB\n",
+          int(FLAGS_dst_dbopts.block_size >> 10));
+  fprintf(stdout, "Bloom bits:         %d\n",
+          int(FLAGS_dst_dbopts.filter_bits_per_key));
+  fprintf(stdout, "Max open tables:    %d\n",
+          int(FLAGS_dst_dbopts.table_cache_size));
+  fprintf(stdout, "Io monitoring:      %d\n",
+          FLAGS_dst_dbopts.enable_io_monitoring);
+  fprintf(stdout, "Wal off:            %d\n",
+          FLAGS_dst_dbopts.disable_write_ahead_logging);
+  fprintf(stdout, "Wal write size:     %-4d KB\n",
+          int(FLAGS_dst_dbopts.write_ahead_log_buffer >> 10));
+  fprintf(stdout, "LSM COMPACTION OFF: %d\n",
+          FLAGS_dst_dbopts.disable_compaction);
+  fprintf(stdout, "Memtable size:      %-4d MB\n",
+          int(FLAGS_dst_dbopts.memtable_size >> 20));
+  fprintf(stdout, "Tbl size:           %-4d MB\n",
+          int(FLAGS_dst_dbopts.table_size >> 20));
+  fprintf(stdout, "Tbl write size:     %-4d KB\n",
+          int(FLAGS_dst_dbopts.table_buffer >> 10));
+  fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
+          int(FLAGS_dst_dbopts.table_bulk_read_size >> 10));
+  fprintf(stdout, "Prefetch compaction input: %d\n",
+          FLAGS_dst_dbopts.prefetch_compaction_input);
+  fprintf(stdout, "Db level factor:    %d\n", FLAGS_dst_dbopts.level_factor);
+  fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
+          FLAGS_dst_dbopts.l0_soft_limit, FLAGS_dst_dbopts.l0_hard_limit);
+  fprintf(stdout, "L1 trigger:         %d\n",
+          FLAGS_dst_dbopts.l1_compaction_trigger);
+  fprintf(stdout, "Db force cleaning:  %d\n", FLAGS_dst_force_cleaning);
+  fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_dst_prefix);
+}
+
 void PrintHeader() {
   PrintWarnings();
   PrintEnvironment();
@@ -229,9 +266,15 @@ void PrintHeader() {
   fprintf(stdout, "Rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
   fprintf(stdout, "Rpc batch:          %d (min), %d (max)\n",
           FLAGS_rpc_batch_min, FLAGS_rpc_batch_max);
+  fprintf(stdout, "Num sender threads: %d (max outstanding rpcs)\n",
+          FLAGS_rpc_async_sender_threads);
   fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
           FLAGS_rpc_worker_threads);
   fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+  fprintf(stdout, "Src:\n");
+  fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_src_prefix);
+  fprintf(stdout, "Dst:\n");
+  PrintDstSettings();
 #if defined(PDLFS_RADOS)
   fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
   if (FLAGS_env_use_rados) PrintRadosSettings();
