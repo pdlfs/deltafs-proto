@@ -81,6 +81,14 @@ class FilesystemReadonlyDbEnvWrapper : public EnvWrapper {
   virtual Status NewRandomAccessFile(const char* f,
                                      RandomAccessFile** r) OVERRIDE;
   void SetDbLoc(const std::string& dbloc);
+  // Total number of random read operations performed on db table files.
+  uint64_t TotalRndTblReads();
+  // Total amount of data read randomly from db table files. This could include
+  // both data read for background compaction (when compaction input
+  // pre-fetching is turned off) and data read for foreground db queries. A db
+  // may also be configured to cache data in memory reducing physical random
+  // data reads.
+  uint64_t TotalRndTblBytesRead();
 
  private:
   std::list<RandomAccessFileStats*> randomaccessfile_repo_;

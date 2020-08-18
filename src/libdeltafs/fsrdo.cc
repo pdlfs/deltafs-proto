@@ -76,6 +76,39 @@ void FilesystemReadonlyDbEnvWrapper::SetDbLoc(const std::string& dbloc) {
 }
 
 namespace {
+template <typename T>
+inline uint64_t SumUpBytes(const std::list<T*>* v) {
+  uint64_t result = 0;
+  typename std::list<T*>::const_iterator it = v->begin();
+  for (; it != v->end(); ++it) {
+    result += (*it)->TotalBytes();
+  }
+  return result;
+}
+
+template <typename T>
+inline uint64_t SumUpOps(const std::list<T*>* v) {
+  uint64_t result = 0;
+  typename std::list<T*>::const_iterator it = v->begin();
+  for (; it != v->end(); ++it) {
+    result += (*it)->TotalOps();
+  }
+  return result;
+}
+
+}  // namespace
+
+uint64_t FilesystemReadonlyDbEnvWrapper::TotalRndTblReads() {
+  MutexLock l(&mu_);
+  return SumUpOps(&randomaccessfile_repo_);
+}
+
+uint64_t FilesystemReadonlyDbEnvWrapper::TotalRndTblBytesRead() {
+  MutexLock l(&mu_);
+  return SumUpBytes(&randomaccessfile_repo_);
+}
+
+namespace {
 void ReadBoolFromEnv(const char* key, bool* dst) {
   const char* env = getenv(key);
   if (!env || !env[0]) return;
