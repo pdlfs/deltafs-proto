@@ -124,7 +124,7 @@ int FLAGS_comm_size = 1;
 int FLAGS_rank = 0;
 
 // RPC timeout in seconds.
-int FLAGS_rpc_timeout = 5;
+int FLAGS_rpc_timeout = 30;
 
 // Min number of kv pairs that must be buffered before sending an rpc.
 int FLAGS_rpc_batch_min = 1;
