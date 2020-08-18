@@ -668,6 +668,12 @@ void BM_Main(int* const argc, char*** const argv) {
                       &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
+    } else if (sscanf((*argv)[i], "--udp_sndbuf=%dK%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_sndbuf = n << 10;
+    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%dK%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_rcvbuf = n << 10;
+    } else if (sscanf((*argv)[i], "--udp_max_msgsz=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_udp_max_msgsz = n;
     } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_udp = n;
