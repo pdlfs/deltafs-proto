@@ -465,6 +465,7 @@ class Compactor : public rpc::If {
         return myenv_;
       }
       FLAGS_src_dbopts.detach_dir_on_close = true;
+      FLAGS_dst_dbopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
       options.force_syncio = FLAGS_rados_force_syncio;
