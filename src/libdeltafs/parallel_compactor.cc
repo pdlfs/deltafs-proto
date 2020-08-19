@@ -314,7 +314,7 @@ struct Stats {
 #endif
 
   void Start() {
-    next_report_ = 100;
+    next_report_ = 1000;
     done_ = 0;
     seconds_ = 0;
     start_ = CurrentMicros();
@@ -336,7 +336,7 @@ struct Stats {
     done_++;
     if (FLAGS_rank == 0 && done_ >= next_report_) {
       next_report_ += 1000;
-      fprintf(stdout, "%d: Finished %d ops %30s\r", FLAGS_rank, done_, "");
+      printf("%d: Finished %d ops\r", FLAGS_rank, done_);
       fflush(stdout);
     }
   }
@@ -723,7 +723,7 @@ class Compactor : public rpc::If {
     delete iter;
     delete giga;
     if (FLAGS_rank == 0) {
-      puts("Sender flushing...");
+      printf("Sender flushing...\r");
     }
     for (int i = 0; i < FLAGS_comm_size; i++) {
       s = async_kv_senders_[i]->Flush(sndpool_);
@@ -743,7 +743,7 @@ class Compactor : public rpc::If {
     }
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
-      puts("Receiver flushing...");
+      printf("Db flushing...\r");
     }
     s = dstdb_->Flush(false);
     if (!s.ok()) {
