@@ -104,13 +104,13 @@ const char* FLAGS_rados_conf = "/tmp/ceph.conf";
 // Use udp.
 bool FLAGS_udp = false;
 
-// Max incoming message size for UDP in bytes.
+// Max incoming message size in bytes for server-side UDP sockets.
 size_t FLAGS_udp_max_msgsz = 1432;
 
-// UDP sender buffer size in bytes.
+// UDP server-side sender buffer size in bytes.
 int FLAGS_udp_sndbuf = 512 * 1024;
 
-// UDP receiver buffer size in bytes.
+// UDP server-side receiver buffer size in bytes.
 int FLAGS_udp_rcvbuf = 512 * 1024;
 
 // For hosts with multiple ip addresses, use the one starting with the
@@ -921,7 +921,7 @@ void BM_Main(int* const argc, char*** const argv) {
 
   for (int i = 1; i < (*argc); i++) {
     int n;
-    char junk;
+    char u, junk;
     if (sscanf((*argv)[i], "--rpc_timeout=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_rpc_timeout = n;
     } else if (sscanf((*argv)[i], "--rpc_threads=%d%c", &n, &junk) == 1) {
@@ -945,9 +945,11 @@ void BM_Main(int* const argc, char*** const argv) {
                    1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_rados_force_syncio = n;
-    } else if (sscanf((*argv)[i], "--udp_sndbuf=%dK%c", &n, &junk) == 1) {
+    } else if (sscanf((*argv)[i], "--udp_sndbuf=%d%c%c", &n, &u, &junk) == 2 &&
+               (u == 'K' || u == 'k')) {
       pdlfs::FLAGS_udp_sndbuf = n << 10;
-    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%dK%c", &n, &junk) == 1) {
+    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%d%c%c", &n, &u, &junk) == 2 &&
+               (u == 'K' || u == 'k')) {
       pdlfs::FLAGS_udp_rcvbuf = n << 10;
     } else if (sscanf((*argv)[i], "--udp_max_msgsz=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_udp_max_msgsz = n;

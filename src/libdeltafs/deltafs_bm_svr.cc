@@ -629,7 +629,7 @@ void BM_Main(int* const argc, char*** const argv) {
 
   for (int i = 1; i < (*argc); i++) {
     int n;
-    char junk;
+    char u, junk;
     if (sscanf((*argv)[i], "--info_port=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_info_port = n;
     } else if (sscanf((*argv)[i], "--rpc_worker_threads=%d%c", &n, &junk) ==
@@ -668,9 +668,11 @@ void BM_Main(int* const argc, char*** const argv) {
                       &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_dbopts.prefetch_compaction_input = n;
-    } else if (sscanf((*argv)[i], "--udp_sndbuf=%dK%c", &n, &junk) == 1) {
+    } else if (sscanf((*argv)[i], "--udp_sndbuf=%d%c%c", &n, &u, &junk) == 2 &&
+               (u == 'K' || u == 'k')) {
       pdlfs::FLAGS_udp_sndbuf = n << 10;
-    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%dK%c", &n, &junk) == 1) {
+    } else if (sscanf((*argv)[i], "--udp_rcvbuf=%d%c%c", &n, &u, &junk) == 2 &&
+               (u == 'K' || u == 'k')) {
       pdlfs::FLAGS_udp_rcvbuf = n << 10;
     } else if (sscanf((*argv)[i], "--udp_max_msgsz=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_udp_max_msgsz = n;
