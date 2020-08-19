@@ -858,6 +858,17 @@ class Compactor : public rpc::If {
     stats.Reduce(&per_rank_stats);
     if (FLAGS_rank == 0) {
       stats.Report("mapreduce");
+      if (srcdb_ && FLAGS_src_dbopts.enable_io_monitoring) {
+        fprintf(stdout, "Total random reads: %llu ",
+                static_cast<unsigned long long>(
+                    srcdb_->GetDbEnv()->TotalRndTblReads()));
+        fprintf(stdout,
+                "(Avg read size: %.1fK, total bytes read: %llu) // src db\n",
+                1.0 * srcdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
+                    srcdb_->GetDbEnv()->TotalRndTblReads(),
+                static_cast<unsigned long long>(
+                    srcdb_->GetDbEnv()->TotalRndTblBytesRead()));
+      }
       if (dstdb_) {
         if (FLAGS_dst_dbopts.enable_io_monitoring) {
           fprintf(stdout, "Total random reads: %llu ",
@@ -895,8 +906,10 @@ class Compactor : public rpc::If {
 
 namespace {
 void BM_Main(int* const argc, char*** const argv) {
+  pdlfs::FLAGS_src_dbopts.enable_io_monitoring = true;
   pdlfs::FLAGS_src_dbopts.use_default_logger = true;
   pdlfs::FLAGS_src_dbopts.ReadFromEnv();
+  pdlfs::FLAGS_dst_dbopts.enable_io_monitoring = true;
   pdlfs::FLAGS_dst_dbopts.use_default_logger = true;
   pdlfs::FLAGS_dst_dbopts.ReadFromEnv();
   pdlfs::FLAGS_dst_force_cleaning = true;
