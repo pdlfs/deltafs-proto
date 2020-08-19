@@ -722,6 +722,9 @@ class Compactor : public rpc::If {
     }
     delete iter;
     delete giga;
+    if (FLAGS_rank == 0) {
+      puts("Sender flushing...");
+    }
     for (int i = 0; i < FLAGS_comm_size; i++) {
       s = async_kv_senders_[i]->Flush(sndpool_);
       if (!s.ok()) {
@@ -739,6 +742,9 @@ class Compactor : public rpc::If {
       }
     }
     MPI_Barrier(MPI_COMM_WORLD);
+    if (FLAGS_rank == 0) {
+      puts("Receiver flushing...");
+    }
     s = dstdb_->Flush(false);
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot flush db: %s\n", FLAGS_rank,
