@@ -701,6 +701,7 @@ class Compactor : public rpc::If {
     giga_options.num_virtual_servers = FLAGS_comm_size;
     giga_options.num_servers = FLAGS_comm_size;
     DirIndex* const giga = new DirIndex(0, &giga_options);
+    giga->SetAll();
     ReadOptions read_options;
     read_options.fill_cache = false;
     Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
