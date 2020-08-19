@@ -132,6 +132,7 @@ Status FilesystemReadonlyDb::Open(const std::string& dbloc) {
   dbopts.block_cache = block_cache_;
   dbopts.filter_policy = filter_policy_;
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
+  env_wrapper_->SetDbLoc(dbloc);
   dbopts.env = env_wrapper_;
   return ReadonlyDB::Open(dbopts, dbloc, &db_);
 }
