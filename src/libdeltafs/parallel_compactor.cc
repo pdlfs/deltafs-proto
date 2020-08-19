@@ -335,16 +335,7 @@ struct Stats {
   void FinishedSingleOp() {
     done_++;
     if (FLAGS_rank == 0 && done_ >= next_report_) {
-      if (next_report_ < 1000)
-        next_report_ += 100;
-      else if (next_report_ < 5000)
-        next_report_ += 500;
-      else if (next_report_ < 10000)
-        next_report_ += 1000;
-      else if (next_report_ < 50000)
-        next_report_ += 5000;
-      else
-        next_report_ += 10000;
+      next_report_ += 1000;
       fprintf(stdout, "%d: Finished %d ops %30s\r", FLAGS_rank, done_, "");
       fflush(stdout);
     }
