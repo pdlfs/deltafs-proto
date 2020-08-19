@@ -723,7 +723,7 @@ class Compactor : public rpc::If {
     delete iter;
     delete giga;
     if (FLAGS_rank == 0) {
-      printf("Sender flushing...\r");
+      printf("Sender flushing...%30s\r", "");
     }
     for (int i = 0; i < FLAGS_comm_size; i++) {
       s = async_kv_senders_[i]->Flush(sndpool_);
@@ -741,15 +741,21 @@ class Compactor : public rpc::If {
         MPI_Abort(MPI_COMM_WORLD, 1);
       }
     }
+    if (FLAGS_rank == 0) {
+      printf("Waiting for other ranks...%30s\r", "");
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
-      printf("Db flushing...\r");
+      printf("Db flushing...%30s\r", "");
     }
     s = dstdb_->Flush(false);
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot flush db: %s\n", FLAGS_rank,
               s.ToString().c_str());
       MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    if (FLAGS_rank == 0) {
+      printf("Done!%30s\n", "");
     }
   }
 
@@ -894,7 +900,7 @@ class Compactor : public rpc::If {
         fprintf(stdout, " - L0 stats: >>>\n%s\n",
                 dstdb_->GetDbLevel0Events().c_str());
       }
-      puts("Done!");
+      puts("Bye");
     }
   }
 };
