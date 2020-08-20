@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "env_wrapper.h"
+#include "fs.h"
 #include "fsdb.h"
 #include "fsrdo.h"
 
@@ -42,6 +43,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
@@ -55,6 +57,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <vector>
 #if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_connmgr.h"
 #endif
@@ -528,6 +531,20 @@ class AsyncKVSender {
 
 class Compactor : public rpc::If {
  private:
+  struct Dir {  // Entry doubles as a hash entry
+    DirIndexOptions* giga_opts;
+    DirIndex* giga;
+    Dir* next_hash;
+    size_t key_length;
+    uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+    char key_data[1];  // Beginning of key
+
+    Slice key() const {  // Return the key of the dir
+      return Slice(key_data, key_length);
+    }
+  };
+  std::vector<Dir*> dirrepo_;
+  HashTable<Dir> dirs_;
   RPC* rpc_;
   AsyncKVSender** async_kv_senders_;
   ThreadPool* sender_workers_;
@@ -698,13 +715,32 @@ class Compactor : public rpc::If {
     }
   }
 
+  Dir* FetchDir(const Slice& dir_key) {
+    const uint32_t hash = Hash(dir_key.data(), dir_key.size(), 0);
+    Dir** const pos = dirs_.FindPointer(dir_key, hash);
+    Dir* dir = *pos;
+    if (dir != NULL) {
+      return dir;
+    } else {
+      Key key(dir_key);
+      int zserver = Filesystem::PickupServer(DirId(key.dnode(), key.inode()));
+      dir = static_cast<Dir*>(malloc(sizeof(Dir) - 1 + dir_key.size()));
+      dir->key_length = dir_key.size();
+      memcpy(dir->key_data, dir_key.data(), dir_key.size());
+      dir->hash = hash;
+      dir->giga_opts = new DirIndexOptions;
+      dir->giga_opts->num_virtual_servers = FLAGS_comm_size;
+      dir->giga_opts->num_servers = FLAGS_comm_size;
+      dir->giga = new DirIndex(zserver, dir->giga_opts);
+      dir->giga->SetAll();
+      dirs_.Inject(dir, pos);
+      dirrepo_.push_back(dir);
+      return dir;
+    }
+  }
+
   void MapReduce(Stats* stats) {
     Status s;
-    DirIndexOptions giga_options;
-    giga_options.num_virtual_servers = FLAGS_comm_size;
-    giga_options.num_servers = FLAGS_comm_size;
-    DirIndex* const giga = new DirIndex(0, &giga_options);
-    giga->SetAll();
     ReadOptions read_options;
     read_options.fill_cache = false;
     Iterator* const iter = srcdb_->TEST_GetDbRep()->NewIterator(read_options);
@@ -713,7 +749,8 @@ class Compactor : public rpc::If {
       const Slice key = iter->key();
       assert(key.size() > 16);
       Slice name(key.data() + 16, key.size() - 16);
-      int i = giga->SelectServer(name);
+      Dir* const dir = FetchDir(Slice(key.data(), 16));
+      int i = dir->giga->SelectServer(name);
       s = async_kv_senders_[i]->Send(sender_workers_, key, iter->value());
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot send rpc: %s\n", FLAGS_rank,
@@ -724,7 +761,6 @@ class Compactor : public rpc::If {
       iter->Next();
     }
     delete iter;
-    delete giga;
     if (FLAGS_rank == 0) {
       printf("Sender flushing...%30s\r", "");
     }
@@ -786,6 +822,12 @@ class Compactor : public rpc::If {
     delete sender_workers_;
     delete srcdb_;
     delete dstdb_;
+    for (int i = 0; i < dirrepo_.size(); i++) {
+      Dir* const dir = dirrepo_[i];
+      delete dir->giga;
+      delete dir->giga_opts;
+      free(dir);
+    }
 #if defined(PDLFS_RADOS)
     delete myenv_;
     delete mgr_;
