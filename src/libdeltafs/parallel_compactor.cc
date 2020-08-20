@@ -391,6 +391,7 @@ struct GlobalStats {
   }
 
   void Report(const char* name) {
+    if (FLAGS_rank != 0) return;
     // Pretend at least one op was done in case we are running a benchmark
     // that does not call FinishedSingleOp().
     if (done_ < 1) done_ = 1;
@@ -952,9 +953,7 @@ class Compactor : public rpc::If {
     }
     MPI_Barrier(MPI_COMM_WORLD);
     stats.Reduce(&per_rank_stats);
-    if (FLAGS_rank == 0) {
-      stats.Report("mapreduce");
-    }
+    stats.Report("mapreduce");
     CollectAndReportMoreStats();
     if (FLAGS_rank == 0) {
       puts("Bye");
