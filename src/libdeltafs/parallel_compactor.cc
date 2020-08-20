@@ -798,6 +798,52 @@ class Compactor : public rpc::If {
     }
   }
 
+  void CollectAndReportMoreStats() {
+    unsigned long long my_nr;
+    unsigned long long my_rbytes;
+    unsigned long long my_nw;
+    unsigned long long my_wbytes;
+    if (srcdb_ && FLAGS_src_dbopts.enable_io_monitoring) {
+      my_rbytes = srcdb_->GetDbEnv()->TotalRndTblBytesRead();
+      my_nr = srcdb_->GetDbEnv()->TotalRndTblReads();
+      unsigned long long total_rbytes;
+      unsigned long long total_nr;
+      MPI_Reduce(&my_rbytes, &total_rbytes, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
+                 0, MPI_COMM_WORLD);
+      MPI_Reduce(&my_nr, &total_nr, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0,
+                 MPI_COMM_WORLD);
+      if (FLAGS_rank == 0) {
+        fprintf(stdout,
+                "Total random reads: %llu "
+                "(Avg read size: %.1fK, total bytes read: %llu) "
+                "// src db\n",
+                total_nr, 1.0 * total_rbytes / 1024.0 / total_nr, total_rbytes);
+      }
+    }
+    if (dstdb_ && FLAGS_dst_dbopts.enable_io_monitoring) {
+      my_wbytes = dstdb_->GetDbEnv()->TotalTblBytesWritten();
+      my_nw = dstdb_->GetDbEnv()->TotalTblWrites();
+      unsigned long long total_wbytes;
+      unsigned long long total_nw;
+      MPI_Reduce(&my_wbytes, &total_wbytes, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
+                 0, MPI_COMM_WORLD);
+      MPI_Reduce(&my_nw, &total_nw, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0,
+                 MPI_COMM_WORLD);
+      if (FLAGS_rank == 0) {
+        fprintf(stdout, "Total bytes written: %llu ", total_wbytes);
+        fprintf(stdout, "(Avg write size: %.1fK)\n",
+                1.0 * total_wbytes / 1024.0 / total_nw);
+      }
+    }
+    if (FLAGS_rank == 0) {
+      if (dstdb_) {
+        fprintf(stdout, " - Db stats: >>>\n%s\n", dstdb_->GetDbStats().c_str());
+        fprintf(stdout, " - L0 stats: >>>\n%s\n",
+                dstdb_->GetDbLevel0Events().c_str());
+      }
+    }
+  }
+
  public:
   Compactor()
       : rpc_(NULL),
@@ -908,30 +954,9 @@ class Compactor : public rpc::If {
     stats.Reduce(&per_rank_stats);
     if (FLAGS_rank == 0) {
       stats.Report("mapreduce");
-      if (srcdb_ && FLAGS_src_dbopts.enable_io_monitoring) {
-        fprintf(stdout, "Total random reads: %llu ",
-                static_cast<unsigned long long>(
-                    srcdb_->GetDbEnv()->TotalRndTblReads()));
-        fprintf(stdout,
-                "(Avg read size: %.1fK, total bytes read: %llu) // src db\n",
-                1.0 * srcdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
-                    srcdb_->GetDbEnv()->TotalRndTblReads(),
-                static_cast<unsigned long long>(
-                    srcdb_->GetDbEnv()->TotalRndTblBytesRead()));
-      }
-      if (dstdb_) {
-        if (FLAGS_dst_dbopts.enable_io_monitoring) {
-          fprintf(stdout, "Total bytes written: %llu ",
-                  static_cast<unsigned long long>(
-                      dstdb_->GetDbEnv()->TotalTblBytesWritten()));
-          fprintf(stdout, "(Avg write size: %.1fK)\n",
-                  1.0 * dstdb_->GetDbEnv()->TotalTblBytesWritten() / 1024.0 /
-                      dstdb_->GetDbEnv()->TotalTblWrites());
-        }
-        fprintf(stdout, " - Db stats: >>>\n%s\n", dstdb_->GetDbStats().c_str());
-        fprintf(stdout, " - L0 stats: >>>\n%s\n",
-                dstdb_->GetDbLevel0Events().c_str());
-      }
+    }
+    CollectAndReportMoreStats();
+    if (FLAGS_rank == 0) {
       puts("Bye");
     }
   }
