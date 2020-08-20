@@ -37,6 +37,7 @@
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/iterator.h"
+#include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -793,25 +794,26 @@ class Compactor : public rpc::If {
 
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
     Status s;
+    WriteBatch batch;
     int n = 0;
     Slice input = in.contents;
     if (!GetFixed32(&input, &n)) {
-      s = Status::InvalidArgument("Bad rpc request header");
+      s = Status::InvalidArgument("Bad rpc request encoding");
     } else {
       Slice key;
       Slice val;
       for (int i = 0; i < n; i++) {
         if (!GetLengthPrefixedSlice(&input, &key) ||
             !GetLengthPrefixedSlice(&input, &val)) {
-          s = Status::InvalidArgument("Bad kv pair");
-        } else {
-          WriteOptions write_options;
-          s = dstdb_->TEST_GetDbRep()->Put(write_options, key, val);
-        }
-        if (!s.ok()) {
+          s = Status::InvalidArgument("Bad kv encoding");
           break;
+        } else {
+          batch.Put(key, val);
         }
       }
+    }
+    if (s.ok()) {
+      s = dstdb_->TEST_GetDbRep()->Write(WriteOptions(), &batch);
     }
     char* dst = &out.buf[0];
     EncodeFixed32(dst, s.err_code());
