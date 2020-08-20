@@ -879,20 +879,6 @@ class Compactor : public rpc::If {
       }
       if (dstdb_) {
         if (FLAGS_dst_dbopts.enable_io_monitoring) {
-          fprintf(stdout, "Total random reads: %llu ",
-                  static_cast<unsigned long long>(
-                      dstdb_->GetDbEnv()->TotalRndTblReads()));
-          fprintf(stdout, "(Avg read size: %.1fK, total bytes read: %llu)\n",
-                  1.0 * dstdb_->GetDbEnv()->TotalRndTblBytesRead() / 1024.0 /
-                      dstdb_->GetDbEnv()->TotalRndTblReads(),
-                  static_cast<unsigned long long>(
-                      dstdb_->GetDbEnv()->TotalRndTblBytesRead()));
-          fprintf(stdout, "Total sequential bytes read: %llu ",
-                  static_cast<unsigned long long>(
-                      dstdb_->GetDbEnv()->TotalSeqTblBytesRead()));
-          fprintf(stdout, "(Avg read size: %.1fK)\n",
-                  1.0 * dstdb_->GetDbEnv()->TotalSeqTblBytesRead() / 1024.0 /
-                      dstdb_->GetDbEnv()->TotalSeqTblReads());
           fprintf(stdout, "Total bytes written: %llu ",
                   static_cast<unsigned long long>(
                       dstdb_->GetDbEnv()->TotalTblBytesWritten()));
