@@ -530,8 +530,8 @@ class Compactor : public rpc::If {
  private:
   RPC* rpc_;
   AsyncKVSender** async_kv_senders_;
-  ThreadPool* rcvpool_;
-  ThreadPool* sndpool_;
+  ThreadPool* sender_workers_;
+  ThreadPool* server_workers_;
   FilesystemReadonlyDb* srcdb_;
   FilesystemDb* dstdb_;
 #if defined(PDLFS_RADOS)
@@ -660,9 +660,9 @@ class Compactor : public rpc::If {
     rpcopts.udp_srv_sndbuf = FLAGS_udp_sndbuf;
     rpcopts.udp_srv_rcvbuf = FLAGS_udp_rcvbuf;
     if (FLAGS_rpc_worker_threads != 0) {
-      rcvpool_ = ThreadPool::NewFixed(FLAGS_rpc_worker_threads);
+      server_workers_ = ThreadPool::NewFixed(FLAGS_rpc_worker_threads);
     }
-    rpcopts.extra_workers = rcvpool_;
+    rpcopts.extra_workers = server_workers_;
     rpcopts.num_rpc_threads = FLAGS_rpc_threads;
     rpcopts.rpc_timeout = FLAGS_rpc_timeout * 1000 * 1000;
     rpcopts.mode = rpc::kServerClient;
@@ -684,7 +684,7 @@ class Compactor : public rpc::If {
   void OpenSenders(const unsigned short* const port_info,
                    const unsigned* const ip_info) {
     if (FLAGS_rpc_async_sender_threads != 0) {
-      sndpool_ = ThreadPool::NewFixed(FLAGS_rpc_async_sender_threads);
+      sender_workers_ = ThreadPool::NewFixed(FLAGS_rpc_async_sender_threads);
     }
     async_kv_senders_ = new AsyncKVSender*[FLAGS_comm_size];
     struct in_addr tmp_addr;
@@ -714,7 +714,7 @@ class Compactor : public rpc::If {
       assert(key.size() > 16);
       Slice name(key.data() + 16, key.size() - 16);
       int i = giga->SelectServer(name);
-      s = async_kv_senders_[i]->Send(sndpool_, key, iter->value());
+      s = async_kv_senders_[i]->Send(sender_workers_, key, iter->value());
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot send rpc: %s\n", FLAGS_rank,
                 s.ToString().c_str());
@@ -729,7 +729,7 @@ class Compactor : public rpc::If {
       printf("Sender flushing...%30s\r", "");
     }
     for (int i = 0; i < FLAGS_comm_size; i++) {
-      s = async_kv_senders_[i]->Flush(sndpool_);
+      s = async_kv_senders_[i]->Flush(sender_workers_);
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot flush rpc: %s\n", FLAGS_rank,
                 s.ToString().c_str());
@@ -766,8 +766,8 @@ class Compactor : public rpc::If {
   Compactor()
       : rpc_(NULL),
         async_kv_senders_(NULL),
-        rcvpool_(NULL),
-        sndpool_(NULL),
+        sender_workers_(NULL),
+        server_workers_(NULL),
         srcdb_(NULL),
         dstdb_(NULL) {
 #if defined(PDLFS_RADOS)
@@ -782,8 +782,8 @@ class Compactor : public rpc::If {
     }
     delete[] async_kv_senders_;
     delete rpc_;
-    delete rcvpool_;
-    delete sndpool_;
+    delete server_workers_;
+    delete sender_workers_;
     delete srcdb_;
     delete dstdb_;
 #if defined(PDLFS_RADOS)
