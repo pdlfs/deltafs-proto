@@ -241,7 +241,7 @@ void PrintDstSettings() {
           FLAGS_dst_dbopts.disable_write_ahead_logging);
   fprintf(stdout, "Wal write size:     %-4d KB\n",
           int(FLAGS_dst_dbopts.write_ahead_log_buffer >> 10));
-  fprintf(stdout, "LSM COMPACTION OFF: %d\n",
+  fprintf(stdout, "Lsm compaction off: %d\n",
           FLAGS_dst_dbopts.disable_compaction);
   fprintf(stdout, "Memtable size:      %-4d MB\n",
           int(FLAGS_dst_dbopts.memtable_size >> 20));
@@ -266,24 +266,26 @@ void PrintHeader() {
   PrintWarnings();
   PrintEnvironment();
   fprintf(stdout, "DELTAFS PARALLEL COMPACTOR\n");
-  fprintf(stdout, "Rpc ip:             %s*\n", FLAGS_ip_prefix);
+  fprintf(stdout, "rpc ip:             %s*\n", FLAGS_ip_prefix);
   char udp_info[100];
   snprintf(udp_info, sizeof(udp_info),
            "Yes (MAX_MSGSZ=%d, SO_RCVBUF=%dK, SO_SNDBUF=%dK)",
            int(FLAGS_udp_max_msgsz), FLAGS_udp_rcvbuf >> 10,
            FLAGS_udp_sndbuf >> 10);
-  fprintf(stdout, "Rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
-  fprintf(stdout, "Rpc batch:          %d (min), %d (max)\n",
+  fprintf(stdout, "rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
+  fprintf(stdout, "rpc batch:          %d (min), %d (max)\n",
           FLAGS_rpc_batch_min, FLAGS_rpc_batch_max);
-  fprintf(stdout, "Rpc timeout:        %d\n", FLAGS_rpc_timeout);
-  fprintf(stdout, "Num sender threads: %d (max outstanding rpcs)\n",
+  fprintf(stdout, "rpc timeout:        %d\n", FLAGS_rpc_timeout);
+  fprintf(stdout, "num sender threads: %d (max outstanding rpcs)\n",
           FLAGS_rpc_async_sender_threads);
-  fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
+  fprintf(stdout, "num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
           FLAGS_rpc_worker_threads);
-  fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-  fprintf(stdout, "SRC:\n");
+  fprintf(stdout, "num ranks:          %d\n", FLAGS_comm_size);
+  fprintf(stdout, "SOURCE DB:\n");
+  fprintf(stdout, "Io monitoring:      %d\n",
+          FLAGS_src_dbopts.enable_io_monitoring);
   fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_src_prefix);
-  fprintf(stdout, "DST:\n");
+  fprintf(stdout, "DESTINATION DB:\n");
   PrintDstSettings();
 #if defined(PDLFS_RADOS)
   fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
