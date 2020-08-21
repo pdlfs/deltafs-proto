@@ -62,13 +62,17 @@ struct FilesystemOptions {
   bool skip_name_collision_checks;
   bool skip_lease_due_checks;
   bool skip_perm_checks;
-  // Total number of virtual servers
+  // Total number of virtual servers.
+  // Default: 1
   int vsrvs;
-  // Number of servers
+  // Number of servers.
+  // Default: 1
   int nsrvs;
-  // Server id.
+  // My id in giga partitioning.
+  // Default: 0
   int srvid;
-  // My dnode no.
+  // My dnode no for allocating new fids.
+  // Default: 0
   uint64_t mydno;
 };
 
