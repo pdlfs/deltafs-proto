@@ -46,10 +46,11 @@
 #endif
 namespace pdlfs {
 
-struct FilesystemDir;  // Opaque handle to the internal structure of a FS dir
-struct FilesystemDbStats;
-struct DirIndexOptions;
 struct DirId;
+struct DirIndexOptions;
+struct FilesystemDbStats;
+struct FilesystemDir;  // Opaque handle to the internal data structure of a
+                       // filesystem dir
 
 class DirIndex;
 class FilesystemDb;

@@ -46,12 +46,13 @@
 
 namespace pdlfs {
 
+struct DirId;
 struct DirIndexOptions;
 struct FilesystemDbStats;
 
-class FilesystemCli;
-class Filesystem;
 class DirIndex;
+class Filesystem;
+class FilesystemCli;
 
 // Client context to make filesystem calls.
 class FilesystemCliCtx {
