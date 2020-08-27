@@ -36,6 +36,8 @@
 #include "fs.h"
 #include "fsdb.h"
 
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/fsdbbase.h"
 #include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/mutexlock.h"
 

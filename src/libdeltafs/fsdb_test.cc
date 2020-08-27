@@ -42,6 +42,7 @@
 #include "pdlfs-common/leveldb/options.h"
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/fsdbbase.h"
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"

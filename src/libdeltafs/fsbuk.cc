@@ -40,9 +40,13 @@
 #include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/cache.h"
+#include "pdlfs-common/fsdb0.h"
 #include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
+namespace {
+typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
+}
 
 BukDbEnvWrapper::BukDbEnvWrapper(const BukDbOptions& options, Env* base)
     : EnvWrapper(base != NULL ? base : Env::Default()), options_(options) {}
@@ -84,12 +88,12 @@ BukDb::BukDb(const BukDbOptions& options, Env* base)
       db_(NULL) {}
 
 BukDb::~BukDb() {
+  delete reinterpret_cast<MDB*>(mdb_);
   delete db_;
   delete block_cache_;
   delete table_cache_;
   delete filter_policy_;
   delete env_wrapper_;
-  delete mdb_;
 }
 
 namespace {
@@ -157,17 +161,17 @@ Status BukDb::Open(const std::string& dbloc) {
   dbopts.env = env_wrapper_;
   Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
-    mdb_ = new MDB(db_);
+    mdb_ = reinterpret_cast<MetadataDb*>(new MDB(db_));
   }
   return status;
 }
 
-Status BukDb::Put(  ///
-    const DirId& id, const Slice& fname, const Stat& stat,
-    BukDbStats* const stats) {
+Status BukDb::Put(const DirId& id, const Slice& fname, const Stat& stat,
+                  BukDbStats* const stats) {
   WriteOptions options;
   Tx* const tx(NULL);
-  return mdb_->PUT<Key>(id, fname, stat, fname, &options, tx, stats);
+  return reinterpret_cast<MDB*>(mdb_)->PUT<Key>(id, fname, stat, fname,
+                                                &options, tx, stats);
 }
 
 Status BukDb::Flush() {

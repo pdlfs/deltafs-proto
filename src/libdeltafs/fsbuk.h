@@ -35,7 +35,6 @@
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
-#include "pdlfs-common/fsdb0.h"
 
 #include <stddef.h>
 #if __cplusplus >= 201103L
@@ -46,8 +45,12 @@
 
 namespace pdlfs {
 
-class FilterPolicy;
+class DB;
 class Cache;
+class FilterPolicy;
+class Stat;
+
+struct DirId;
 
 struct BukDbOptions {
   BukDbOptions();
@@ -131,10 +134,10 @@ class BukDb {
 
  private:
   struct Tx;
+  struct MetadataDb;
+  MetadataDb* mdb_;
   void operator=(const BukDb& other);
   BukDb(const BukDb&);
-  typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
-  MDB* mdb_;
   BukDbOptions options_;
   BukDbEnvWrapper* env_wrapper_;
   const FilterPolicy* filter_policy_;
