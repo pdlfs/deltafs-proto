@@ -38,6 +38,8 @@
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/options.h"
 
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/fsdbbase.h"
 #include "pdlfs-common/testharness.h"
 
 namespace pdlfs {

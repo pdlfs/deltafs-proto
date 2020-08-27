@@ -35,7 +35,7 @@
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fsdb0.h"
 
 #include <stddef.h>
 #if __cplusplus >= 201103L

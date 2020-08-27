@@ -34,6 +34,9 @@
 #pragma once
 
 #include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/status.h"
+
+#include <stdint.h>
 
 namespace pdlfs {
 enum LokupMode { kRegular, kBatchedCreats, kBulkIn };

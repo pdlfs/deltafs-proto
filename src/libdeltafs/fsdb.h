@@ -33,13 +33,20 @@
  */
 #pragma once
 
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/status.h"
+
+#include <stdint.h>
 
 namespace pdlfs {
 
+class Cache;
+class DB;
+class Env;
 class FilesystemDbEnvWrapper;
 class FilterPolicy;
-class Cache;
+class Stat;
+
+struct DirId;
 
 struct FilesystemDbOptions {
   FilesystemDbOptions();
@@ -173,10 +180,10 @@ class FilesystemDb {
 
  private:
   struct Tx;
-  void operator=(const FilesystemDb& fsdb);
+  struct MetadataDb;
+  MetadataDb* mdb_;
+  void operator=(const FilesystemDb& other);
   FilesystemDb(const FilesystemDb&);
-  typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
-  MDB* mdb_;
   FilesystemDbOptions options_;
   FilesystemDbEnvWrapper* dbenv_;
   const FilterPolicy* filter_;

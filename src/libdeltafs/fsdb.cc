@@ -42,11 +42,15 @@
 #include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/cache.h"
+#include "pdlfs-common/fsdb0.h"
 #include "pdlfs-common/strutil.h"
 
 #include <stdlib.h>
 
 namespace pdlfs {
+namespace {
+typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
+}
 
 FilesystemDbStats::FilesystemDbStats()
     : putkeybytes(0),
@@ -177,7 +181,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.env = dbenv_;
   Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
-    mdb_ = new MDB(db_);
+    mdb_ = reinterpret_cast<MetadataDb*>(new MDB(db_));
   }
   return status;
 }
@@ -217,12 +221,12 @@ FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* base)
       db_(NULL) {}
 
 FilesystemDb::~FilesystemDb() {
+  delete reinterpret_cast<MDB*>(mdb_);
   delete db_;
+  delete filter_;
   delete block_cache_;
   delete table_cache_;
-  delete filter_;
   delete dbenv_;
-  delete mdb_;
 }
 
 Status FilesystemDb::Flush(bool force_flush_l0) {
@@ -236,7 +240,8 @@ Status FilesystemDb::Put(  ///
     FilesystemDbStats* const stats) {
   WriteOptions options;
   Tx* const tx = NULL;
-  return mdb_->PUT<Key>(id, fname, stat, fname, &options, tx, stats);
+  return reinterpret_cast<MDB*>(mdb_)->PUT<Key>(  ///
+      id, fname, stat, fname, &options, tx, stats);
 }
 
 Status FilesystemDb::Get(  ///
@@ -244,13 +249,14 @@ Status FilesystemDb::Get(  ///
     FilesystemDbStats* const stats) {
   ReadOptions options;
   Tx* const tx = NULL;
-  return mdb_->GET<Key>(id, fname, stat, NULL, &options, tx, stats);
+  return reinterpret_cast<MDB*>(mdb_)->GET<Key>(id, fname, stat, NULL, &options,
+                                                tx, stats);
 }
 
 Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
   WriteOptions options;
   Tx* const tx = NULL;
-  return mdb_->DELETE<Key>(id, fname, &options, tx);
+  return reinterpret_cast<MDB*>(mdb_)->DELETE<Key>(id, fname, &options, tx);
 }
 
 Status FilesystemDb::BulkInsert(const std::string& dir) {

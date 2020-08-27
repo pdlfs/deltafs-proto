@@ -33,6 +33,8 @@
  */
 #include "fssvr.h"
 
+#include "pdlfs-common/coding.h"
+
 namespace pdlfs {
 
 FilesystemServerOptions::FilesystemServerOptions()
