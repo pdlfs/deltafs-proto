@@ -162,7 +162,7 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.skip_lock_file = true;
   dbopts.table_cache = table_cache_;
   dbopts.block_cache = block_cache_;
-  dbopts.filter_policy = filter_;
+  dbopts.filter_policy = filter_policy_;
   dbopts.table_bulk_read_size = options_.table_bulk_read_size;
   dbopts.write_buffer_size = options_.memtable_size;
   dbopts.table_file_size = options_.table_size;
@@ -177,8 +177,8 @@ Status FilesystemDb::Open(const std::string& dbloc) {
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   dbopts.compression =
       options_.compression ? kSnappyCompression : kNoCompression;
-  dbenv_->SetDbLoc(dbloc);
-  dbopts.env = dbenv_;
+  myenv_->SetDbLoc(dbloc);
+  dbopts.env = myenv_;
   Status status = DB::Open(dbopts, dbloc, &db_);
   if (status.ok()) {
     mdb_ = reinterpret_cast<MetadataDb*>(new MDB(db_));
@@ -212,10 +212,10 @@ struct FilesystemDb::Tx {
 FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* base)
     : mdb_(NULL),
       options_(options),
-      dbenv_(new FilesystemDbEnvWrapper(options, base)),
-      filter_(options_.filter_bits_per_key != 0
-                  ? NewBloomFilterPolicy(options_.filter_bits_per_key)
-                  : NULL),
+      myenv_(new FilesystemDbEnvWrapper(options, base)),
+      filter_policy_(options_.filter_bits_per_key != 0
+                         ? NewBloomFilterPolicy(options_.filter_bits_per_key)
+                         : NULL),
       table_cache_(NewLRUCache(options_.table_cache_size)),
       block_cache_(NewLRUCache(options_.block_cache_size)),
       db_(NULL) {}
@@ -223,10 +223,10 @@ FilesystemDb::FilesystemDb(const FilesystemDbOptions& options, Env* base)
 FilesystemDb::~FilesystemDb() {
   delete reinterpret_cast<MDB*>(mdb_);
   delete db_;
-  delete filter_;
+  delete filter_policy_;
   delete block_cache_;
   delete table_cache_;
-  delete dbenv_;
+  delete myenv_;
 }
 
 Status FilesystemDb::Flush(bool force_flush_l0) {
@@ -261,7 +261,7 @@ Status FilesystemDb::Delete(const DirId& id, const Slice& fname) {
 
 Status FilesystemDb::BulkInsert(const std::string& dir) {
   if (options_.create_dir_on_bulk) {
-    dbenv_->CreateDir(dir.c_str());
+    myenv_->CreateDir(dir.c_str());
   }
   InsertOptions options(options_.bulk_use_copy ? kCopy : kRename);
   options.attach_dir_on_start = options_.attach_dir_on_bulk;

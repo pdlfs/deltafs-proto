@@ -166,7 +166,7 @@ class FilesystemDb {
 
   std::string GetDbLevel0Events();
   std::string GetDbStats();
-  FilesystemDbEnvWrapper* GetDbEnv() { return dbenv_; }
+  FilesystemDbEnvWrapper* GetDbEnv() { return myenv_; }
   DB* TEST_GetDbRep() { return db_; }
   static Status DestroyDb(const std::string& dbloc, Env* env);
   Status Open(const std::string& dbloc);
@@ -185,8 +185,8 @@ class FilesystemDb {
   void operator=(const FilesystemDb& other);
   FilesystemDb(const FilesystemDb&);
   FilesystemDbOptions options_;
-  FilesystemDbEnvWrapper* dbenv_;
-  const FilterPolicy* filter_;
+  FilesystemDbEnvWrapper* myenv_;
+  const FilterPolicy* filter_policy_;
   Cache* table_cache_;
   Cache* block_cache_;
   DB* db_;
