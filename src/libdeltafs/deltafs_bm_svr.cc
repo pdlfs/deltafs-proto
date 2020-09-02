@@ -222,7 +222,8 @@ class Server : public FilesystemWrapper {
             FLAGS_rpc_worker_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
     fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
-    fprintf(stdout, "Fs use existing:    %d\n", FLAGS_use_existing_fs);
+    fprintf(stdout, "Fs use existing:    %d (readonly=%d)\n",
+            FLAGS_use_existing_fs, FLAGS_use_existing_fs);
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
@@ -424,7 +425,7 @@ class Server : public FilesystemWrapper {
     if (!FLAGS_use_existing_fs) {
       FilesystemDb::DestroyDb(dbpath, env);
     }
-    Status s = fsdb_->Open(dbpath);
+    Status s = fsdb_->Open(dbpath, FLAGS_use_existing_fs);
     if (!s.ok()) {
       fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
               s.ToString().c_str());
