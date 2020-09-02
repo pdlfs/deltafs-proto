@@ -47,7 +47,7 @@
 # main directory sources and tests
 set (deltafs-srcs env_wrapper.cc fs.cc fsapi.cc
         fsbuk.cc fscli.cc fscom.cc fsdb.cc
-        fsis.cc fsrdo.cc fssvr.cc)
+        fsis.cc fsro.cc fssvr.cc)
 set (deltafs-tests base64enc_test.cc fsis_test.cc
         fssvr_test.cc fscli_test.cc fscom_test.cc
         fs_test.cc fsdb_test.cc)

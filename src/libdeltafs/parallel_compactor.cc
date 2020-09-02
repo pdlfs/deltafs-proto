@@ -34,7 +34,7 @@
 #include "env_wrapper.h"
 #include "fs.h"
 #include "fsdb.h"
-#include "fsrdo.h"
+#include "fsro.h"
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/iterator.h"

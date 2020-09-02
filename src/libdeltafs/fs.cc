@@ -34,7 +34,7 @@
 #include "fs.h"
 
 #include "fsdb.h"
-#include "fsrdo.h"
+#include "fsro.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
