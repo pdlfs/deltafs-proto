@@ -132,7 +132,7 @@ bool FLAGS_use_existing_fs = false;
 // Comma separated, ordered list of db for readonly fs metadata access.
 const char* FLAGS_readonly_db_chain = NULL;
 
-// Write fs metadata changes to the db at the following prefix.
+// Write fs metadata changes at the db under the following prefix.
 const char* FLAGS_db_prefix = NULL;
 
 // Number of rpc worker threads to run.
@@ -205,18 +205,19 @@ class Server : public FilesystemWrapper {
 #endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
+    fprintf(stdout, "Readonly db chain: %s\n", FLAGS_readonly_db_chain);
   }
 
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
-    fprintf(stdout, "Rpc ip:             %s*\n", FLAGS_ip_prefix);
+    fprintf(stdout, "rpc ip:             %s*\n", FLAGS_ip_prefix);
     char udp_info[100];
     snprintf(udp_info, sizeof(udp_info),
              "Yes (MAX_MSGSZ=%d, SO_RCVBUF=%dK, SO_SNDBUF=%dK)",
              int(FLAGS_udp_max_msgsz), FLAGS_udp_rcvbuf >> 10,
              FLAGS_udp_sndbuf >> 10);
-    fprintf(stdout, "Rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
+    fprintf(stdout, "rpc use udp:        %s\n", FLAGS_udp ? udp_info : "No");
     fprintf(stdout, "Num rpc threads:    %d + %d\n", FLAGS_rpc_threads,
             FLAGS_rpc_worker_threads);
     fprintf(stdout, "Num ports per rank: %d\n", FLAGS_ports_per_rank);
