@@ -46,16 +46,15 @@
 #endif
 namespace pdlfs {
 
+class DirIndex;
+class FilesystemDb;
+class FilesystemReadonlyDb;
+
 struct DirId;
 struct DirIndexOptions;
 struct FilesystemDbStats;
-struct FilesystemDir;  // Opaque handle to the internal data structure of a
-                       // filesystem dir
-
-class DirIndex;
-class FilesystemDb;
-
-// Options for controlling the filesystem.
+struct FilesystemDir;  // Opaque handle to the internal data structure of a dir.
+// Options controlling the behavior a filesystem.
 struct FilesystemOptions {
   FilesystemOptions();
   size_t dir_lru_size;
@@ -96,6 +95,7 @@ class Filesystem : public FilesystemIf {
   virtual Status Lstat(const User& who, const LookupStat& parent,
                        const Slice& name, Stat* stat) OVERRIDE;
 
+  void SetReadonlyDbs(FilesystemReadonlyDb** readonly_dbs, size_t n);
   void SetDb(FilesystemDb* db);
   // Deterministically calculate a zeroth server based on a specified directory
   // id.
@@ -131,6 +131,8 @@ class Filesystem : public FilesystemIf {
                 FilesystemDbStats* stats);
   Status CheckAndPut(const DirId& at, const Slice& name, const Stat& stat,
                      FilesystemDbStats* stats);
+  Status DbGet(const DirId& at, const Slice& name, Stat* stat,
+               FilesystemDbStats* stats);
 
   // No copying allowed
   void operator=(const Filesystem& fs);
@@ -199,7 +201,9 @@ class Filesystem : public FilesystemIf {
 
   // Constant after server opening
   FilesystemOptions options_;
-  FilesystemDb* db_;  // db_ is not owned by us
+  FilesystemDb* db_;
+  FilesystemReadonlyDb** readonly_dbs_;
+  size_t n_;
 };
 
 }  // namespace pdlfs

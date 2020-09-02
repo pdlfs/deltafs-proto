@@ -34,6 +34,7 @@
 #include "fs.h"
 
 #include "fsdb.h"
+#include "fsrdo.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -405,7 +406,7 @@ Status Filesystem::Lstat1(  ///
   // write operations are blocked. The split operation bulk deletes
   // the half of partition that has been moved and install a new
   // directory index.
-  s = db_->Get(at, name, stat, stats);
+  s = DbGet(at, name, stat, stats);
   dir->mu->Lock();
   dir->stats->Merge(*stats);
   return s;
@@ -521,13 +522,35 @@ Status Filesystem::Mknod1(  ///
   return s;
 }
 
+Status Filesystem::DbGet(const DirId& at, const Slice& name, Stat* const stat,
+                         FilesystemDbStats* const stats) {
+  Status s;
+  if (db_ != NULL) {
+    s = db_->Get(at, name, stat, stats);
+    if (s.ok()) {
+      return s;  // Found it
+    } else if (!s.IsNotFound()) {
+      return s;  // Error
+    }
+  }
+  for (size_t i = 0; i < n_; i++) {
+    s = readonly_dbs_[i]->Get(at, name, stat, stats);
+    if (s.ok()) {
+      return s;  // Found it
+    } else if (!s.IsNotFound()) {
+      return s;  // Error
+    }
+  }
+  return s;
+}
+
 Status Filesystem::CheckAndPut(  ///
     const DirId& at, const Slice& name, const Stat& stat,
     FilesystemDbStats* const stats) {
   Status s;
   if (!options_.skip_name_collision_checks) {
     Stat tmp;
-    s = db_->Get(at, name, &tmp, stats);
+    s = DbGet(at, name, &tmp, stats);
     if (s.ok()) {
       s = Status::AlreadyExists(name);
     } else if (s.IsNotFound()) {
@@ -678,14 +701,17 @@ FilesystemOptions::FilesystemOptions()
       mydno(0) {}
 
 Filesystem::Filesystem(const FilesystemOptions& options)
-    : inoq_(0), options_(options), db_(NULL) {
+    : inoq_(0), options_(options), db_(NULL), readonly_dbs_(NULL), n_(0) {
   dlru_ = new LRUCache<DirHandl>(options_.dir_lru_size);
   dirs_ = new HashTable<Dir>();
 }
 
-void Filesystem::SetDb(FilesystemDb* db) {
-  db_ = db;  // This is a weak reference; db_ is not owned by us
+void Filesystem::SetReadonlyDbs(FilesystemReadonlyDb** readonly_dbs, size_t n) {
+  readonly_dbs_ = readonly_dbs;
+  n_ = n;
 }
+
+void Filesystem::SetDb(FilesystemDb* db) { db_ = db; }
 
 Filesystem::~Filesystem() {
   mutex_.Lock();
