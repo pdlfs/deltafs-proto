@@ -38,6 +38,7 @@
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/options.h"
+#include "pdlfs-common/leveldb/readonly.h"
 #include "pdlfs-common/leveldb/snapshot.h"
 #include "pdlfs-common/leveldb/write_batch.h"
 
@@ -148,7 +149,27 @@ void FilesystemDbOptions::ReadFromEnv() {
   ReadBoolFromEnv("DELTAFS_Db_compression", &compression);
 }
 
-Status FilesystemDb::Open(const std::string& dbloc) {
+Status FilesystemDb::ReadonlyOpen(const std::string& dbloc) {
+  DBOptions dbopts;
+  dbopts.create_if_missing = false;
+  dbopts.detach_dir_on_close = options_.detach_dir_on_close;
+  dbopts.table_cache = table_cache_;
+  dbopts.block_cache = block_cache_;
+  dbopts.filter_policy = filter_policy_;
+  dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
+  myenv_->SetDbLoc(dbloc);
+  dbopts.env = myenv_;
+  Status status = ReadonlyDB::Open(dbopts, dbloc, &db_);
+  if (status.ok()) {
+    mdb_ = reinterpret_cast<MetadataDb*>(new MDB(db_));
+  }
+  return status;
+}
+
+Status FilesystemDb::Open(const std::string& dbloc, bool readonly) {
+  if (readonly) {
+    return ReadonlyOpen(dbloc);
+  }
   DBOptions dbopts;
   dbopts.create_if_missing = true;
   dbopts.table_builder_skip_verification = true;

@@ -169,7 +169,8 @@ class FilesystemDb {
   FilesystemDbEnvWrapper* GetDbEnv() { return myenv_; }
   DB* TEST_GetDbRep() { return db_; }
   static Status DestroyDb(const std::string& dbloc, Env* env);
-  Status Open(const std::string& dbloc);
+  Status ReadonlyOpen(const std::string& dbloc);
+  Status Open(const std::string& dbloc, bool readonly = false);
   Status Get(const DirId& id, const Slice& fname, Stat* stat,
              FilesystemDbStats* stats);
   Status Put(const DirId& id, const Slice& fname, const Stat& stat,
