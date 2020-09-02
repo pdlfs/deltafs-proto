@@ -35,6 +35,7 @@
 #include "fs.h"
 #include "fsdb.h"
 #include "fsis.h"
+#include "fsro.h"
 #include "fssvr.h"
 
 #include "pdlfs-common/leveldb/db.h"
@@ -43,6 +44,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/strutil.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -64,6 +66,9 @@
 
 namespace pdlfs {
 namespace {
+// Readonly db options.
+FilesystemReadonlyDbOptions FLAGS_readonly_dbopts;
+
 // Db options.
 FilesystemDbOptions FLAGS_dbopts;
 
@@ -127,7 +132,10 @@ bool FLAGS_skip_fs_checks = false;
 // If true, will reuse the existing fs image.
 bool FLAGS_use_existing_fs = false;
 
-// Use the db at the following prefix.
+// Comma separated, ordered list of db for readonly fs metadata access.
+const char* FLAGS_readonly_db_chain = NULL;
+
+// Write fs metadata changes to the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
 
 // Number of rpc worker threads to run.
@@ -143,8 +151,9 @@ class Server : public FilesystemWrapper {
   port::CondVar cv_;
   FilesystemInfoServer* infosvr_;
   std::vector<FilesystemServer*> svrs_;
-  Filesystem* fs_;
+  std::vector<FilesystemReadonlyDb*> readonly_dbs_;
   FilesystemDb* fsdb_;
+  Filesystem* fs_;
 #if defined(PDLFS_RADOS)
   rados::RadosConnMgr* mgr_;
   Env* myenv_;
@@ -336,11 +345,15 @@ class Server : public FilesystemWrapper {
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
 #if defined(PDLFS_RADOS)
+      if (myenv_ != NULL) {
+        return myenv_;
+      }
       FLAGS_dbopts.bulk_use_copy = false;
       FLAGS_dbopts.create_dir_on_bulk = true;
       FLAGS_dbopts.attach_dir_on_bulk = true;
       FLAGS_dbopts.detach_dir_on_bulk_end = true;
       FLAGS_dbopts.detach_dir_on_close = true;
+      FLAGS_readonly_dbopts.detach_dir_on_close = true;
       using namespace rados;
       RadosOptions options;
       options.force_syncio = FLAGS_rados_force_syncio;
@@ -378,7 +391,29 @@ class Server : public FilesystemWrapper {
     }
   }
 
-  FilesystemIf* OpenFilesystem() {
+  void OpenReadonlyDb(const std::string& dbpath) {
+    Env* env = OpenEnv();
+    FilesystemReadonlyDb* const db =
+        new FilesystemReadonlyDb(FLAGS_readonly_dbopts, env);
+    readonly_dbs_.push_back(db);
+    Status s = db->Open(dbpath);
+    if (!s.ok()) {
+      fprintf(stderr, "%d: Cannot open db: %s\n", FLAGS_rank,
+              s.ToString().c_str());
+      MPI_Finalize();
+      exit(1);
+    }
+  }
+
+  void OpenReadonlyDbs() {
+    std::vector<std::string> lst;
+    size_t n = SplitString(&lst, FLAGS_readonly_db_chain, ';');
+    for (size_t i = 0; i < n; i++) {
+      OpenReadonlyDb(lst[i]);
+    }
+  }
+
+  void OpenDb() {
     Env* env = OpenEnv();
     if (!FLAGS_env_use_rados) {
       env->CreateDir(FLAGS_db_prefix);
@@ -398,7 +433,11 @@ class Server : public FilesystemWrapper {
       MPI_Finalize();
       exit(1);
     }
+  }
 
+  FilesystemIf* OpenFilesystem() {
+    OpenReadonlyDbs();
+    OpenDb();
     FilesystemOptions opts;
     opts.skip_partition_checks = opts.skip_perm_checks =
         opts.skip_lease_due_checks = opts.skip_name_collision_checks =
@@ -406,6 +445,7 @@ class Server : public FilesystemWrapper {
     opts.vsrvs = opts.nsrvs = FLAGS_comm_size;
     opts.mydno = opts.srvid = FLAGS_rank;
     fs_ = new Filesystem(opts);
+    fs_->SetReadonlyDbs(readonly_dbs_.data(), readonly_dbs_.size());
     fs_->SetDb(fsdb_);
     return fs_;
   }
@@ -453,8 +493,8 @@ class Server : public FilesystemWrapper {
       : shutting_down_(NULL),
         cv_(&mu_),
         infosvr_(NULL),
-        fs_(NULL),
-        fsdb_(NULL) {
+        fsdb_(NULL),
+        fs_(NULL) {
 #if defined(PDLFS_RADOS)
     mgr_ = NULL;
     myenv_ = NULL;
@@ -468,6 +508,9 @@ class Server : public FilesystemWrapper {
     }
     delete fs_;
     delete fsdb_;
+    for (size_t i = 0; i < readonly_dbs_.size(); i++) {
+      delete readonly_dbs_[i];
+    }
 #if defined(PDLFS_RADOS)
     delete myenv_;
     delete mgr_;
@@ -620,6 +663,9 @@ void HandleSig(const int sig) {
 
 void BM_Main(int* const argc, char*** const argv) {
   pdlfs::FLAGS_skip_fs_checks = true;
+  pdlfs::FLAGS_readonly_dbopts.enable_io_monitoring = true;
+  pdlfs::FLAGS_readonly_dbopts.use_default_logger = true;
+  pdlfs::FLAGS_readonly_dbopts.ReadFromEnv();
   pdlfs::FLAGS_dbopts.enable_io_monitoring = true;
   pdlfs::FLAGS_dbopts.prefetch_compaction_input = true;
   pdlfs::FLAGS_dbopts.disable_write_ahead_logging = true;
@@ -697,6 +743,9 @@ void BM_Main(int* const argc, char*** const argv) {
   if (!pdlfs::FLAGS_db_prefix) {
     default_db_prefix = "/tmp/deltafs_bm";
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
+  }
+  if (!pdlfs::FLAGS_readonly_db_chain) {
+    pdlfs::FLAGS_readonly_db_chain = "";
   }
 
   pdlfs::Server svr;
