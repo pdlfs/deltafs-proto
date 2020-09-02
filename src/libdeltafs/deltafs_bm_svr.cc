@@ -724,6 +724,8 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_udp = n;
+    } else if (strncmp((*argv)[i], "--readonly_db_chain=", 20) == 0) {
+      pdlfs::FLAGS_readonly_db_chain = (*argv)[i] + 20;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
       pdlfs::FLAGS_db_prefix = (*argv)[i] + 5;
     } else if (strncmp((*argv)[i], "--ip=", 5) == 0) {
