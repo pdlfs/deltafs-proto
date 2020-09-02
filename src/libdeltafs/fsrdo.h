@@ -34,7 +34,6 @@
 #pragma once
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
@@ -51,8 +50,12 @@ namespace pdlfs {
 
 class Cache;
 class DB;
-class Env;
 class FilterPolicy;
+class RandomAccessFileStats;
+class Stat;
+
+struct DirId;
+struct FilesystemDbStats;
 
 struct FilesystemReadonlyDbOptions {
   FilesystemReadonlyDbOptions();
@@ -102,10 +105,15 @@ class FilesystemReadonlyDb {
   FilesystemReadonlyDb(const FilesystemReadonlyDbOptions& options, Env* base);
   FilesystemReadonlyDbEnvWrapper* GetDbEnv() { return env_wrapper_; }
   DB* TEST_GetDbRep() { return db_; }
+  Status Get(const DirId& id, const Slice& fname, Stat* stat,
+             FilesystemDbStats* stats);
   Status Open(const std::string& dbloc);
   ~FilesystemReadonlyDb();
 
  private:
+  struct Tx;
+  struct MetadataDb;
+  MetadataDb* mdb_;
   void operator=(const FilesystemReadonlyDb&);
   FilesystemReadonlyDb(const FilesystemReadonlyDb& other);
   FilesystemReadonlyDbOptions options_;

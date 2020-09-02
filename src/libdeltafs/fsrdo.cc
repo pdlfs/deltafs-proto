@@ -33,17 +33,25 @@
  */
 #include "fsrdo.h"
 
+#include "fsdb.h"
+
+#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/readonly.h"
+#include "pdlfs-common/leveldb/snapshot.h"
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/env.h"
+#include "pdlfs-common/env_files.h"
+#include "pdlfs-common/fsdb0.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
+namespace {
+typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
+}
 
 FilesystemReadonlyDbOptions::FilesystemReadonlyDbOptions()
     : filter_bits_per_key(10),
@@ -134,7 +142,24 @@ Status FilesystemReadonlyDb::Open(const std::string& dbloc) {
   dbopts.info_log = options_.use_default_logger ? Logger::Default() : NULL;
   env_wrapper_->SetDbLoc(dbloc);
   dbopts.env = env_wrapper_;
-  return ReadonlyDB::Open(dbopts, dbloc, &db_);
+  Status status = ReadonlyDB::Open(dbopts, dbloc, &db_);
+  if (status.ok()) {
+    mdb_ = reinterpret_cast<MetadataDb*>(new MDB(db_));
+  }
+  return status;
+}
+
+struct FilesystemReadonlyDb::Tx {
+  const Snapshot* snap;
+};
+
+Status FilesystemReadonlyDb::Get(const DirId& id, const Slice& fname,
+                                 Stat* const stat,
+                                 FilesystemDbStats* const stats) {
+  ReadOptions options;
+  Tx* const tx = NULL;
+  return reinterpret_cast<MDB*>(mdb_)->GET<Key>(id, fname, stat, NULL, &options,
+                                                tx, stats);
 }
 
 FilesystemReadonlyDb::FilesystemReadonlyDb(
@@ -149,11 +174,12 @@ FilesystemReadonlyDb::FilesystemReadonlyDb(
       db_(NULL) {}
 
 FilesystemReadonlyDb::~FilesystemReadonlyDb() {
+  delete reinterpret_cast<MDB*>(mdb_);
   delete db_;
-  delete env_wrapper_;
+  delete filter_policy_;
   delete block_cache_;
   delete table_cache_;
-  delete filter_policy_;
+  delete env_wrapper_;
 }
 
 namespace {
