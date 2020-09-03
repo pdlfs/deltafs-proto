@@ -182,7 +182,7 @@ class Server : public FilesystemWrapper {
             FLAGS_dbopts.disable_write_ahead_logging);
     fprintf(stdout, "Wal write size:     %-4d KB\n",
             int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
+    fprintf(stdout, "Lsm compaction off: %d\n",
             FLAGS_dbopts.disable_compaction);
     fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_dbopts.memtable_size >> 20));
@@ -200,12 +200,18 @@ class Server : public FilesystemWrapper {
             FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
     fprintf(stdout, "L1 trigger:         %d\n",
             FLAGS_dbopts.l1_compaction_trigger);
-#if defined(PDLFS_RADOS)
-    fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
-    if (FLAGS_env_use_rados) PrintRadosSettings();
-#endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
+  }
+
+  static void PrintReadonlyDbSettings() {
+    fprintf(stdout, "Blk cache size:     %-4d MB\n",
+            int(FLAGS_readonly_dbopts.block_cache_size >> 20));
+    fprintf(stdout, "Max open tables:    %d\n",
+            int(FLAGS_readonly_dbopts.table_cache_size));
+    fprintf(stdout, "Io monitoring:      %d\n",
+            FLAGS_readonly_dbopts.enable_io_monitoring);
+    fprintf(stdout, "Db chain: %s\n", FLAGS_readonly_db_chain);
   }
 
   static void PrintHeader() {
@@ -227,10 +233,18 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
-    if (!FLAGS_dummy_svr && FLAGS_db_prefix && FLAGS_db_prefix[0]) {
+    if (!FLAGS_dummy_svr) {
+      fprintf(stdout, "READONLY DB CHAIN:\n");
+      PrintReadonlyDbSettings();
+      fprintf(stdout, "MAIN DB:\n");
       PrintDbSettings();
+#if defined(PDLFS_RADOS)
+      fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
+      if (FLAGS_env_use_rados) {
+        PrintRadosSettings();
+      }
+#endif
     }
-    fprintf(stdout, "Readonly db chain: %s\n", FLAGS_readonly_db_chain);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
