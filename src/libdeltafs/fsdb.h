@@ -74,7 +74,7 @@ struct FilesystemDbOptions {
   // Default: 4MB
   size_t table_size;
   // Size for a table block.
-  // Default: 2KB
+  // Default: 4KB
   size_t block_size;
   // Max number of table files we open.
   // Setting to 0 disables caching effectively.
