@@ -214,6 +214,19 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Db chain: %s\n", FLAGS_readonly_db_chain);
   }
 
+  static void PrintSvrSettings() {
+    fprintf(stdout, "READONLY DB CHAIN:\n");
+    PrintReadonlyDbSettings();
+    fprintf(stdout, "MAIN DB:\n");
+    PrintDbSettings();
+#if defined(PDLFS_RADOS)
+    fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
+    if (FLAGS_env_use_rados) {
+      PrintRadosSettings();
+    }
+#endif
+  }
+
   static void PrintHeader() {
     PrintEnvironment();
     PrintWarnings();
@@ -233,18 +246,7 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
-    if (!FLAGS_dummy_svr) {
-      fprintf(stdout, "READONLY DB CHAIN:\n");
-      PrintReadonlyDbSettings();
-      fprintf(stdout, "MAIN DB:\n");
-      PrintDbSettings();
-#if defined(PDLFS_RADOS)
-      fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
-      if (FLAGS_env_use_rados) {
-        PrintRadosSettings();
-      }
-#endif
-    }
+    if (!FLAGS_dummy_svr) PrintSvrSettings();
     fprintf(stdout, "------------------------------------------------\n");
   }
 
