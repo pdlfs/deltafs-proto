@@ -693,7 +693,7 @@ class Client {
   }
 
   void PrepareRun(RankState* const state) {
-    if (!FLAGS_share_dir || FLAGS_rank == 0) {
+    if (!FLAGS_share_dir || FLAGS_fs_use_local || FLAGS_rank == 0) {
       Status s;
       if (FLAGS_use_existing_fs) {
         Stat stat;
