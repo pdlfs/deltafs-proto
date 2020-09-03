@@ -206,7 +206,6 @@ class Server : public FilesystemWrapper {
 #endif
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
-    fprintf(stdout, "Readonly db chain: %s\n", FLAGS_readonly_db_chain);
   }
 
   static void PrintHeader() {
@@ -228,9 +227,10 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Fs info port:       %d\n", FLAGS_info_port);
     fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Fs dummy:           %d\n", FLAGS_dummy_svr);
-    if (!FLAGS_dummy_svr) {
+    if (!FLAGS_dummy_svr && FLAGS_db_prefix && FLAGS_db_prefix[0]) {
       PrintDbSettings();
     }
+    fprintf(stdout, "Readonly db chain: %s\n", FLAGS_readonly_db_chain);
     fprintf(stdout, "------------------------------------------------\n");
   }
 
@@ -428,6 +428,9 @@ class Server : public FilesystemWrapper {
   }
 
   void OpenDb() {
+    if (!FLAGS_db_prefix || !FLAGS_db_prefix[0]) {
+      return;
+    }
     Env* env = OpenEnv();
     if (!FLAGS_env_use_rados) {
       env->CreateDir(FLAGS_db_prefix);
@@ -625,11 +628,15 @@ class Server : public FilesystemWrapper {
       svrs_[i]->Close();
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    if (FLAGS_rank == 0) fprintf(stdout, "Flushing db ...\n");
-    fsdb_->Flush(false);
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (FLAGS_rank == 0) {
-      fprintf(stdout, "Done!\n");
+    if (fsdb_) {
+      if (FLAGS_rank == 0) fprintf(stdout, "Flushing db ...\n");
+      fsdb_->Flush(false);
+      MPI_Barrier(MPI_COMM_WORLD);
+      if (FLAGS_rank == 0) {
+        fprintf(stdout, "Done!\n");
+      }
+    }
+    if (fsdb_ && FLAGS_rank == 0) {
       if (FLAGS_dbopts.enable_io_monitoring) {
         fprintf(stdout, "Total random reads: %llu ",
                 static_cast<unsigned long long>(
@@ -760,7 +767,7 @@ void BM_Main(int* const argc, char*** const argv) {
 
   std::string default_db_prefix;
   // Choose a prefix for the test db if none given with --db=<path>
-  if (!pdlfs::FLAGS_db_prefix) {
+  if (!pdlfs::FLAGS_use_existing_fs && !pdlfs::FLAGS_db_prefix) {
     default_db_prefix = "/tmp/deltafs_bm";
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
   }
