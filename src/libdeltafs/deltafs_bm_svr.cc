@@ -188,7 +188,7 @@ class Server : public FilesystemWrapper {
             int(FLAGS_dbopts.memtable_size >> 20));
     fprintf(stdout, "Tbl size:           %-4d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
-    fprintf(stdout, "Tbl write size:     %-4d KB (min), %-4d KB (max)\n",
+    fprintf(stdout, "Tbl write size:     %-4d KB (min), %d KB (max)\n",
             int(FLAGS_dbopts.table_buffer >> 10),
             int(FLAGS_dbopts.table_buffer >> 9));
     fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
