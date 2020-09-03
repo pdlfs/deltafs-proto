@@ -1163,6 +1163,8 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_step_interval = n;
     } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_num = n;
+    } else if (sscanf((*argv)[i], "--phases=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_phases = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--read_phases=%d%c", &n, &junk) == 1) {
