@@ -178,7 +178,8 @@ Status FilesystemReadonlyDb::Get(const DirId& id, const Slice& fname,
 
 FilesystemReadonlyDb::FilesystemReadonlyDb(
     const FilesystemReadonlyDbOptions& options, Env* base)
-    : options_(options),
+    : mdb_(NULL),
+      options_(options),
       env_wrapper_(new FilesystemReadonlyDbEnvWrapper(options, base)),
       filter_policy_(options_.filter_bits_per_key != 0
                          ? NewBloomFilterPolicy(options_.filter_bits_per_key)
