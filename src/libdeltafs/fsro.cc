@@ -54,7 +54,9 @@ typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
 }
 
 FilesystemReadonlyDbOptions::FilesystemReadonlyDbOptions()
-    : filter_bits_per_key(10),
+    : table_cache_size(0),
+      filter_bits_per_key(10),
+      block_cache_size(0),
       enable_io_monitoring(false),
       detach_dir_on_close(false),
       use_default_logger(false) {}
@@ -117,6 +119,16 @@ uint64_t FilesystemReadonlyDbEnvWrapper::TotalRndTblBytesRead() {
 }
 
 namespace {
+template <typename T>
+void ReadIntegerOptionFromEnv(const char* key, T* const dst) {
+  const char* env = getenv(key);
+  if (!env || !env[0]) return;
+  uint64_t tmp;
+  if (ParsePrettyNumber(env, &tmp)) {
+    *dst = static_cast<T>(tmp);
+  }
+}
+
 void ReadBoolFromEnv(const char* key, bool* dst) {
   const char* env = getenv(key);
   if (!env || !env[0]) return;
@@ -129,6 +141,8 @@ void ReadBoolFromEnv(const char* key, bool* dst) {
 
 // Read options from system env. All env keys start with "DELTAFS_Rr_".
 void FilesystemReadonlyDbOptions::ReadFromEnv() {
+  ReadIntegerOptionFromEnv("DELTAFS_Rr_table_cache_size", &table_cache_size);
+  ReadIntegerOptionFromEnv("DELTAFS_Rr_block_cache_size", &block_cache_size);
   ReadBoolFromEnv("DELTAFS_Rr_use_default_logger", &use_default_logger);
 }
 
@@ -169,8 +183,8 @@ FilesystemReadonlyDb::FilesystemReadonlyDb(
       filter_policy_(options_.filter_bits_per_key != 0
                          ? NewBloomFilterPolicy(options_.filter_bits_per_key)
                          : NULL),
-      table_cache_(NewLRUCache(0)),
-      block_cache_(NewLRUCache(0)),
+      table_cache_(NewLRUCache(options_.table_cache_size)),
+      block_cache_(NewLRUCache(options_.block_cache_size)),
       db_(NULL) {}
 
 FilesystemReadonlyDb::~FilesystemReadonlyDb() {
