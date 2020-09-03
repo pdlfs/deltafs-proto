@@ -610,7 +610,11 @@ class Server : public FilesystemWrapper {
       svrs_[i]->Close();
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    if (fsdb_ && FLAGS_rank == 0) {
+    if (FLAGS_rank == 0) fprintf(stdout, "Flushing db ...\n");
+    fsdb_->Flush(false);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (FLAGS_rank == 0) {
+      fprintf(stdout, "Done\n");
       if (FLAGS_dbopts.enable_io_monitoring) {
         fprintf(stdout, "Total random reads: %llu ",
                 static_cast<unsigned long long>(
