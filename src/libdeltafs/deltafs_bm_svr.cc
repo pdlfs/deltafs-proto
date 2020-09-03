@@ -188,8 +188,9 @@ class Server : public FilesystemWrapper {
             int(FLAGS_dbopts.memtable_size >> 20));
     fprintf(stdout, "Tbl size:           %-4d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
-    fprintf(stdout, "Tbl write size:     %-4d KB\n",
-            int(FLAGS_dbopts.table_buffer >> 10));
+    fprintf(stdout, "Tbl write size:     %-4d KB (min), %-4d KB (max)\n",
+            int(FLAGS_dbopts.table_buffer >> 10),
+            int(FLAGS_dbopts.table_buffer >> 9));
     fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
             int(FLAGS_dbopts.table_bulk_read_size >> 10));
     fprintf(stdout, "Prefetch compaction input: %d\n",
@@ -614,7 +615,7 @@ class Server : public FilesystemWrapper {
     fsdb_->Flush(false);
     MPI_Barrier(MPI_COMM_WORLD);
     if (FLAGS_rank == 0) {
-      fprintf(stdout, "Done\n");
+      fprintf(stdout, "Done!\n");
       if (FLAGS_dbopts.enable_io_monitoring) {
         fprintf(stdout, "Total random reads: %llu ",
                 static_cast<unsigned long long>(
@@ -642,7 +643,7 @@ class Server : public FilesystemWrapper {
               fsdb_->GetDbLevel0Events().c_str());
     }
     if (FLAGS_rank == 0) {
-      puts("Bye!");
+      puts("Bye");
     }
   }
 };
