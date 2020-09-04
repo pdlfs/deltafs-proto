@@ -426,12 +426,12 @@ class Server : public FilesystemWrapper {
     size_t n = SplitString(&lst, FLAGS_readonly_db_chain, ';');
     if (n == 0) {
       const char* e = getenv("DELTAFS_Bm_test_readonly_db_chain");
-      if (e && e[0] && strcmp(e, "1") == 0) {
+      if (e && e[0]) {
         if (FLAGS_rank == 0) {
-          puts("DELTAFS_Bm_test_readonly_db_chain=1");
+          printf("DELTAFS_Bm_test_readonly_db_chain=%d\n", atoi(e));
         }
         char tmp[20];
-        for (int i = 0; i < 512; i++) {
+        for (int i = 0; i < atoi(e); i++) {
           snprintf(tmp, sizeof(tmp), "/s/r%d", i);
           OpenReadonlyDb(tmp);
         }
