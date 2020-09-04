@@ -167,6 +167,10 @@ class Server : public FilesystemWrapper {
 #endif
 
   static void PrintDbSettings() {
+    fprintf(stdout, "MAIN DB:\n");
+    if (!FLAGS_db_prefix || !FLAGS_db_prefix[0]) {
+      return;
+    }
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
     fprintf(stdout, "Blk cache size:     %-4d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));
@@ -205,6 +209,10 @@ class Server : public FilesystemWrapper {
   }
 
   static void PrintReadonlyDbSettings() {
+    fprintf(stdout, "READONLY DB CHAIN:\n");
+    if (!FLAGS_readonly_db_chain || !FLAGS_readonly_db_chain[0]) {
+      return;
+    }
     fprintf(stdout, "Blk cache size:     %-4d MB\n",
             int(FLAGS_readonly_dbopts.block_cache_size >> 20));
     fprintf(stdout, "Max open tables:    %d\n",
@@ -215,9 +223,7 @@ class Server : public FilesystemWrapper {
   }
 
   static void PrintSvrSettings() {
-    fprintf(stdout, "READONLY DB CHAIN:\n");
     PrintReadonlyDbSettings();
-    fprintf(stdout, "MAIN DB:\n");
     PrintDbSettings();
 #if defined(PDLFS_RADOS)
     fprintf(stdout, "Use rados:          %d\n", FLAGS_env_use_rados);
@@ -429,6 +435,7 @@ class Server : public FilesystemWrapper {
       if (e && e[0]) {
         if (FLAGS_rank == 0) {
           printf("DELTAFS_Bm_test_readonly_db_chain=%d\n", atoi(e));
+          PrintReadonlyDbSettings();
         }
         char tmp[20];
         for (int i = 0; i < atoi(e); i++) {
