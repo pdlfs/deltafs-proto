@@ -857,6 +857,16 @@ class Client {
     }
   }
 
+  static void Barrier(MPI_Comm comm) {
+    MPI_Request req;
+    MPI_Ibarrier(comm, &req);
+    int done = 0;
+    while (!done) {
+      MPI_Test(&req, &done, MPI_STATUS_IGNORE);
+      SleepForMicroseconds(5000);
+    }
+  }
+
   void RunStep(const char* name, RankState* const state,
                void (Client::*method)(RankState*)) {
     GlobalStats stats;
@@ -868,7 +878,7 @@ class Client {
     if (FLAGS_print_per_rank_stats) {
       per_rank_stats->Report();
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    Barrier(MPI_COMM_WORLD);
     stats.Reduce(per_rank_stats);
     if (FLAGS_rank == 0) {
       stats.Report(name);
