@@ -408,8 +408,6 @@ class Client {
             int(FLAGS_dbopts.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dbopts.filter_bits_per_key));
-    fprintf(stdout, "Max open tables:    %d\n",
-            int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_dbopts.enable_io_monitoring);
     fprintf(stdout, "Wal off:            %d\n",
@@ -424,10 +422,12 @@ class Client {
             int(FLAGS_dbopts.table_size >> 20));
     fprintf(stdout, "Tbl write size:     %-4d KB\n",
             int(FLAGS_dbopts.table_buffer >> 10));
-    fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
-            int(FLAGS_dbopts.table_bulk_read_size >> 10));
+    fprintf(stdout, "Tbl cache size:     %d\n",
+            int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dbopts.prefetch_compaction_input);
+    fprintf(stdout, "Prefetch read size: %-4d KB\n",
+            int(FLAGS_dbopts.table_bulk_read_size >> 10));
     fprintf(stdout, "Db level factor:    %d\n", FLAGS_dbopts.level_factor);
     fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
             FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
