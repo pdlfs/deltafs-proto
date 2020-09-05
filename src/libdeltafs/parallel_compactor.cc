@@ -237,8 +237,6 @@ void PrintDstSettings() {
           int(FLAGS_dst_dbopts.block_size >> 10));
   fprintf(stdout, "Bloom bits:         %d\n",
           int(FLAGS_dst_dbopts.filter_bits_per_key));
-  fprintf(stdout, "Max open tables:    %d\n",
-          int(FLAGS_dst_dbopts.table_cache_size));
   fprintf(stdout, "Io monitoring:      %d\n",
           FLAGS_dst_dbopts.enable_io_monitoring);
   fprintf(stdout, "Wal off:            %d\n",
@@ -253,10 +251,12 @@ void PrintDstSettings() {
           int(FLAGS_dst_dbopts.table_size >> 20));
   fprintf(stdout, "Tbl write size:     %-4d KB\n",
           int(FLAGS_dst_dbopts.table_buffer >> 10));
-  fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
-          int(FLAGS_dst_dbopts.table_bulk_read_size >> 10));
+  fprintf(stdout, "Tbl cache size:     %d\n",
+          int(FLAGS_dst_dbopts.table_cache_size));
   fprintf(stdout, "Prefetch compaction input: %d\n",
           FLAGS_dst_dbopts.prefetch_compaction_input);
+  fprintf(stdout, "Prefetch read size: %-4d KB\n",
+          int(FLAGS_dst_dbopts.table_bulk_read_size >> 10));
   fprintf(stdout, "Db level factor:    %d\n", FLAGS_dst_dbopts.level_factor);
   fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
           FLAGS_dst_dbopts.l0_soft_limit, FLAGS_dst_dbopts.l0_hard_limit);
