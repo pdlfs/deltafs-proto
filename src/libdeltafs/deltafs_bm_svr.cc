@@ -810,6 +810,13 @@ void BM_Main(int* const argc, char*** const argv) {
     } else if (sscanf((*argv)[i], "--udp=%d%c", &n, &junk) == 1 &&
                (n == 0 || n == 1)) {
       pdlfs::FLAGS_udp = n;
+    } else if (sscanf((*argv)[i], "--readonly_db_chain_table_cache_size=%d%c",
+                      &n, &junk) == 1) {
+      pdlfs::FLAGS_table_cache_size = n;
+    } else if (sscanf((*argv)[i], "--readonly_db_chain_block_cache_size=%d%c%c",
+                      &n, &u, &junk) == 2 &&
+               (u == 'M' || u == 'm')) {
+      pdlfs::FLAGS_block_cache_size = n << 20;
     } else if (strncmp((*argv)[i], "--readonly_db_chain=", 20) == 0) {
       pdlfs::FLAGS_readonly_db_chain = (*argv)[i] + 20;
     } else if (strncmp((*argv)[i], "--db=", 5) == 0) {
