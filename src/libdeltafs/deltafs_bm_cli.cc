@@ -383,7 +383,35 @@ class Client {
   }
 #endif
 
+  template <typename T>
+  static void PrintLsmCompactionSettings(const T& dbopts) {
+    fprintf(stdout, "Lsm compaction off: %d\n", dbopts.disable_compaction);
+    if (dbopts.disable_compaction) {
+      return;
+    }
+    fprintf(stdout, "Db level factor:    %d\n", dbopts.level_factor);
+    fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
+            dbopts.l0_soft_limit, dbopts.l0_hard_limit);
+    fprintf(stdout, "L1 trigger:         %d\n", dbopts.l1_compaction_trigger);
+    fprintf(stdout, "Prefetch compaction input: %d\n",
+            dbopts.prefetch_compaction_input);
+    fprintf(stdout, "Prefetch read size: %-4d KB\n",
+            int(dbopts.table_bulk_read_size >> 10));
+  }
+
+  template <typename T>
+  static void PrintWalSettings(const T& dbopts) {
+    fprintf(stdout, "Wal off:            %d\n",
+            dbopts.disable_write_ahead_logging);
+    if (dbopts.disable_write_ahead_logging) {
+      return;
+    }
+    fprintf(stdout, "Wal write size:     %-4d KB\n",
+            int(dbopts.write_ahead_log_buffer >> 10));
+  }
+
   static void PrintBkSettings() {
+    fprintf(stdout, "BK DB:\n");
     fprintf(stdout, "Snappy:             %d\n", FLAGS_bkopts.compression);
     fprintf(stdout, "Blk size:           %-4d KB\n",
             int(FLAGS_bkopts.block_size >> 10));
@@ -391,16 +419,14 @@ class Client {
             int(FLAGS_bkopts.filter_bits_per_key));
     fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_bkopts.memtable_size >> 20));
-    fprintf(stdout, "Wal off:            %d\n",
-            FLAGS_bkopts.disable_write_ahead_logging);
-    fprintf(stdout, "Wal write size:     %-4d KB\n",
-            int(FLAGS_bkopts.write_ahead_log_buffer >> 10));
     fprintf(stdout, "Tbl write size:     %-4d KB\n",
             int(FLAGS_bkopts.table_buffer >> 10));
+    PrintWalSettings(FLAGS_bkopts);
     fprintf(stdout, "Db: %s/b<dir>\n", FLAGS_db_prefix);
   }
 
   static void PrintDbSettings() {
+    fprintf(stdout, "CLIENT DB:\n");
     fprintf(stdout, "Snappy:             %d\n", FLAGS_dbopts.compression);
     fprintf(stdout, "Blk cache size:     %-4d MB\n",
             int(FLAGS_dbopts.block_cache_size >> 20));
@@ -408,31 +434,18 @@ class Client {
             int(FLAGS_dbopts.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dbopts.filter_bits_per_key));
-    fprintf(stdout, "Io monitoring:      %d\n",
-            FLAGS_dbopts.enable_io_monitoring);
-    fprintf(stdout, "Wal off:            %d\n",
-            FLAGS_dbopts.disable_write_ahead_logging);
-    fprintf(stdout, "Wal write size:     %-4d KB\n",
-            int(FLAGS_dbopts.write_ahead_log_buffer >> 10));
-    fprintf(stdout, "LSM COMPACTION OFF: %d\n",
-            FLAGS_dbopts.disable_compaction);
     fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_dbopts.memtable_size >> 20));
     fprintf(stdout, "Tbl size:           %-4d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
     fprintf(stdout, "Tbl write size:     %-4d KB\n",
             int(FLAGS_dbopts.table_buffer >> 10));
-    fprintf(stdout, "Tbl cache size:     %d\n",
+    fprintf(stdout, "Tbl cache size:     %d (max open table files)\n",
             int(FLAGS_dbopts.table_cache_size));
-    fprintf(stdout, "Prefetch compaction input: %d\n",
-            FLAGS_dbopts.prefetch_compaction_input);
-    fprintf(stdout, "Prefetch read size: %-4d KB\n",
-            int(FLAGS_dbopts.table_bulk_read_size >> 10));
-    fprintf(stdout, "Db level factor:    %d\n", FLAGS_dbopts.level_factor);
-    fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
-            FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
-    fprintf(stdout, "L1 trigger:         %d\n",
-            FLAGS_dbopts.l1_compaction_trigger);
+    fprintf(stdout, "Io monitoring:      %d\n",
+            FLAGS_dbopts.enable_io_monitoring);
+    PrintLsmCompactionSettings(FLAGS_dbopts);
+    PrintWalSettings(FLAGS_dbopts);
     fprintf(stdout, "Use existing db:    %d\n", FLAGS_use_existing_fs);
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
   }
