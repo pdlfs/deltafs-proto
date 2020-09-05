@@ -562,6 +562,10 @@ class Server : public FilesystemWrapper {
 #else
 #define OVERRIDE
 #endif
+  virtual Status Lstat(const User& who, const LookupStat& parent,
+                       const Slice& name, Stat* stat) OVERRIDE {
+    return Status::OK();
+  }
   virtual Status Lokup(const User& who, const LookupStat& parent,
                        const Slice& name, LookupStat*) OVERRIDE {
     return Status::OK();
