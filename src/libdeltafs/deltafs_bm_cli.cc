@@ -438,9 +438,10 @@ class Client {
             int(FLAGS_dbopts.memtable_size >> 20));
     fprintf(stdout, "Tbl size:           %-4d MB\n",
             int(FLAGS_dbopts.table_size >> 20));
-    fprintf(stdout, "Tbl write size:     %-4d KB\n",
-            int(FLAGS_dbopts.table_buffer >> 10));
-    fprintf(stdout, "Tbl cache size:     %d (max open table files)\n",
+    fprintf(stdout, "Tbl write size:     %-4d KB (min), %d KB (max)\n",
+            int(FLAGS_dbopts.table_buffer >> 10),
+            int(FLAGS_dbopts.table_buffer >> 9));
+    fprintf(stdout, "Tbl cache size:     %d (max open tables)\n",
             int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_dbopts.enable_io_monitoring);
@@ -453,17 +454,17 @@ class Client {
   static void PrintHeader() {
     PrintWarnings();
     PrintEnvironment();
-    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
+    fprintf(stdout, "# ranks:            %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs use existing:    %d (prepare_run=%s)\n",
             FLAGS_use_existing_fs, !FLAGS_use_existing_fs ? "mkdir" : "lstat");
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
     fprintf(stdout, "Fs infosvr locatio: %s\n",
             FLAGS_fs_use_local ? "N/A" : FLAGS_info_svr_uri);
+    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     char timeout[10];
     snprintf(timeout, sizeof(timeout), "%d s", FLAGS_rpc_timeout);
-    fprintf(stdout, "Fs rpc timeout:     %s\n",
+    fprintf(stdout, "RPC timeout:        %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
-    fprintf(stdout, "Fs skip checks:     %d\n", FLAGS_skip_fs_checks);
     fprintf(stdout, "Num files:          %d per rank\n", FLAGS_num);
     fprintf(stdout, "Reads:              %d x %d per rank\n", FLAGS_reads,
             FLAGS_read_phases);
