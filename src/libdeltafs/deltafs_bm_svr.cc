@@ -464,7 +464,9 @@ class Server : public FilesystemWrapper {
       if (e && e[0]) {
         if (FLAGS_rank == 0) {
           printf("DELTAFS_Bm_test_readonly_db_chain=%d\n", atoi(e));
+          puts(">>>");
           PrintReadonlyDbSettings(true);
+          puts("<<<");
         }
         char tmp[20];
         for (int i = 0; i < atoi(e); i++) {
