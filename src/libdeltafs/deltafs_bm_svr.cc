@@ -208,10 +208,12 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_db_prefix);
   }
 
-  static void PrintReadonlyDbSettings() {
+  static void PrintReadonlyDbSettings(bool force = false) {
     fprintf(stdout, "READONLY DB CHAIN:\n");
     if (!FLAGS_readonly_db_chain || !FLAGS_readonly_db_chain[0]) {
-      return;
+      if (!force) {
+        return;
+      }
     }
     fprintf(stdout, "Blk cache size:     %-4d MB\n",
             int(FLAGS_readonly_dbopts.block_cache_size >> 20));
@@ -435,7 +437,7 @@ class Server : public FilesystemWrapper {
       if (e && e[0]) {
         if (FLAGS_rank == 0) {
           printf("DELTAFS_Bm_test_readonly_db_chain=%d\n", atoi(e));
-          PrintReadonlyDbSettings();
+          PrintReadonlyDbSettings(true);
         }
         char tmp[20];
         for (int i = 0; i < atoi(e); i++) {
