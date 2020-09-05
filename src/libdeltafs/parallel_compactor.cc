@@ -286,10 +286,8 @@ void PrintHeader() {
           FLAGS_rpc_worker_threads);
   fprintf(stdout, "num ranks:          %d\n", FLAGS_comm_size);
   fprintf(stdout, "SOURCE DB:\n");
-  fprintf(stdout, "Blk cache size:     %-4d MB\n",
-          int(FLAGS_src_dbopts.block_cache_size >> 20));
-  fprintf(stdout, "Max open tables:    %d\n",
-          int(FLAGS_src_dbopts.table_cache_size));
+  fprintf(stdout, "Blk cache size:     0 MB\n");
+  fprintf(stdout, "Tbl cache size:     0\n");
   fprintf(stdout, "Io monitoring:      %d\n",
           FLAGS_src_dbopts.enable_io_monitoring);
   fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_src_prefix);

@@ -54,9 +54,9 @@ typedef MXDB<DB, Slice, Status, kNameInKey> MDB;
 }
 
 FilesystemReadonlyDbOptions::FilesystemReadonlyDbOptions()
-    : table_cache_size(0),
+    : table_cache(NULL),
       filter_bits_per_key(10),
-      block_cache_size(0),
+      block_cache(NULL),
       enable_io_monitoring(false),
       detach_dir_on_close(false),
       use_default_logger(false) {}
@@ -141,8 +141,6 @@ void ReadBoolFromEnv(const char* key, bool* dst) {
 
 // Read options from system env. All env keys start with "DELTAFS_Rr_".
 void FilesystemReadonlyDbOptions::ReadFromEnv() {
-  ReadIntegerOptionFromEnv("DELTAFS_Rr_table_cache_size", &table_cache_size);
-  ReadIntegerOptionFromEnv("DELTAFS_Rr_block_cache_size", &block_cache_size);
   ReadBoolFromEnv("DELTAFS_Rr_use_default_logger", &use_default_logger);
 }
 
@@ -184,17 +182,23 @@ FilesystemReadonlyDb::FilesystemReadonlyDb(
       filter_policy_(options_.filter_bits_per_key != 0
                          ? NewBloomFilterPolicy(options_.filter_bits_per_key)
                          : NULL),
-      table_cache_(NewLRUCache(options_.table_cache_size)),
-      block_cache_(NewLRUCache(options_.block_cache_size)),
+      table_cache_(options_.table_cache ? options_.table_cache
+                                        : NewLRUCache(0)),
+      block_cache_(options_.block_cache ? options_.block_cache
+                                        : NewLRUCache(0)),
       db_(NULL) {}
 
 FilesystemReadonlyDb::~FilesystemReadonlyDb() {
   delete reinterpret_cast<MDB*>(mdb_);
   delete db_;
   delete filter_policy_;
-  delete block_cache_;
-  delete table_cache_;
   delete env_wrapper_;
+  if (block_cache_ != options_.block_cache) {
+    delete block_cache_;
+  }
+  if (table_cache_ != options_.table_cache) {
+    delete table_cache_;
+  }
 }
 
 namespace {

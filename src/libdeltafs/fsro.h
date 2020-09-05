@@ -61,18 +61,18 @@ struct FilesystemReadonlyDbOptions {
   FilesystemReadonlyDbOptions();
   // Read options from env.
   void ReadFromEnv();
-  // Max number of table files we open.
-  // Setting to 0 disables caching effectively.
-  // Default: 0
-  size_t table_cache_size;
+  // Shared table cache.
+  // Set to NULL to disable table caching altogether.
+  // Default: NULL
+  Cache* table_cache;
   // Bloom filter bits per key.
   // Use 0 to disable filters altogether.
   // Default: 10
   size_t filter_bits_per_key;
-  // Block cache size.
-  // Setting to 0 disables caching effectively.
-  // Default: 0
-  size_t block_cache_size;
+  // Shared block cache.
+  // Set to NULL to disable block caching altogether.
+  // Default: NULL
+  Cache* block_cache;
   // Collect performance stats for db table files.
   // Default: false
   bool enable_io_monitoring;

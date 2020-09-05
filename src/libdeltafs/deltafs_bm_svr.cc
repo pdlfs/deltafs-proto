@@ -38,6 +38,7 @@
 #include "fsro.h"
 #include "fssvr.h"
 
+#include "pdlfs-common/cache.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
@@ -65,6 +66,14 @@ namespace pdlfs {
 namespace {
 // Readonly db options.
 FilesystemReadonlyDbOptions FLAGS_readonly_dbopts;
+
+// Shared table cache size (in # of tables) for the entire readonly db chain.
+// Setting to 0 disables caching.
+size_t FLAGS_table_cache_size = 0;
+
+// Shared block cache size (in bytes) for the entire readonly db chain.
+// Setting to 0 disables caching.
+size_t FLAGS_block_cache_size = 0;
 
 // Db options.
 FilesystemDbOptions FLAGS_dbopts;
@@ -149,6 +158,8 @@ class Server : public FilesystemWrapper {
   FilesystemInfoServer* infosvr_;
   std::vector<FilesystemServer*> svrs_;
   std::vector<FilesystemReadonlyDb*> readonly_dbs_;
+  Cache* table_cache_;
+  Cache* block_cache_;
   FilesystemDb* fsdb_;
   Filesystem* fs_;
 #if defined(PDLFS_RADOS)
@@ -178,8 +189,6 @@ class Server : public FilesystemWrapper {
             int(FLAGS_dbopts.block_size >> 10));
     fprintf(stdout, "Bloom bits:         %d\n",
             int(FLAGS_dbopts.filter_bits_per_key));
-    fprintf(stdout, "Max open tables:    %d\n",
-            int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_dbopts.enable_io_monitoring);
     fprintf(stdout, "Wal off:            %d\n",
@@ -195,10 +204,12 @@ class Server : public FilesystemWrapper {
     fprintf(stdout, "Tbl write size:     %-4d KB (min), %d KB (max)\n",
             int(FLAGS_dbopts.table_buffer >> 10),
             int(FLAGS_dbopts.table_buffer >> 9));
-    fprintf(stdout, "Tbl bulk read size: %-4d KB\n",
-            int(FLAGS_dbopts.table_bulk_read_size >> 10));
+    fprintf(stdout, "Tbl cache size:     %d\n",
+            int(FLAGS_dbopts.table_cache_size));
     fprintf(stdout, "Prefetch compaction input: %d\n",
             FLAGS_dbopts.prefetch_compaction_input);
+    fprintf(stdout, "Prefetch read size: %-4d KB\n",
+            int(FLAGS_dbopts.table_bulk_read_size >> 10));
     fprintf(stdout, "Db level factor:    %d\n", FLAGS_dbopts.level_factor);
     fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
             FLAGS_dbopts.l0_soft_limit, FLAGS_dbopts.l0_hard_limit);
@@ -215,10 +226,10 @@ class Server : public FilesystemWrapper {
         return;
       }
     }
-    fprintf(stdout, "Blk cache size:     %-4d MB\n",
-            int(FLAGS_readonly_dbopts.block_cache_size >> 20));
-    fprintf(stdout, "Max open tables:    %d\n",
-            int(FLAGS_readonly_dbopts.table_cache_size));
+    fprintf(stdout, "Blk cache size:     %-4d MB (for the entire chain)\n",
+            int(FLAGS_block_cache_size >> 20));
+    fprintf(stdout, "Tbl cache size:     %d (for the entire chain)\n",
+            int(FLAGS_table_cache_size));
     fprintf(stdout, "Io monitoring:      %d\n",
             FLAGS_readonly_dbopts.enable_io_monitoring);
     fprintf(stdout, "Db chain: %s\n", FLAGS_readonly_db_chain);
@@ -429,7 +440,23 @@ class Server : public FilesystemWrapper {
     }
   }
 
-  void OpenReadonlyDbs() {
+  Cache* OpenTableCache() {
+    if (!table_cache_) {
+      table_cache_ = NewLRUCache(FLAGS_table_cache_size);
+    }
+    return table_cache_;
+  }
+
+  Cache* OpenBlockCache() {
+    if (!block_cache_) {
+      block_cache_ = NewLRUCache(FLAGS_block_cache_size);
+    }
+    return block_cache_;
+  }
+
+  void OpenReadonlyDbChain() {
+    FLAGS_readonly_dbopts.table_cache = OpenTableCache();
+    FLAGS_readonly_dbopts.block_cache = OpenBlockCache();
     std::vector<std::string> lst;
     size_t n = SplitString(&lst, FLAGS_readonly_db_chain, ';');
     if (n == 0) {
@@ -478,7 +505,7 @@ class Server : public FilesystemWrapper {
   }
 
   FilesystemIf* OpenFilesystem() {
-    OpenReadonlyDbs();
+    OpenReadonlyDbChain();
     OpenDb();
     FilesystemOptions opts;
     opts.skip_partition_checks = opts.skip_perm_checks =
@@ -535,6 +562,8 @@ class Server : public FilesystemWrapper {
       : shutting_down_(NULL),
         cv_(&mu_),
         infosvr_(NULL),
+        table_cache_(NULL),
+        block_cache_(NULL),
         fsdb_(NULL),
         fs_(NULL) {
 #if defined(PDLFS_RADOS)
@@ -553,6 +582,8 @@ class Server : public FilesystemWrapper {
     for (size_t i = 0; i < readonly_dbs_.size(); i++) {
       delete readonly_dbs_[i];
     }
+    delete table_cache_;
+    delete block_cache_;
 #if defined(PDLFS_RADOS)
     delete myenv_;
     delete mgr_;
