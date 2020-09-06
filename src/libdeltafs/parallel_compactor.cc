@@ -229,6 +229,33 @@ void PrintRadosSettings() {
 }
 #endif
 
+void PrintLsmCompactionSettings() {
+  fprintf(stdout, "Lsm compaction off: %d\n",
+          FLAGS_dst_dbopts.disable_compaction);
+  if (FLAGS_dst_dbopts.disable_compaction) {
+    return;
+  }
+  fprintf(stdout, "Db level factor:    %d\n", FLAGS_dst_dbopts.level_factor);
+  fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
+          FLAGS_dst_dbopts.l0_soft_limit, FLAGS_dst_dbopts.l0_hard_limit);
+  fprintf(stdout, "L1 trigger:         %d\n",
+          FLAGS_dst_dbopts.l1_compaction_trigger);
+  fprintf(stdout, "Prefetch compaction input: %d\n",
+          FLAGS_dst_dbopts.prefetch_compaction_input);
+  fprintf(stdout, "Prefetch read size: %-4d KB\n",
+          int(FLAGS_dst_dbopts.table_bulk_read_size >> 10));
+}
+
+void PrintWalSettings() {
+  fprintf(stdout, "Wal off:            %d\n",
+          FLAGS_dst_dbopts.disable_write_ahead_logging);
+  if (FLAGS_dst_dbopts.disable_write_ahead_logging) {
+    return;
+  }
+  fprintf(stdout, "Wal write size:     %-4d KB\n",
+          int(FLAGS_dst_dbopts.write_ahead_log_buffer >> 10));
+}
+
 void PrintDstSettings() {
   fprintf(stdout, "Snappy:             %d\n", FLAGS_dst_dbopts.compression);
   fprintf(stdout, "Blk cache size:     %-4d MB\n",
@@ -237,14 +264,6 @@ void PrintDstSettings() {
           int(FLAGS_dst_dbopts.block_size >> 10));
   fprintf(stdout, "Bloom bits:         %d\n",
           int(FLAGS_dst_dbopts.filter_bits_per_key));
-  fprintf(stdout, "Io monitoring:      %d\n",
-          FLAGS_dst_dbopts.enable_io_monitoring);
-  fprintf(stdout, "Wal off:            %d\n",
-          FLAGS_dst_dbopts.disable_write_ahead_logging);
-  fprintf(stdout, "Wal write size:     %-4d KB\n",
-          int(FLAGS_dst_dbopts.write_ahead_log_buffer >> 10));
-  fprintf(stdout, "Lsm compaction off: %d\n",
-          FLAGS_dst_dbopts.disable_compaction);
   fprintf(stdout, "Memtable size:      %-4d MB\n",
           int(FLAGS_dst_dbopts.memtable_size >> 20));
   fprintf(stdout, "Tbl size:           %-4d MB\n",
@@ -253,15 +272,10 @@ void PrintDstSettings() {
           int(FLAGS_dst_dbopts.table_buffer >> 10));
   fprintf(stdout, "Tbl cache size:     %d\n",
           int(FLAGS_dst_dbopts.table_cache_size));
-  fprintf(stdout, "Prefetch compaction input: %d\n",
-          FLAGS_dst_dbopts.prefetch_compaction_input);
-  fprintf(stdout, "Prefetch read size: %-4d KB\n",
-          int(FLAGS_dst_dbopts.table_bulk_read_size >> 10));
-  fprintf(stdout, "Db level factor:    %d\n", FLAGS_dst_dbopts.level_factor);
-  fprintf(stdout, "L0 limits:          %d (soft), %d (hard)\n",
-          FLAGS_dst_dbopts.l0_soft_limit, FLAGS_dst_dbopts.l0_hard_limit);
-  fprintf(stdout, "L1 trigger:         %d\n",
-          FLAGS_dst_dbopts.l1_compaction_trigger);
+  fprintf(stdout, "Io monitoring:      %d\n",
+          FLAGS_dst_dbopts.enable_io_monitoring);
+  PrintLsmCompactionSettings();
+  PrintWalSettings();
   fprintf(stdout, "Db force cleaning:  %d\n", FLAGS_dst_force_cleaning);
   fprintf(stdout, "Db: %s/r<rank>\n", FLAGS_dst_prefix);
 }
