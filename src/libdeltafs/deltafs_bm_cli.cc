@@ -143,13 +143,16 @@ bool FLAGS_batched_writes = false;
 // Number of writes per batch.
 int FLAGS_batch_size = 16;
 
-// Number of files to insert per rank.
-int FLAGS_num = 8;
+// Number of files (keys) to operate upon per rank.
+int FLAGS_n = 8;
+
+// Number of files to creat per rank.
+int FLAGS_writes = -1;
 
 // Number of write steps to run.
-int FLAGS_phases = 1;
+int FLAGS_write_phases = 1;
 
-// Number of files to stat per rank.
+// Number of files to lstat per rank.
 int FLAGS_reads = -1;
 
 // Number of read steps to run.
@@ -313,9 +316,8 @@ struct RankState {
   void RandomShuffle() { std::random_shuffle(fids.begin(), fids.end(), rnd); }
 
   RankState() : ctx(1000 * FLAGS_rank), rnd(1000 * FLAGS_rank) {
-    int num = std::max(FLAGS_num, FLAGS_reads);
-    fids.reserve(num);
-    for (int i = 0; i < num; i++) {
+    fids.reserve(FLAGS_n);
+    for (int i = 0; i < FLAGS_n; i++) {
       fids.push_back(i);
     }
     char tmp[30];
@@ -465,9 +467,9 @@ class Client {
     snprintf(timeout, sizeof(timeout), "%d s", FLAGS_rpc_timeout);
     fprintf(stdout, "RPC timeout:        %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
-    fprintf(stdout, "Num files:          %d per rank\n", FLAGS_num);
-    fprintf(stdout, "Reads:              %d x %d per rank\n", FLAGS_reads,
-            FLAGS_read_phases);
+    fprintf(stdout, "Num files:          %d per rank\n", FLAGS_n);
+    fprintf(stdout, "Creats:             %d x %d per rank\n", FLAGS_writes,
+            FLAGS_write_phases);
     fprintf(stdout, "Bulk in:            %s\n", FLAGS_bk ? "1 >>>" : "OFF");
     if (FLAGS_bk) PrintBkSettings();
     char bat_info[100];
@@ -475,6 +477,8 @@ class Client {
              FLAGS_batched_writes, FLAGS_batch_size);
     fprintf(stdout, "Batched writes:     %s\n",
             FLAGS_batched_writes ? bat_info : "OFF");
+    fprintf(stdout, "Lstats:             %d x %d per rank\n", FLAGS_reads,
+            FLAGS_read_phases);
     char mon_info[100];
     snprintf(mon_info, sizeof(mon_info), "%s (every %ds)",
              FLAGS_mon_destination_uri, FLAGS_mon_interval);
@@ -754,7 +758,7 @@ class Client {
     fscli_->BulkInit(&state->ctx, NULL, state->pathbuf.c_str(), &buk);
     char tmp[30];
     memset(tmp, 0, sizeof(tmp));
-    for (int i = 0; i < FLAGS_num; i++) {
+    for (int i = 0; i < FLAGS_writes; i++) {
       Slice fname = Base64Enc(tmp, Compose(FLAGS_rank, state->fids[i]));
       Status s = fscli_->BulkInsert(buk, fname.c_str());
       if (!s.ok()) {
@@ -764,7 +768,7 @@ class Client {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
-      state->stats.FinishedSingleOp(FLAGS_num);
+      state->stats.FinishedSingleOp(FLAGS_writes);
     }
     Status s = fscli_->BulkCommit(buk);
     if (!s.ok()) {
@@ -788,7 +792,7 @@ class Client {
     fscli_->BatchInit(&state->ctx, NULL, state->pathbuf.c_str(), &batch);
     char tmp[30];
     memset(tmp, 0, sizeof(tmp));
-    for (int i = 0; i < FLAGS_num; i++) {
+    for (int i = 0; i < FLAGS_writes; i++) {
       Slice fname = Base64Enc(tmp, Compose(FLAGS_rank, state->fids[i]));
       Status s = fscli_->BatchInsert(batch, fname.c_str());
       if (!s.ok()) {
@@ -798,7 +802,7 @@ class Client {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
-      state->stats.FinishedSingleOp(FLAGS_num);
+      state->stats.FinishedSingleOp(FLAGS_writes);
     }
     Status s = fscli_->BatchCommit(batch);
     if (!s.ok()) {
@@ -818,7 +822,7 @@ class Client {
 
   void DoWrites(RankState* const state) {
     char tmp[30];
-    for (int i = 0; i < FLAGS_num; i++) {
+    for (int i = 0; i < FLAGS_writes; i++) {
       Slice fname = Base64Enc(tmp, Compose(FLAGS_rank, state->fids[i]));
       state->pathbuf.resize(state->prefix_length);
       state->pathbuf.append(fname.data(), fname.size());
@@ -837,7 +841,7 @@ class Client {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
-      state->stats.FinishedSingleOp(FLAGS_num);
+      state->stats.FinishedSingleOp(FLAGS_writes);
     }
     if (FLAGS_fs_use_local) {
       if (fsdb_) {
@@ -953,7 +957,7 @@ class Client {
     if (FLAGS_random_order) {
       state->RandomShuffle();
     }
-    if (FLAGS_num == 0) {
+    if (FLAGS_writes == 0) {
       return 0;
     }
     if (FLAGS_bk) {
@@ -1009,7 +1013,7 @@ class Client {
       }
     }
     int nsteps = 0;
-    for (int i = 0; i < FLAGS_phases; i++) {
+    for (int i = 0; i < FLAGS_write_phases; i++) {
       if (nsteps != 0) {
         Sleep();
       }
@@ -1185,10 +1189,12 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_batch_size = n;
     } else if (sscanf((*argv)[i], "--step_interval=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_step_interval = n;
-    } else if (sscanf((*argv)[i], "--num=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_num = n;
-    } else if (sscanf((*argv)[i], "--phases=%d%c", &n, &junk) == 1) {
-      pdlfs::FLAGS_phases = n;
+    } else if (sscanf((*argv)[i], "--n=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_n = n;
+    } else if (sscanf((*argv)[i], "--writes=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_writes = n;
+    } else if (sscanf((*argv)[i], "--write_phases=%d%c", &n, &junk) == 1) {
+      pdlfs::FLAGS_write_phases = n;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--read_phases=%d%c", &n, &junk) == 1) {
@@ -1215,8 +1221,11 @@ void BM_Main(int* const argc, char*** const argv) {
     }
   }
 
+  if (pdlfs::FLAGS_writes == -1) {
+    pdlfs::FLAGS_writes = pdlfs::FLAGS_n;
+  }
   if (pdlfs::FLAGS_reads == -1) {
-    pdlfs::FLAGS_reads = pdlfs::FLAGS_num;
+    pdlfs::FLAGS_reads = pdlfs::FLAGS_n;
   }
 
   std::string default_db_prefix;
