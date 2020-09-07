@@ -461,7 +461,7 @@ class Client {
   static void PrintHeader() {
     PrintWarnings();
     PrintEnvironment();
-    fprintf(stdout, "# ranks:            %d\n", FLAGS_comm_size);
+    fprintf(stdout, "Num ranks:          %d\n", FLAGS_comm_size);
     fprintf(stdout, "Fs use existing:    %d (prepare_run=%s)\n",
             FLAGS_use_existing_fs, !FLAGS_use_existing_fs ? "mkdir" : "lstat");
     fprintf(stdout, "Fs use local:       %d\n", FLAGS_fs_use_local);
@@ -472,15 +472,14 @@ class Client {
     snprintf(timeout, sizeof(timeout), "%d s", FLAGS_rpc_timeout);
     fprintf(stdout, "RPC timeout:        %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
-    fprintf(stdout, "Num files:          %d per rank\n", FLAGS_n);
     fprintf(stdout, "Creats:             %d x %d per rank\n", FLAGS_writes,
             FLAGS_write_phases);
-    if (FLAGS_bk) PrintBkSettings();
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
              FLAGS_batched_writes, FLAGS_batch_size);
-    fprintf(stdout, "Batched writes:     %s\n",
+    fprintf(stdout, "Batched creats:     %s\n",
             FLAGS_batched_writes ? bat_info : "OFF");
+    PrintBkSettings();
     fprintf(stdout, "Lstats:             %d x %d per rank\n", FLAGS_reads,
             FLAGS_read_phases);
     char mon_info[100];
