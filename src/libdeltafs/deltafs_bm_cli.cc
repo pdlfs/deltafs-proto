@@ -414,6 +414,9 @@ class Client {
 
   static void PrintBkSettings() {
     fprintf(stdout, "BK DB:\n");
+    if (!FLAGS_bk) {
+      return;
+    }
     fprintf(stdout, "Snappy:             %d\n", FLAGS_bkopts.compression);
     fprintf(stdout, "Blk size:           %-4d KB\n",
             int(FLAGS_bkopts.block_size >> 10));
@@ -421,8 +424,9 @@ class Client {
             int(FLAGS_bkopts.filter_bits_per_key));
     fprintf(stdout, "Memtable size:      %-4d MB\n",
             int(FLAGS_bkopts.memtable_size >> 20));
-    fprintf(stdout, "Tbl write size:     %-4d KB\n",
-            int(FLAGS_bkopts.table_buffer >> 10));
+    fprintf(stdout, "Tbl write size:     %-4d KB (min), %d KB (max)\n",
+            int(FLAGS_bkopts.table_buffer >> 10),
+            int(FLAGS_bkopts.table_buffer >> 9));
     PrintWalSettings(FLAGS_bkopts);
     fprintf(stdout, "Db: %s/b<dir>\n", FLAGS_db_prefix);
   }
@@ -470,7 +474,6 @@ class Client {
     fprintf(stdout, "Num files:          %d per rank\n", FLAGS_n);
     fprintf(stdout, "Creats:             %d x %d per rank\n", FLAGS_writes,
             FLAGS_write_phases);
-    fprintf(stdout, "Bulk in:            %s\n", FLAGS_bk ? "1 >>>" : "OFF");
     if (FLAGS_bk) PrintBkSettings();
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
