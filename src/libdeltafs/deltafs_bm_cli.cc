@@ -413,10 +413,11 @@ class Client {
   }
 
   static void PrintBkSettings() {
-    fprintf(stdout, "BK DB:\n");
+    fprintf(stdout, "Bulk in:            %s\n", FLAGS_bk ? "1" : "OFF");
     if (!FLAGS_bk) {
       return;
     }
+    fprintf(stdout, "BK DB:\n");
     fprintf(stdout, "Snappy:             %d\n", FLAGS_bkopts.compression);
     fprintf(stdout, "Blk size:           %-4d KB\n",
             int(FLAGS_bkopts.block_size >> 10));
