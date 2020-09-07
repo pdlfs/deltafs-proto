@@ -58,7 +58,7 @@ BukDbOptions::BukDbOptions()
       manifest_buffer(4 << 10),
       table_buffer(256 << 10),
       memtable_size(8 << 20),
-      block_size(2 << 10),
+      block_size(4 << 10),
       filter_bits_per_key(10),
       block_restart_interval(16),
       detach_dir_on_close(false),

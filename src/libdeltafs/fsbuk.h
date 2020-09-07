@@ -72,7 +72,7 @@ struct BukDbOptions {
   // Default: 8MB
   size_t memtable_size;
   // Size for a table block.
-  // Default: 2KB
+  // Default: 4KB
   size_t block_size;
   // Bloom filter bits per key.
   // Use 0 to disable filters altogether.
