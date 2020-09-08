@@ -418,9 +418,9 @@ struct GlobalStats {
     // of per-rank elapsed times, not the actual elapsed time.
     double elapsed = (finish_ - start_) * 1e-6;
     fprintf(stdout,
-            "==%-10s: %9.3f micros/op, %9.3f Mop/s, %9.3f Mops, %15ld ops\n",
-            name, seconds_ * 1e6 / done_, done_ / 1000000.0 / elapsed,
-            done_ / 1000000.0, done_);
+            "==%-10s: %9.3f micros/op, %9.3f Mop/s, %15.3f s, %15ld ops\n",
+            name, seconds_ * 1e6 / done_, done_ / 1000000.0 / elapsed, elapsed,
+            done_);
     fflush(stdout);
   }
 };
