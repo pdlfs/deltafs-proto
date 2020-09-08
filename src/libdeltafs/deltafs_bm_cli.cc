@@ -40,6 +40,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/osd.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/random.h"
 
@@ -166,6 +167,12 @@ bool FLAGS_use_existing_fs = false;
 
 // Use the db at the following prefix.
 const char* FLAGS_db_prefix = NULL;
+
+// Location for file data storage.
+const char* FLAGS_data = NULL;
+
+// Bytes per file to write. Bypass data writes when set to 0.
+size_t FLAGS_data_size = 0;
 
 // User id for the bench.
 int FLAGS_uid = 1;
@@ -374,6 +381,7 @@ class Client {
   rados::RadosConnMgr* mgr_;
   Env* myenv_;
 #endif
+  Osd* osd_;
 
 #if defined(PDLFS_RADOS)
   static void PrintRadosSettings() {
@@ -472,8 +480,9 @@ class Client {
     snprintf(timeout, sizeof(timeout), "%d s", FLAGS_rpc_timeout);
     fprintf(stdout, "RPC timeout:        %s\n",
             FLAGS_fs_use_local ? "N/A" : timeout);
-    fprintf(stdout, "Creats:             %d x %d per rank\n", FLAGS_writes,
-            FLAGS_write_phases);
+    fprintf(stdout,
+            "Creats:             %d x %d per rank (%d KB data per file)\n",
+            FLAGS_writes, FLAGS_write_phases, int(FLAGS_data_size >> 10));
     char bat_info[100];
     snprintf(bat_info, sizeof(bat_info), "%d (batch_size=%d)",
              FLAGS_batched_writes, FLAGS_batch_size);
@@ -652,6 +661,13 @@ class Client {
     } else {
       return Env::Default();
     }
+  }
+
+  Osd* OpenOsd() {
+    if (!osd_) {
+      osd_ = Osd::FromEnv(FLAGS_data, OpenEnv());
+    }
+    return osd_;
   }
 
   void OpenLocal() {
@@ -1041,7 +1057,12 @@ class Client {
 
  public:
   Client()
-      : fscli_(NULL), uri_mapper_(NULL), rpc_(NULL), fs_(NULL), fsdb_(NULL) {
+      : fscli_(NULL),
+        uri_mapper_(NULL),
+        rpc_(NULL),
+        fs_(NULL),
+        fsdb_(NULL),
+        osd_(NULL) {
 #if defined(PDLFS_RADOS)
     mgr_ = NULL;
     myenv_ = NULL;
@@ -1049,6 +1070,7 @@ class Client {
   }
 
   ~Client() {
+    delete osd_;
     delete fscli_;
     delete uri_mapper_;
     delete rpc_;
@@ -1236,6 +1258,12 @@ void BM_Main(int* const argc, char*** const argv) {
   if (!pdlfs::FLAGS_db_prefix) {
     default_db_prefix = "/tmp/deltafs_bm";
     pdlfs::FLAGS_db_prefix = default_db_prefix.c_str();
+  }
+
+  std::string default_data;
+  if (!pdlfs::FLAGS_data) {
+    default_data = "/tmp/deltafs_data";
+    pdlfs::FLAGS_data = default_data.c_str();
   }
 
   pdlfs::Client cli;
