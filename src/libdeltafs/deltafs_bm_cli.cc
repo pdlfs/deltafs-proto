@@ -308,6 +308,7 @@ struct STLRand {
 
 // Per-rank work state.
 struct RankState {
+  Osd* osd;
   Stats stats;
   FilesystemCliCtx ctx;
   std::vector<uint32_t> fids;
@@ -335,6 +336,7 @@ struct RankState {
     User* const who = &ctx.who;
     who->uid = FLAGS_uid;
     who->gid = FLAGS_gid;
+    osd = NULL;
   }
 
   void RandomShuffle() {
@@ -381,8 +383,9 @@ class Client {
   Filesystem* fs_;
   FilesystemDb* fsdb_;
 #if defined(PDLFS_RADOS)
-  rados::RadosConnMgr* mgr_;
-  Env* myenv_;
+  rados::RadosConnMgr* rmgr_;
+  Osd* rados_osd_;
+  Env* rados_env_;
 #endif
   Osd* osd_;
 
@@ -620,8 +623,8 @@ class Client {
   Env* OpenEnv() {
     if (FLAGS_env_use_rados) {
 #if defined(PDLFS_RADOS)
-      if (myenv_) {
-        return myenv_;
+      if (rados_env_) {
+        return rados_env_;
       }
       FLAGS_dbopts.bulk_use_copy = false;
       FLAGS_dbopts.create_dir_on_bulk = true;
@@ -633,9 +636,8 @@ class Client {
       RadosOptions options;
       options.force_syncio = FLAGS_rados_force_syncio;
       RadosConn* conn;
-      Osd* osd;
-      mgr_ = new RadosConnMgr(RadosConnMgrOptions());
-      Status s = mgr_->OpenConn(  ///
+      rmgr_ = new RadosConnMgr(RadosConnMgrOptions());
+      Status s = rmgr_->OpenConn(  ///
           FLAGS_rados_cluster_name, FLAGS_rados_cli_name, FLAGS_rados_conf,
           RadosConnOptions(), &conn);
       if (!s.ok()) {
@@ -644,16 +646,16 @@ class Client {
         MPI_Finalize();
         exit(1);
       }
-      s = mgr_->OpenOsd(conn, FLAGS_rados_pool, options, &osd);
+      s = rmgr_->OpenOsd(conn, FLAGS_rados_pool, options, &rados_osd_);
       if (!s.ok()) {
         fprintf(stderr, "%d: Cannot open rados object pool: %s\n", FLAGS_rank,
                 s.ToString().c_str());
         MPI_Finalize();
         exit(1);
       }
-      myenv_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
-      mgr_->Release(conn);
-      return myenv_;
+      rados_env_ = rmgr_->OpenEnv(rados_osd_, false, RadosEnvOptions());
+      rmgr_->Release(conn);
+      return rados_env_;
 #else
       if (FLAGS_rank == 0) {
         fprintf(stderr, "Rados not installed\n");
@@ -667,7 +669,18 @@ class Client {
   }
 
   Osd* OpenOsd() {
-    if (!osd_) {
+    if (FLAGS_env_use_rados) {
+#if defined(PDLFS_RADOS)
+      OpenEnv();
+      return rados_osd_;
+#else
+      if (FLAGS_rank == 0) {
+        fprintf(stderr, "Rados not installed\n");
+      }
+      MPI_Finalize();
+      exit(1);
+#endif
+    } else if (!osd_) {
       osd_ = Osd::FromEnv(FLAGS_data, OpenEnv());
     }
     return osd_;
@@ -849,7 +862,7 @@ class Client {
       state->stats.FinishedSingleOp(FLAGS_writes);
       if (s.ok() && FLAGS_data_size) {
         WritableFile* f = NULL;
-        s = osd_->NewWritableObj(&fname[0], &f);
+        s = state->osd->NewWritableObj(&fname[0], &f);
         if (s.ok()) {
           s = f->Append(state->filedata);
           if (s.ok()) {
@@ -1006,6 +1019,9 @@ class Client {
 
   void RunSteps() {
     RankState state;
+    if (FLAGS_data_size) {
+      state.osd = OpenOsd();
+    }
     if (FLAGS_bk) {
       Env* env = OpenEnv();
       FilesystemCliCtx* const ctx = &state.ctx;
@@ -1062,8 +1078,9 @@ class Client {
         fsdb_(NULL),
         osd_(NULL) {
 #if defined(PDLFS_RADOS)
-    mgr_ = NULL;
-    myenv_ = NULL;
+    rmgr_ = NULL;
+    rados_osd_ = NULL;
+    rados_env_ = NULL;
 #endif
   }
 
@@ -1075,8 +1092,9 @@ class Client {
     delete fs_;
     delete fsdb_;
 #if defined(PDLFS_RADOS)
-    delete myenv_;
-    delete mgr_;
+    delete rados_env_;
+    delete rados_osd_;
+    delete rmgr_;
 #endif
   }
 
