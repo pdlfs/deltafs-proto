@@ -43,6 +43,7 @@
 #include "pdlfs-common/osd.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/random.h"
+#include "pdlfs-common/testutil.h"
 
 #include <algorithm>
 #include <arpa/inet.h>
@@ -300,9 +301,9 @@ struct GlobalStats {
 
 // A wrapper over our own random object.
 struct STLRand {
-  STLRand(int seed) : rnd(seed) {}
-  int operator()(int i) { return rnd.Next() % i; }
-  Random rnd;
+  explicit STLRand(Random* rnd) : rnd(rnd) {}
+  int operator()(int i) { return rnd->Next() % i; }
+  Random* rnd;
 };
 
 // Per-rank work state.
@@ -310,17 +311,20 @@ struct RankState {
   Stats stats;
   FilesystemCliCtx ctx;
   std::vector<uint32_t> fids;
-  STLRand rnd;
+  Random rnd;
   std::string::size_type prefix_length;
   std::string pathbuf;
+  std::string scratch;
+  Slice filedata;
   Stat stbuf;
-
-  void RandomShuffle() { std::random_shuffle(fids.begin(), fids.end(), rnd); }
 
   RankState() : ctx(1000 * FLAGS_rank), rnd(1000 * FLAGS_rank) {
     fids.reserve(FLAGS_n);
     for (int i = 0; i < FLAGS_n; i++) {
       fids.push_back(i);
+    }
+    if (FLAGS_data_size) {
+      filedata = test::RandomString(&rnd, FLAGS_data_size, &scratch);
     }
     char tmp[30];
     pathbuf.reserve(100);
@@ -331,6 +335,10 @@ struct RankState {
     User* const who = &ctx.who;
     who->uid = FLAGS_uid;
     who->gid = FLAGS_gid;
+  }
+
+  void RandomShuffle() {
+    std::random_shuffle(fids.begin(), fids.end(), STLRand(&rnd));
   }
 };
 
@@ -824,6 +832,7 @@ class Client {
 
   void DoWrites(RankState* const state) {
     char tmp[30];
+    memset(tmp, 0, sizeof(tmp));
     for (int i = 0; i < FLAGS_writes; i++) {
       Slice fname = Base64Enc(tmp, Compose(FLAGS_rank, state->fids[i]));
       state->pathbuf.resize(state->prefix_length);
@@ -831,13 +840,31 @@ class Client {
       Status s = fscli_->Mkfle(&state->ctx, NULL, state->pathbuf.c_str(), 0644,
                                &state->stbuf);
       if (!s.ok()) {
-        fprintf(stderr, "%d: Fail to mkfle: %s\n", FLAGS_rank,
-                s.ToString().c_str());
+        fprintf(stderr, "%d: Fail to mkfle %s: %s\n", FLAGS_rank,
+                state->pathbuf.c_str(), s.ToString().c_str());
         if (FLAGS_abort_on_errors) {
           MPI_Abort(MPI_COMM_WORLD, 1);
         }
       }
       state->stats.FinishedSingleOp(FLAGS_writes);
+      if (s.ok() && FLAGS_data_size) {
+        WritableFile* f = NULL;
+        s = osd_->NewWritableObj(&fname[0], &f);
+        if (s.ok()) {
+          s = f->Append(state->filedata);
+          if (s.ok()) {
+            s = f->Sync();
+          }
+        }
+        if (!s.ok()) {
+          fprintf(stderr, "%d: Cannot write into obj %s: %s\n", FLAGS_rank,
+                  &fname[0], s.ToString().c_str());
+          if (FLAGS_abort_on_errors) {
+            MPI_Abort(MPI_COMM_WORLD, 1);
+          }
+        }
+        delete f;
+      }
     }
     if (FLAGS_fs_use_local) {
       if (fsdb_) {
