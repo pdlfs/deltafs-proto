@@ -1176,7 +1176,7 @@ void BM_Main(int* const argc, char*** const argv) {
 
   for (int i = 1; i < (*argc); i++) {
     int n;
-    char junk;
+    char u, junk;
     if (sscanf((*argv)[i], "--print_ips=%d%c", &n, &junk) == 1 &&
         (n == 0 || n == 1)) {
       pdlfs::FLAGS_print_ips = n;
@@ -1236,6 +1236,9 @@ void BM_Main(int* const argc, char*** const argv) {
       pdlfs::FLAGS_writes = n;
     } else if (sscanf((*argv)[i], "--write_phases=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_write_phases = n;
+    } else if (sscanf((*argv)[i], "--data_size=%d%c%c", &n, &u, &junk) == 2 &&
+               (u == 'k' || u == 'K')) {
+      pdlfs::FLAGS_data_size = n << 10;
     } else if (sscanf((*argv)[i], "--reads=%d%c", &n, &junk) == 1) {
       pdlfs::FLAGS_reads = n;
     } else if (sscanf((*argv)[i], "--read_phases=%d%c", &n, &junk) == 1) {
