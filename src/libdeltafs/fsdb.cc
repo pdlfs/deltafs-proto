@@ -250,10 +250,32 @@ FilesystemDb::~FilesystemDb() {
   delete myenv_;
 }
 
-Status FilesystemDb::Flush(bool force_flush_l0) {
+namespace {
+struct FlushState {
   FlushOptions opts;
-  opts.force_flush_l0 = force_flush_l0;
-  return db_->FlushMemTable(opts);
+  DB* db;
+};
+
+void FlushDb(void* arg) {
+  FlushState* state = reinterpret_cast<FlushState*>(arg);
+  state->db->FlushMemTable(state->opts);
+  free(state);
+}
+
+}  // namespace
+
+Status FilesystemDb::Flush(bool force_l0, bool async) {
+  Status s;
+  FlushState* const state =
+      static_cast<FlushState*>(malloc(sizeof(FlushState)));
+  state->opts.force_flush_l0 = force_l0;
+  state->db = db_;
+  if (async) {
+    Env::Default()->StartThread(FlushDb, state);
+  } else {
+    FlushDb(state);
+  }
+  return s;
 }
 
 Status FilesystemDb::Put(  ///

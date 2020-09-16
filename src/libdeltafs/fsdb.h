@@ -176,8 +176,8 @@ class FilesystemDb {
   Status Put(const DirId& id, const Slice& fname, const Stat& stat,
              FilesystemDbStats* stats);
   Status Delete(const DirId& id, const Slice& fname);
+  Status Flush(bool force_flush_l0, bool async = false);
   Status BulkInsert(const std::string& dir);
-  Status Flush(bool force_flush_l0);
 
  private:
   struct Tx;
