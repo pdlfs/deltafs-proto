@@ -266,14 +266,16 @@ void FlushDb(void* arg) {
 
 Status FilesystemDb::Flush(bool force_l0, bool async) {
   Status s;
-  FlushState* const state =
-      static_cast<FlushState*>(malloc(sizeof(FlushState)));
-  state->opts.force_flush_l0 = force_l0;
-  state->db = db_;
+  FlushOptions fopts;
+  fopts.force_flush_l0 = force_l0;
   if (async) {
+    FlushState* const state =
+        static_cast<FlushState*>(malloc(sizeof(FlushState)));
+    state->opts = fopts;
+    state->db = db_;
     Env::Default()->StartThread(FlushDb, state);
   } else {
-    FlushDb(state);
+    s = db_->FlushMemTable(fopts);
   }
   return s;
 }
