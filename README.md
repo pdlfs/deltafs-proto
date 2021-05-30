@@ -1,5 +1,6 @@
 **Massive serverless client middleware for fast distributed file system metadata functions.**
 
+[![CI](https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml/badge.svg)](https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml)
 [![Build Status](https://travis-ci.org/pdlfs/deltafs-proto.svg?branch=master)](https://travis-ci.org/pdlfs/deltafs-proto)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
 
