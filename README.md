@@ -82,6 +82,6 @@ Finally, we run tests to check if DeltaFS is correctly built:
 ctest -VV  ## <-- This is double V, not W
 ```
 
-Sample test output can be checked at https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml
+Sample test output can be checked at https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml. It takes about 5 minutes to run all tests.
 
 # DONE
