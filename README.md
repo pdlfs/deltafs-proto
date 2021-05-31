@@ -1,7 +1,9 @@
 **Massive serverless client middleware for fast distributed file system metadata functions.**
 
 [![CI](https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml/badge.svg)](https://github.com/pdlfs/deltafs-proto/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/253742457.svg)](https://zenodo.org/badge/latestdoi/253742457)
 [![Build Status](https://travis-ci.org/pdlfs/deltafs-proto.svg?branch=master)](https://travis-ci.org/pdlfs/deltafs-proto)
+[![GitHub Release](https://img.shields.io/github/release/pdlfs/deltafs-proto.svg)](https://github.com/pdlfs/deltafs-proto/releases)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
 
 DeltaFS Prototype
